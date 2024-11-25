@@ -45,11 +45,6 @@ if __name__ == "__main__":
     print(y['income'].value_counts())
 
 
-
-
-    y.value_counts()
-
-
     y = y['income'].map({'<=50K': 0, '>50K': 1})
 
 
