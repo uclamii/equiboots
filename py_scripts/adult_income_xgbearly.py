@@ -13,12 +13,16 @@ print()
 from ucimlrepo import fetch_ucirepo
 import pandas as pd
 import numpy as np
+import os
 from xgboost import XGBClassifier
 from sklearn.preprocessing import StandardScaler, OneHotEncoder
 from sklearn.impute import SimpleImputer
 from sklearn.pipeline import Pipeline
 from sklearn.compose import ColumnTransformer
 from model_tuner import Model
+
+################################# Set Data Path ################################
+data_path = "../public_data"
 
 ############################### Load The Dataset ###############################
 
@@ -184,15 +188,19 @@ model_xgb.return_metrics(X_test, y_test, optimal_threshold=True)
 ##################### Extract Predicted Probabilities ##########################
 
 y_prob = model_xgb.predict_proba(X_test)
-
 y_prob = pd.DataFrame(y_prob)
+
+## Save out `y_pred`` to csv in `public_data` path
+y_prob.to_csv(os.path.join(data_path, "y_prob.csv"))
 
 print(f"Predicted Probabilities: \n {y_prob}")
 
-
 y_pred = model_xgb.predict(X_test, optimal_threshold=True)
 
-# Cast predictions into DataFrame
+## Cast predictions into DataFrame
 y_pred = pd.DataFrame(y_pred)
+
+## Save out `y_pred`` to csv in `public_data` path
+y_pred.to_csv(os.path.join(data_path, "y_pred.csv"))
 
 print(f"Predictions: \n {y_pred}")
