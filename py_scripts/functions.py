@@ -287,31 +287,35 @@ def plot_metrics(
     categories="all",
     include_legend=True,
     cmap="tab20c",
+    save_plots=False,
+    image_path_png=None,
+    image_path_svg=None,
 ):
     """
-    Plots violin plots for specified metric columns grouped by attribute names.
+    Plots violin plots for specified metric columns grouped by attribute names
+    and optionally saves the output.
 
     Parameters:
-    df (pd.DataFrame): The DataFrame containing the data to be plotted. It should
-    include 'attribute_name' and 'attribute_value' columns.
+    df (pd.DataFrame): The DataFrame containing the data to be plotted.
+    It should include 'attribute_name' and 'attribute_value' columns.
     metric_cols (list of str): List of metric column names to plot.
     categories (str or list of str): 'all' to plot all categories, a specific
     category as a string, or a list of specific attribute names to plot.
-    include_legend (bool): Whether to include the legend in the plots. Default is True.
+    include_legend (bool): Whether to include the legend in the plots.
+    Default is True.
     cmap (str): The color map to use for the plots. Default is 'tab20c'.
-
-    This function creates a figure for each unique attribute name in the DataFrame.
-    Each figure contains violin plots of the specified metrics against attribute
-    values. Horizontal lines are added at y=0, y=1, and y=2 for reference.
-
-    For each subplot, the x-axis represents labeled attribute values, and the
-    y-axis represents the metric values. The colors and font weights of the x-axis
-    labels are adjusted to match the corresponding colors in the legend.
+    save_plots (bool): Whether to save the plots to the specified paths.
+    Default is False.
+    image_path_png (str): Optional path to save the plots as PNG files.
+    Default is None.
+    image_path_svg (str): Optional path to save the plots as SVG files.
+    Default is None.
 
     Raises:
     KeyError: If the required columns 'attribute_name' or 'attribute_value' are
-    not present in the DataFrame. ValueError: If categories is not 'all', a
-    string, or a list of specific attribute names.
+    not present in the DataFrame.
+    ValueError: If categories is not 'all', a string, or a list of specific
+    attribute names.
 
     Example usage:
     metric_cols = ["pprev_disparity", "fpr_disparity", "tnr_disparity",
@@ -322,8 +326,12 @@ def plot_metrics(
         metric_cols=metric_cols,
         include_legend=True,
         cmap="tab20c",
+        save_plots=True,
+        image_path_png="./plots",
+        image_path_svg="./plots",
     )
     """
+
     # Ensure necessary columns are in the DataFrame
     if "attribute_name" not in df.columns or "attribute_value" not in df.columns:
         raise KeyError(
@@ -411,6 +419,22 @@ def plot_metrics(
         plt.tight_layout(
             w_pad=2, h_pad=2, rect=[0.01, 0.01, 1.01, 1]
         )  # Adjust rect to make space for the legend and reduce white space
+
+        # Save plots if save_plots is True and paths are provided
+        if save_plots:
+            if image_path_png:
+                os.makedirs(
+                    image_path_png, exist_ok=True
+                )  # Ensure PNG directory exists
+                png_file = os.path.join(image_path_png, f"{name}_plot.png")
+                plt.savefig(png_file, bbox_inches="tight")
+            if image_path_svg:
+                os.makedirs(
+                    image_path_svg, exist_ok=True
+                )  # Ensure SVG directory exists
+                svg_file = os.path.join(image_path_svg, f"{name}_plot.svg")
+                plt.savefig(svg_file, bbox_inches="tight")
+
         plt.show()
 
 
@@ -427,16 +451,20 @@ def plot_metrics_with_ks_test(
     significance_level=0.05,
 ):
     """
-    Plots violin plots for specified metric columns grouped by attribute names and annotates with KS test results.
+    Plots violin plots for specified metric columns grouped by attribute names
+    and annotates with KS test results.
 
     Parameters:
     df (pd.DataFrame): The DataFrame containing the data to be plotted.
     metric_cols (list of str): List of metric column names to plot.
     ks_test_results_df (pd.DataFrame): DataFrame containing the KS test results.
-    categories (str or list of str): 'all' to plot all categories or a specific category.
-    include_legend (bool): Whether to include the legend in the plots. Default is True.
+    categories (str or list of str): 'all' to plot all categories or a specific
+    category.
+    include_legend (bool): Whether to include the legend in the plots.
+    Default is True.
     cmap (str): The color map to use for the plots. Default is 'tab20c'.
-    significance_level (float): The significance level for the KS test (default is 0.05).
+    significance_level (float): The significance level for the KS test
+    Default is 0.05.
     """
 
     # Ensure necessary columns are in the DataFrame

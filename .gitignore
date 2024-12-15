@@ -143,5 +143,4 @@ dmypy.json
 data_splits/
 structured_data_regressor/
 mlruns/
-Images/
 --stdin*/
