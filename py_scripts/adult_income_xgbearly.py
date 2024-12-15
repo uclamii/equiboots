@@ -20,15 +20,10 @@ from sklearn.preprocessing import StandardScaler, OneHotEncoder
 from sklearn.impute import SimpleImputer
 from sklearn.pipeline import Pipeline
 from sklearn.compose import ColumnTransformer
+from eda_toolkit import add_ids
 from model_tuner import Model
 
 if __name__ == "__main__":
-
-    argv = sys.argv[1:]
-
-    # input_data_file = argv[0]
-    # output_folder = argv[1]
-
 
     ################################# Set Data Path ################################
     data_path = "./public_data"
@@ -39,8 +34,34 @@ if __name__ == "__main__":
     adult = fetch_ucirepo(id=2)
 
     ##################### Define the Feature Space and Outcome #####################
-    X = adult.data.features
-    y = adult.data.targets
+
+    # fetch dataset
+    adult = fetch_ucirepo(id=2)
+
+    adult = adult.data.features.join(adult.data.targets, how="inner")
+
+    adult = add_ids(
+        df=adult,
+        id_colname="Adult_ID",
+        num_digits=9,
+        seed=222,
+    ).set_index(
+        "Adult_ID",
+    )
+
+    ########################## Map Income to Booleans ##############################
+    ######################## and output subset to .csv #############################
+
+    adult.loc[:, "income"] = adult["income"].str.rstrip(".")  # Remove trailing periods
+    adult["income"] = adult["income"].map({"<=50K": 0, ">50K": 1})
+
+    adult_subset = adult[["race", "sex", "income"]]
+
+    adult_subset.to_csv(os.path.join(data_path, "adult.csv"))
+
+    ######################## data (as pandas dataframes) ###########################
+    X = adult[[col for col in adult.columns if not "income" in col]]
+    y = adult[["income"]]
 
     print("-" * 80)
     print("X")
@@ -54,16 +75,10 @@ if __name__ == "__main__":
 
     print(f"\n{y.head()}")  # inspect first 5 rows of y
 
-    y.loc[:, "income"] = y["income"].str.rstrip(".")  # Remove trailing periods
-
     print(f"\n Income Value Counts: \n")
 
     # Check the updated value counts
     print(y["income"].value_counts())
-
-    y = y["income"].map({"<=50K": 0, ">50K": 1})
-
-    outcome = ["y"]
 
     ################### Parse Categorical and Numerical Features ###################
     # >2 categories
@@ -87,6 +102,8 @@ if __name__ == "__main__":
     xgb_name = "xgb"
     xgb = XGBClassifier(
         objective="binary:logistic",
+        tree_method="hist",
+        device="cuda",
         random_state=222,
     )
 
@@ -184,7 +201,6 @@ if __name__ == "__main__":
 
     model_xgb.fit(X_train, y_train, validation_data=[X_valid, y_valid])
 
-
     ######################### Return Metrics (Optional) ############################
 
     print("Validation Metrics")
@@ -193,23 +209,25 @@ if __name__ == "__main__":
     print("Test Metrics")
     model_xgb.return_metrics(X_test, y_test, optimal_threshold=True)
 
-
     ##################### Extract Predicted Probabilities ##########################
 
     y_prob = model_xgb.predict_proba(X_test)
-    y_prob = pd.DataFrame(y_prob)
+    y_prob = pd.DataFrame(
+        y_prob,
+        index=X_test.index,
+        columns=["prob_class_0", "prob_class_1"],
+    )
 
-    ## Save out `y_pred`` to csv in `public_data` path
+    ## Save out `y_prob` to csv in `public_data` path
     y_prob.to_csv(os.path.join(data_path, "y_prob.csv"))
 
-    print(f"Predicted Probabilities: \n {y_prob}")
+    ########################### Extract Predictions ################################
 
     y_pred = model_xgb.predict(X_test, optimal_threshold=True)
 
-    ## Cast predictions into DataFrame
-    y_pred = pd.DataFrame(y_pred)
+    y_pred = pd.DataFrame(y_pred, index=X_test.index, columns=["predicted"])
 
-    ## Save out `y_pred`` to csv in `public_data` path
-    y_pred.to_csv(os.path.join(data_path, "y_pred.csv"))
+    adult_predictions = adult_subset.join(y_pred, on="Adult_ID", how="inner")
 
-    print(f"Predictions: \n {y_pred}")
+    ## Save out `adult_predictions` to csv in `public_data` path
+    adult_predictions.to_csv(os.path.join(data_path, "adult_predictions.csv"))
