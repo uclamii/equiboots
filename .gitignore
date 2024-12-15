@@ -6,8 +6,8 @@ __pycache__/
 # C extensions
 *.so
 
-# CSV files (because most (if not all) contain identifying patient information
-*.csv
+# CSV files (because most (if not all) contain identifying information
+# *.csv
 
 # Distribution / packaging
 .Python
