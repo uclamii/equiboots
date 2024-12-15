@@ -50,14 +50,14 @@ if __name__ == "__main__":
     )
 
     ########################## Map Income to Booleans ##############################
-    ######################## and output subset to .csv #############################
+    ################### and output adult income dataset to .csv ####################
 
     adult.loc[:, "income"] = adult["income"].str.rstrip(".")  # Remove trailing periods
     adult["income"] = adult["income"].map({"<=50K": 0, ">50K": 1})
 
     adult_subset = adult[["race", "sex", "income"]]
 
-    adult_subset.to_csv(os.path.join(data_path, "adult.csv"))
+    adult.to_csv(os.path.join(data_path, "adult.csv"))
 
     ######################## data (as pandas dataframes) ###########################
     X = adult[[col for col in adult.columns if not "income" in col]]
