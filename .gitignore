@@ -140,7 +140,6 @@ dmypy.json
 .pyre/
 
 # Directories to be ignored
-Data/
 data_splits/
 structured_data_regressor/
 mlruns/

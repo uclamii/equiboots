@@ -14,6 +14,7 @@ from ucimlrepo import fetch_ucirepo
 import pandas as pd
 import numpy as np
 import os
+import sys
 from xgboost import XGBClassifier
 from sklearn.preprocessing import StandardScaler, OneHotEncoder
 from sklearn.impute import SimpleImputer
@@ -21,186 +22,194 @@ from sklearn.pipeline import Pipeline
 from sklearn.compose import ColumnTransformer
 from model_tuner import Model
 
-################################# Set Data Path ################################
-data_path = "../public_data"
+if __name__ == "__main__":
 
-############################### Load The Dataset ###############################
+    argv = sys.argv[1:]
 
-### fetch dataset
-adult = fetch_ucirepo(id=2)
+    # input_data_file = argv[0]
+    # output_folder = argv[1]
 
-##################### Define the Feature Space and Outcome #####################
-X = adult.data.features
-y = adult.data.targets
 
-print("-" * 80)
-print("X")
-print("-" * 80)
+    ################################# Set Data Path ################################
+    data_path = "./public_data"
 
-print(X.head())  # inspect first 5 rows of X
+    ############################### Load The Dataset ###############################
 
-print("-" * 80)
-print("y = Outcome = Income")
-print("-" * 80)
+    ### fetch dataset
+    adult = fetch_ucirepo(id=2)
 
-print(f"\n{y.head()}")  # inspect first 5 rows of y
+    ##################### Define the Feature Space and Outcome #####################
+    X = adult.data.features
+    y = adult.data.targets
 
-y.loc[:, "income"] = y["income"].str.rstrip(".")  # Remove trailing periods
+    print("-" * 80)
+    print("X")
+    print("-" * 80)
 
-print(f"\n Income Value Counts: \n")
+    print(X.head())  # inspect first 5 rows of X
 
-# Check the updated value counts
-print(y["income"].value_counts())
+    print("-" * 80)
+    print("y = Outcome = Income")
+    print("-" * 80)
 
-y = y["income"].map({"<=50K": 0, ">50K": 1})
+    print(f"\n{y.head()}")  # inspect first 5 rows of y
 
-outcome = ["y"]
+    y.loc[:, "income"] = y["income"].str.rstrip(".")  # Remove trailing periods
 
-################### Parse Categorical and Numerical Features ###################
-# >2 categories
-categorical_features = [
-    "workclass",
-    "education",
-    "marital-status",
-    "occupation",
-    "relationship",
-    "race",
-    "sex",
-    "native-country",
-    "race",
-]
+    print(f"\n Income Value Counts: \n")
 
-## continuous or binary
-numerical_features = X.select_dtypes(np.number).columns.to_list()
+    # Check the updated value counts
+    print(y["income"].value_counts())
 
-################### Create an instance of the XGBRegressor #####################
+    y = y["income"].map({"<=50K": 0, ">50K": 1})
 
-xgb_name = "xgb"
-xgb = XGBClassifier(
-    objective="binary:logistic",
-    random_state=222,
-)
+    outcome = ["y"]
 
-##################### Define hyperparameters for XGBoost #######################
-
-xgbearly = True
-tuned_parameters_xgb = {
-    f"{xgb_name}__max_depth": [3, 10, 20, 200, 500],
-    f"{xgb_name}__learning_rate": [1e-4],
-    f"{xgb_name}__n_estimators": [1000],
-    f"{xgb_name}__early_stopping_rounds": [100],
-    f"{xgb_name}__verbose": [0],
-    f"{xgb_name}__eval_metric": ["logloss"],
-}
-
-xgb_definition = {
-    "clc": xgb,
-    "estimator_name": xgb_name,
-    "tuned_parameters": tuned_parameters_xgb,
-    "randomized_grid": False,
-    "n_iter": 5,
-    "early": xgbearly,
-}
-
-model_definitions = {
-    xgb_name: xgb_definition,
-}
-
-# Define transformers for different column types
-numerical_transformer = Pipeline(
-    steps=[
-        ("scaler", StandardScaler()),
-        ("imputer", SimpleImputer(strategy="mean")),
+    ################### Parse Categorical and Numerical Features ###################
+    # >2 categories
+    categorical_features = [
+        "workclass",
+        "education",
+        "marital-status",
+        "occupation",
+        "relationship",
+        "race",
+        "sex",
+        "native-country",
+        "race",
     ]
-)
 
-categorical_transformer = Pipeline(
-    steps=[
-        ("imputer", SimpleImputer(strategy="constant", fill_value="missing")),
-        ("encoder", OneHotEncoder(handle_unknown="ignore")),
-    ]
-)
+    ## continuous or binary
+    numerical_features = X.select_dtypes(np.number).columns.to_list()
 
-# Create the ColumnTransformer with passthrough
-preprocessor = ColumnTransformer(
-    transformers=[
-        ("num", numerical_transformer, numerical_features),
-        ("cat", categorical_transformer, categorical_features),
-    ],
-    remainder="passthrough",
-)
+    ################### Create an instance of the XGBRegressor #####################
 
-model_type = "xgb"
-clc = xgb_definition["clc"]
-estimator_name = xgb_definition["estimator_name"]
+    xgb_name = "xgb"
+    xgb = XGBClassifier(
+        objective="binary:logistic",
+        random_state=222,
+    )
 
-tuned_parameters = xgb_definition["tuned_parameters"]
-n_iter = xgb_definition["n_iter"]
-rand_grid = xgb_definition["randomized_grid"]
-early_stop = xgb_definition["early"]
-kfold = False
-calibrate = True
+    ##################### Define hyperparameters for XGBoost #######################
 
-##################### Initialize and configure the Model #######################
+    xgbearly = True
+    tuned_parameters_xgb = {
+        f"{xgb_name}__max_depth": [3, 10, 20, 200, 500],
+        f"{xgb_name}__learning_rate": [1e-4],
+        f"{xgb_name}__n_estimators": [1000],
+        f"{xgb_name}__early_stopping_rounds": [100],
+        f"{xgb_name}__verbose": [0],
+        f"{xgb_name}__eval_metric": ["logloss"],
+    }
 
-model_xgb = Model(
-    name=f"AIDS_Clinical_{model_type}",
-    estimator_name=estimator_name,
-    calibrate=calibrate,
-    estimator=clc,
-    model_type="classification",
-    kfold=kfold,
-    pipeline_steps=[("ColumnTransformer", preprocessor)],
-    stratify_y=True,
-    stratify_cols=["race", "sex"],
-    grid=tuned_parameters,
-    randomized_grid=rand_grid,
-    boost_early=early_stop,
-    scoring=["roc_auc"],
-    random_state=222,
-    n_jobs=2,
-)
+    xgb_definition = {
+        "clc": xgb,
+        "estimator_name": xgb_name,
+        "tuned_parameters": tuned_parameters_xgb,
+        "randomized_grid": False,
+        "n_iter": 5,
+        "early": xgbearly,
+    }
 
-####################### Grid Search Parameter Tuning ###########################
+    model_definitions = {
+        xgb_name: xgb_definition,
+    }
 
-model_xgb.grid_search_param_tuning(X, y, f1_beta_tune=True)
+    # Define transformers for different column types
+    numerical_transformer = Pipeline(
+        steps=[
+            ("scaler", StandardScaler()),
+            ("imputer", SimpleImputer(strategy="mean")),
+        ]
+    )
 
-####################### Extract Train, Val, Test Splits ########################
+    categorical_transformer = Pipeline(
+        steps=[
+            ("imputer", SimpleImputer(strategy="constant", fill_value="missing")),
+            ("encoder", OneHotEncoder(handle_unknown="ignore")),
+        ]
+    )
 
-X_train, y_train = model_xgb.get_train_data(X, y)
-X_test, y_test = model_xgb.get_test_data(X, y)
-X_valid, y_valid = model_xgb.get_valid_data(X, y)
+    # Create the ColumnTransformer with passthrough
+    preprocessor = ColumnTransformer(
+        transformers=[
+            ("num", numerical_transformer, numerical_features),
+            ("cat", categorical_transformer, categorical_features),
+        ],
+        remainder="passthrough",
+    )
 
-################################# Fit The Model ################################
+    model_type = "xgb"
+    clc = xgb_definition["clc"]
+    estimator_name = xgb_definition["estimator_name"]
 
-model_xgb.fit(X_train, y_train, validation_data=[X_valid, y_valid])
+    tuned_parameters = xgb_definition["tuned_parameters"]
+    n_iter = xgb_definition["n_iter"]
+    rand_grid = xgb_definition["randomized_grid"]
+    early_stop = xgb_definition["early"]
+    kfold = False
+    calibrate = True
+
+    ##################### Initialize and configure the Model #######################
+
+    model_xgb = Model(
+        name=f"AIDS_Clinical_{model_type}",
+        estimator_name=estimator_name,
+        calibrate=calibrate,
+        estimator=clc,
+        model_type="classification",
+        kfold=kfold,
+        pipeline_steps=[("ColumnTransformer", preprocessor)],
+        stratify_y=True,
+        stratify_cols=["race", "sex"],
+        grid=tuned_parameters,
+        randomized_grid=rand_grid,
+        boost_early=early_stop,
+        scoring=["roc_auc"],
+        random_state=222,
+        n_jobs=2,
+    )
+
+    ####################### Grid Search Parameter Tuning ###########################
+
+    model_xgb.grid_search_param_tuning(X, y, f1_beta_tune=True)
+
+    ####################### Extract Train, Val, Test Splits ########################
+
+    X_train, y_train = model_xgb.get_train_data(X, y)
+    X_test, y_test = model_xgb.get_test_data(X, y)
+    X_valid, y_valid = model_xgb.get_valid_data(X, y)
+
+    ################################# Fit The Model ################################
+
+    model_xgb.fit(X_train, y_train, validation_data=[X_valid, y_valid])
 
 
-######################### Return Metrics (Optional) ############################
+    ######################### Return Metrics (Optional) ############################
 
-print("Validation Metrics")
-model_xgb.return_metrics(X_valid, y_valid, optimal_threshold=True)
+    print("Validation Metrics")
+    model_xgb.return_metrics(X_valid, y_valid, optimal_threshold=True)
 
-print("Test Metrics")
-model_xgb.return_metrics(X_test, y_test, optimal_threshold=True)
+    print("Test Metrics")
+    model_xgb.return_metrics(X_test, y_test, optimal_threshold=True)
 
 
-##################### Extract Predicted Probabilities ##########################
+    ##################### Extract Predicted Probabilities ##########################
 
-y_prob = model_xgb.predict_proba(X_test)
-y_prob = pd.DataFrame(y_prob)
+    y_prob = model_xgb.predict_proba(X_test)
+    y_prob = pd.DataFrame(y_prob)
 
-## Save out `y_pred`` to csv in `public_data` path
-y_prob.to_csv(os.path.join(data_path, "y_prob.csv"))
+    ## Save out `y_pred`` to csv in `public_data` path
+    y_prob.to_csv(os.path.join(data_path, "y_prob.csv"))
 
-print(f"Predicted Probabilities: \n {y_prob}")
+    print(f"Predicted Probabilities: \n {y_prob}")
 
-y_pred = model_xgb.predict(X_test, optimal_threshold=True)
+    y_pred = model_xgb.predict(X_test, optimal_threshold=True)
 
-## Cast predictions into DataFrame
-y_pred = pd.DataFrame(y_pred)
+    ## Cast predictions into DataFrame
+    y_pred = pd.DataFrame(y_pred)
 
-## Save out `y_pred`` to csv in `public_data` path
-y_pred.to_csv(os.path.join(data_path, "y_pred.csv"))
+    ## Save out `y_pred`` to csv in `public_data` path
+    y_pred.to_csv(os.path.join(data_path, "y_pred.csv"))
 
-print(f"Predictions: \n {y_pred}")
+    print(f"Predictions: \n {y_pred}")
