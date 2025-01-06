@@ -7,6 +7,7 @@ from scipy.stats import ks_2samp
 import os
 from sklearn.utils import resample
 from aequitas.audit import Audit
+import matplotlib.ticker as ticker
 
 
 ################################################################################
@@ -436,6 +437,108 @@ def plot_metrics(
                 plt.savefig(svg_file, bbox_inches="tight")
 
         plt.show()
+
+
+def plot_mean_std_disparity(data_list, years=None):
+    """
+    Plots the mean disparity scores over years with error bars representing the standard deviation.
+
+    Parameters:
+    - data_list: List of dictionaries. Each dictionary represents a year's data
+                 with race categories as keys and disparity scores as values.
+    - years: Optional list of years corresponding to each dictionary in data_list.
+             If not provided, years will be assigned sequentially starting from 2020.
+    """
+    # Initialize an empty DataFrame to store mean and std
+    stats_df = pd.DataFrame(columns=["Year", "Race", "MeanDisparity", "StdDisparity"])
+
+    # If years are not provided, assign default years starting from 2020
+    if years is None:
+        years = [2020 - len(data_list) + i + 1 for i in range(len(data_list))]
+    elif len(years) != len(data_list):
+        raise ValueError("Length of years list must match length of data_list.")
+
+    # Iterate over the data_list and years to compute mean and std
+    for data, year in zip(data_list, years):
+        for race, scores in data.items():
+            # Convert scores to numpy array if it's a pandas Series
+            if isinstance(scores, (pd.Series, pd.DataFrame)):
+                scores = scores.values.flatten()
+            elif isinstance(scores, list):
+                scores = np.array(scores)
+            else:
+                scores = np.array([scores])
+            # Compute mean and std deviation
+            mean_score = np.mean(scores)
+            std_score = np.std(scores)
+            # Append to stats_df
+            temp_df = pd.DataFrame(
+                {
+                    "Year": [year],
+                    "Race": [race],
+                    "MeanDisparity": [mean_score],
+                    "StdDisparity": [std_score],
+                }
+            )
+            stats_df = pd.concat([stats_df, temp_df], ignore_index=True)
+
+    # Convert 'Year' to numeric for proper plotting
+    stats_df["Year"] = pd.to_numeric(stats_df["Year"])
+
+    # Set up the plot
+    plt.figure(figsize=(12, 8))
+
+    # Get the list of races
+    races = stats_df["Race"].unique()
+
+    # Define a color palette
+    colors = plt.cm.tab10.colors  # Adjust the colormap as needed
+    color_dict = {race: colors[i % len(colors)] for i, race in enumerate(races)}
+
+    # Plot mean disparity values over years for each race with error bars
+    for race in races:
+        race_data = stats_df[stats_df["Race"] == race].sort_values("Year")
+        plt.errorbar(
+            race_data["Year"],
+            race_data["MeanDisparity"],
+            yerr=race_data["StdDisparity"],
+            marker="o",
+            linestyle="-",
+            color=color_dict[race],
+            label=race,
+            capsize=5,
+        )
+
+    # Add horizontal dotted lines at y=0 (red), y=1 (blue), and y=2 (red)
+    plt.axhline(y=0, linestyle="--", color="red")
+    plt.axhline(y=1, linestyle="--", color="blue")
+    plt.axhline(y=2, linestyle="--", color="red")
+
+    # Set plot titles and labels
+    plt.title("Mean Disparity Scores Over Years with Standard Deviation")
+    plt.ylabel("Mean Disparity Score")
+    plt.xlabel("Year")
+
+    # Set x-axis ticks to integer years
+    plt.xticks(years)  # Ensure x-axis ticks are at the specified years
+    plt.xlim(min(years) - 0.5, max(years) + 0.5)  # Adjust x-axis limits
+
+    # Format x-axis to show integer labels
+    ax = plt.gca()
+    ax.xaxis.set_major_locator(ticker.MultipleLocator(1))
+    ax.xaxis.set_major_formatter(ticker.FormatStrFormatter("%d"))
+
+    # Add legend
+    plt.legend(title="Race")
+
+    # Show grid
+    plt.grid(True, linestyle="--", alpha=0.5)
+
+    # Adjust layout to prevent clipping of labels and legend
+    plt.tight_layout()
+
+    # Show the plot
+    plt.show()
 
 
 ################################################################################
