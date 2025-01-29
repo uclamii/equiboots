@@ -9,38 +9,55 @@ from sklearn.metrics import (
     brier_score_loss,
     mean_absolute_error,
     mean_squared_error,
+    confusion_matrix,
     # root_mean_squared_error,
     r2_score,
     explained_variance_score,
     mean_squared_log_error,
 )
+import numpy as np
+
 
 from sklearn.preprocessing import MultiLabelBinarizer
+from typing import Optional, List, Dict, Tuple
 
 
-def binary_classification_metrics(y_true, y_pred, y_proba=None):
+def binary_classification_metrics(
+    y_true: np.ndarray, y_pred: np.ndarray, y_proba: Optional[np.ndarray] = None
+) -> Dict[str, float]:
     """
     Evaluate binary classification metrics.
 
     Parameters:
-    - y_true: array-like of shape (n_samples,)
-        True binary labels.
-    - y_pred: array-like of shape (n_samples,)
-        Predicted binary class labels.
-    - y_proba: array-like of shape (n_samples,), optional, default=None
-        Probability estimates for the positive class, used for ROC AUC, Average Precision, etc.
+    - y_true: np.ndarray
+        Array of true binary labels.
+    - y_pred: np.ndarray
+        Array of predicted binary class labels.
+    - y_proba: Optional[np.ndarray]
+        Array of predicted probabilities for the positive class.
 
     Returns:
-    - metrics: dict
-        Dictionary containing the calculated metrics. Keys include 'Accuracy',
-        'Precision', 'Recall', 'F1 Score', and optionally 'ROC AUC',
-        'Average Precision Score', 'Log Loss', 'Brier Score' if `y_proba` is provided.
+    - metrics: Dict[str, float]
+        Dictionary with various metrics such as accuracy, precision, recall, f1 score,
+        TP, FP, FN, TN rates, prevalence, predicted prevalence, and optionally ROC AUC, log loss, and Brier score.
     """
+    tn, fp, fn, tp = confusion_matrix(y_true, y_pred).ravel()
+
+    prevalence = np.mean(y_true)
+    predicted_prevalence = np.mean(y_pred)
+
     metrics = {
         "Accuracy": accuracy_score(y_true, y_pred),
         "Precision": precision_score(y_true, y_pred),
         "Recall": recall_score(y_true, y_pred),
         "F1 Score": f1_score(y_true, y_pred),
+        "Specificity": tn / (tn + fp) if tn + fp > 0 else 0,  # Specificity calculation
+        "TP Rate": tp / (tp + fn) if tp + fn > 0 else 0,
+        "FP Rate": fp / (fp + tn) if fp + tn > 0 else 0,
+        "FN Rate": fn / (tp + fn) if tp + fn > 0 else 0,
+        "TN Rate": tn / (fp + tn) if fp + tn > 0 else 0,
+        "Prevalence": prevalence,
+        "Predicted Prevalence": predicted_prevalence,
     }
 
     if y_proba is not None:
@@ -56,38 +73,69 @@ def binary_classification_metrics(y_true, y_pred, y_proba=None):
     return metrics
 
 
-def multi_label_classification_metrics(
-    y_true, y_pred, y_proba=None, average="weighted"
-):
+def multi_class_prevalence(
+    y_true: np.ndarray, y_pred: np.ndarray, n_classes: int
+) -> Tuple[List[float], List[float]]:
     """
-    Evaluate multi-label classification metrics.
+    Calculate prevalence and predicted prevalence for multi-class classification.
 
     Parameters:
-    - y_true: array-like of shape (n_samples,)
-        True class labels.
-    - y_pred: array-like of shape (n_samples,)
-        Predicted class labels.
-    - y_proba: array-like of shape (n_samples, n_classes), optional, default=None
-        Probability estimates for each class, used for ROC AUC, Average Precision, etc.
-    - average: str, optional, default='weighted'
-        This parameter is required for multiclass/multilabel targets.
+    - y_true: np.ndarray
+        Array of true class labels.
+    - y_pred: np.ndarray
+        Array of predicted class labels.
+    - n_classes: int
+        Number of classes.
 
     Returns:
-    - metrics: dict
-        Dictionary containing the calculated metrics. Keys include 'Accuracy',
-        'Precision', 'Recall', 'F1 Score', and optionally 'ROC AUC',
-        'Average Precision Score', 'Log Loss', and 'Brier Score' if `y_proba` is provided.
+    - Tuple[List[float], List[float]]
+        Lists of prevalence and predicted prevalence for each class.
     """
+    prevalence = [np.mean(y_true == i) for i in range(n_classes)]
+    predicted_prevalence = [np.mean(y_pred == i) for i in range(n_classes)]
+    return prevalence, predicted_prevalence
 
+
+def multi_class_classification_metrics(
+    y_true: np.ndarray,
+    y_pred: np.ndarray,
+    y_proba: Optional[np.ndarray] = None,
+    n_classes: Optional[int] = None,
+    average: str = "weighted",
+) -> Dict[str, List[float]]:
+    """
+    Evaluate multi-class classification metrics.
+
+    Parameters:
+    - y_true: np.ndarray
+        Array of true class labels.
+    - y_pred: np.ndarray
+        Array of predicted class labels.
+    - y_proba: Optional[np.ndarray]
+        Matrix of predicted probabilities for each class.
+    - n_classes: Optional[int]
+        Number of classes. Required if y_proba is provided.
+    - average: str
+        Defines the type of averaging performed on the data.
+
+    Returns:
+    - metrics: Dict[str, List[float]]
+        Dictionary with metrics like accuracy, precision, recall, f1 score,
+        TP, FP, FN, TN rates, prevalence, predicted prevalence, and optionally ROC AUC, log loss, and Brier score.
+    """
+    # only for average precision required input format
     mlb = MultiLabelBinarizer()
-    y_true = mlb.fit_transform(y_true)
-    y_pred = mlb.transform(y_pred)
+    y_true_ap = mlb.fit_transform(y_true.reshape(-1, 1))
+
+    prevalence, predicted_prevalence = multi_class_prevalence(y_true, y_pred, n_classes)
 
     metrics = {
         "Accuracy": accuracy_score(y_true, y_pred),
         "Precision": precision_score(y_true, y_pred, average=average),
         "Recall": recall_score(y_true, y_pred, average=average),
         "F1 Score": f1_score(y_true, y_pred, average=average),
+        "Prevalence": prevalence,
+        "Predicted Prevalence": predicted_prevalence,
     }
 
     if y_proba is not None:
@@ -96,6 +144,62 @@ def multi_label_classification_metrics(
                 "ROC AUC": roc_auc_score(
                     y_true, y_proba, average=average, multi_class="ovr"
                 ),
+                "Average Precision Score": average_precision_score(
+                    y_true_ap, y_proba, average=average
+                ),
+                "Log Loss": log_loss(y_true, y_proba),
+            }
+        )
+
+    return metrics
+
+
+def multi_label_classification_metrics(
+    y_true: np.ndarray,
+    y_pred: np.ndarray,
+    y_proba: Optional[np.ndarray] = None,
+    average: str = "weighted",
+) -> Dict[str, List[float]]:
+    """
+    Evaluate multi-label classification metrics.
+
+    Parameters:
+    - y_true: List[List[int]]
+        True class labels for each sample.
+    - y_pred: List[List[int]]
+        Predicted class labels for each sample.
+    - y_proba: Optional[np.ndarray]
+        Probability estimates for each class.
+    - average: str, optional, default='weighted'
+        Strategy to average metric scores.
+
+    Returns:
+    - metrics: dict
+        Dictionary containing the calculated metrics, such as accuracy,
+        precision, recall, f1 score, and optionally ROC AUC, average precision score, log loss, and confusion matrix rates.
+    """
+
+    # Calculate unique row prevalence and predicted prevalence
+    unique_true, true_counts = np.unique(y_true, axis=0, return_counts=True)
+    unique_pred, pred_counts = np.unique(y_pred, axis=0, return_counts=True)
+
+    prevalence = [count / len(y_true) for count in true_counts]
+    predicted_prevalence = [count / len(y_pred) for count in pred_counts]
+    metrics = {
+        "Accuracy": accuracy_score(y_true, y_pred),
+        "Precision": precision_score(y_true, y_pred, average=average),
+        "Recall": recall_score(y_true, y_pred, average=average),
+        "F1 Score": f1_score(y_true, y_pred, average=average),
+        "Prevalence": prevalence,
+        "Prevalence multi-labels": unique_true.tolist(),
+        "Predicted Prevalence": predicted_prevalence,
+        "Predicted Prevalence multi-labels": unique_pred.tolist(),
+    }
+
+    if y_proba is not None:
+        metrics.update(
+            {
+                "ROC AUC": roc_auc_score(y_true, y_proba, average=average),
                 "Average Precision Score": average_precision_score(
                     y_true, y_proba, average=average
                 ),
@@ -106,18 +210,18 @@ def multi_label_classification_metrics(
     return metrics
 
 
-def regression_metrics(y_true, y_pred):
+def regression_metrics(y_true: np.ndarray, y_pred: np.ndarray) -> Dict[str, float]:
     """
     Evaluate regression metrics.
 
     Parameters:
-    - y_true: array-like of shape (n_samples,)
-        True values.
-    - y_pred: array-like of shape (n_samples,)
-        Predicted values.
+    - y_true: np.ndarray
+        Array of true values, with shape (n_samples,).
+    - y_pred: np.ndarray
+        Array of predicted values, with shape (n_samples,).
 
     Returns:
-    - metrics: dict
+    - metrics: Dict[str, float]
         Dictionary containing the calculated metrics. Keys include 'Mean Absolute Error',
         'Mean Squared Error', 'Root Mean Squared Error', 'R^2 Score',
         'Explained Variance', and 'Mean Squared Log Error'.
@@ -151,6 +255,17 @@ def binary_classification_example():
     print("Binary Classification Metrics:\n", metrics)
 
 
+def multi_class_classification_example():
+    n_samples = 100
+    n_classes = 3
+    y_true = np.random.randint(0, n_classes, size=n_samples)
+    y_proba = np.random.rand(n_samples, n_classes)
+    y_proba /= y_proba.sum(axis=1, keepdims=True)
+    y_pred = np.argmax(y_proba, axis=1)
+    metrics = multi_class_classification_metrics(y_true, y_pred, y_proba, n_classes)
+    print("\nMulti-Class Classification Metrics:\n", metrics)
+
+
 def multi_label_classification_example():
     # Generate random true multi-class labels and predicted probabilities
     n_classes = 3
@@ -164,6 +279,9 @@ def multi_label_classification_example():
     y_proba = np.random.rand(100, n_classes)
     y_proba /= y_proba.sum(axis=1, keepdims=True)  # Normalize to sum to 1
     y_pred = (y_proba > 0.5).astype(int)
+
+    mlb = MultiLabelBinarizer()
+    y_true = mlb.fit_transform(y_true)
 
     # Calculate metrics
     metrics = multi_label_classification_metrics(y_true, y_pred, y_proba)
@@ -182,5 +300,6 @@ def regression_example():
 
 if __name__ == "__main__":
     binary_classification_example()
+    multi_class_classification_example()
     multi_label_classification_example()
     regression_example()
