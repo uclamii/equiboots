@@ -11,8 +11,20 @@ class EquiBoots:
         self.y_true = y_true
         self.fairness_df = fairness_df
         self.groups = {}
+        self.check_task(task)
+        self.check_fairness_vars(fairness_vars)
+        
         pass
-
+    
+    def check_task(self, task):
+        if task not in ['binary_classifcation', 'multi_class_classification', 'regression', 'multi_label_classification']:
+            raise ValueError("Invalid task, please supply one of 'binary_classification', 'multi_class_classification', 'regression' or 'multi_label_classification'")
+        
+    def check_fairness_vars(self, fairness_vars):
+        if fairness_vars is None:
+            raise ValueError("fairness_vars cannot be None, please provide a list")
+        if not isinstance(fairness_vars, list):
+            raise ValueError("fairness_vars must be a list")
 
     def grouper(self, groupings_vars: list) -> pd.DataFrame:
         """Method that given a list of categorical variables, returns indices of each category."""
