@@ -33,7 +33,24 @@ class EquiBoots:
         data = {}
         categories = self.groups[slicing_var]["categories"]
         for cat in categories:
-            y_true = self.y_true[self.groups[slicing_var][cat]["indices"]]
-            y_prob = self.y_prob[self.groups[slicing_var][cat]["indices"]]
+            y_true = self.y_true[self.groups[slicing_var]["indices"][cat]]
+            y_prob = self.y_prob[self.groups[slicing_var]["indices"][cat]]
             data[cat] = {"y_true": y_true, "y_prob": y_prob}
         return data
+    
+
+if __name__ == "__main__":
+    # Test the class
+    y_prob = np.random.rand(1000)
+    y_true = np.random.randint(0, 2, 1000)
+    race = np.random.choice(['white', 'black', 'asian', 'hispanic'], 1000).reshape(-1,1)
+    sex = np.random.choice(["M", "F"], 1000).reshape(-1,1)
+    fairness_df = pd.DataFrame(data=np.concatenate((race,sex),axis=1), columns=['race','sex'])
+
+    eq = EquiBoots(y_prob, y_true, fairness_df, fairness_vars=['race','sex'])   
+
+    eq.grouper(groupings_vars=["race","sex"])
+
+    data = eq.slicer("race")
+
+    print(data)
