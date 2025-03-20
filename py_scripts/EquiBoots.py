@@ -1,13 +1,14 @@
 import pandas as pd
 import numpy as np
-
+from metrics import binary_classification_metrics, multi_class_prevalence, multi_label_classification_metrics, regression_metrics
 
 class EquiBoots:
 
     def __init__(
         self,
-        y_prob: np.array,
         y_true: np.array,
+        y_prob: np.array,
+        y_pred: np.array,
         fairness_df: pd.DataFrame,
         fairness_vars: list,
         task: str = "binary_classification",
@@ -15,8 +16,9 @@ class EquiBoots:
 
         self.fairness_vars = fairness_vars
         self.task = task
-        self.y_prob = y_prob
         self.y_true = y_true
+        self.y_prob = y_prob
+        self.y_pred = y_pred
         self.fairness_df = fairness_df
         self.groups = {}
         self.check_task(task)
@@ -64,13 +66,18 @@ class EquiBoots:
         for cat in categories:
             y_true = self.y_true[self.groups[slicing_var]["indices"][cat]]
             y_prob = self.y_prob[self.groups[slicing_var]["indices"][cat]]
-            data[cat] = {"y_true": y_true, "y_prob": y_prob}
+            y_pred = self.y_pred[self.groups[slicing_var]["indices"][cat]]
+            data[cat] = {"y_true": y_true, "y_prob": y_prob, "y_pred": y_pred}
         return data
 
+
+    def get_metrics(self, group_dict):
+        
 
 if __name__ == "__main__":
     # Test the class
     y_prob = np.random.rand(1000)
+    y_pred = (y_prob > 0.5)
     y_true = np.random.randint(0, 2, 1000)
     race = np.random.choice(["white", "black", "asian", "hispanic"], 1000).reshape(
         -1, 1
@@ -80,7 +87,7 @@ if __name__ == "__main__":
         data=np.concatenate((race, sex), axis=1), columns=["race", "sex"]
     )
 
-    eq = EquiBoots(y_prob, y_true, fairness_df, fairness_vars=["race", "sex"])
+    eq = EquiBoots(y_true, y_prob, y_pred, fairness_df, fairness_vars=["race", "sex"])
 
     eq.grouper(groupings_vars=["race", "sex"])
 
