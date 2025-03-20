@@ -6,6 +6,8 @@ from metrics import (
     multi_label_classification_metrics,
     regression_metrics,
 )
+from scipy import stats
+import itertools
 
 
 class EquiBoots:
@@ -17,6 +19,7 @@ class EquiBoots:
         y_pred: np.array,
         fairness_df: pd.DataFrame,
         fairness_vars: list,
+        reference_groups: list = None,
         task: str = "binary_classification",
     ) -> None:
 
@@ -29,8 +32,19 @@ class EquiBoots:
         self.groups = {}
         self.check_task(task)
         self.check_fairness_vars(fairness_vars)
-
+        self.set_reference_groups(reference_groups)
         pass
+
+    def set_reference_groups(self, reference_groups):
+        ### zip the reference groups
+        if reference_groups:
+            self.reference_groups = dict(zip(self.fairness_vars, reference_groups))
+        else:
+            ### use the most populous group as the reference group if needed
+            self.reference_groups = {}
+            for var in self.fairness_vars:
+                value_counts = self.fairness_df[var].value_counts()
+                self.reference_groups[var] = value_counts.index[0]
 
     def check_task(self, task):
         if task not in [
@@ -40,7 +54,8 @@ class EquiBoots:
             "multi_label_classification",
         ]:
             raise ValueError(
-                "Invalid task, please supply one of 'binary_classification', 'multi_class_classification', 'regression' or 'multi_label_classification'"
+                f"Invalid task, please supply one of 'binary_classification', "
+                f"'multi_class_classification', 'regression' or 'multi_label_classification'"
             )
 
     def check_fairness_vars(self, fairness_vars):
@@ -99,6 +114,39 @@ class EquiBoots:
 
         return metric_sliced_dict
 
+    def calculate_disparities(self, sliced_dict: dict, group: str) -> dict:
+        """
+        Calculate disparities between each group and the reference group.
+        """
+        metric_dict = self.get_metrics(sliced_dict)
+        ref_group = self.reference_groups[group]
+        disparities = {}
+
+        # Get reference group metrics
+        ref_metrics = metric_dict[ref_group]
+
+        # Calculate disparities for each group
+        for category, metrics in metric_dict.items():
+
+            disparities[category] = {}
+            for metric_name, value in metrics.items():
+                if not isinstance(value, (int, float)) or not isinstance(
+                    ref_metrics.get(metric_name), (int, float)
+                ):
+                    continue
+
+                ref_value = ref_metrics[metric_name]
+                if ref_value != 0:
+                    ratio = value / ref_value
+                    disparities[category][f"{metric_name}_ratio"] = ratio
+                else:
+                    disparities[category][f"{metric_name}_ratio"] = -1
+                    raise Warning(
+                        "Reference metric value is zero returning negative value"
+                    )
+
+        return disparities
+
 
 if __name__ == "__main__":
     # Test the class
@@ -113,11 +161,20 @@ if __name__ == "__main__":
         data=np.concatenate((race, sex), axis=1), columns=["race", "sex"]
     )
 
-    eq = EquiBoots(y_true, y_prob, y_pred, fairness_df, fairness_vars=["race", "sex"])
+    eq = EquiBoots(
+        y_true,
+        y_prob,
+        y_pred,
+        fairness_df,
+        fairness_vars=["race", "sex"],
+        # reference_groups=["white", "M"],
+    )
 
     eq.grouper(groupings_vars=["race", "sex"])
 
     data = eq.slicer("race")
     race_metrics = eq.get_metrics(data)
 
-    print(race_metrics)
+    dispa = eq.calculate_disparities(data, "race")
+
+    print(dispa)
