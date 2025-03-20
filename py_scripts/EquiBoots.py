@@ -76,6 +76,29 @@ class EquiBoots:
             data[cat] = {"y_true": y_true, "y_prob": y_prob, "y_pred": y_pred}
         return data
 
+    def get_metrics(self, sliced_dict: dict) -> dict:
+        """Calculate metrics for each group based on the task type."""
+        metric_sliced_dict = {}
+
+        for group, data in sliced_dict.items():
+            y_true = data["y_true"]
+            y_prob = data["y_prob"]
+            y_pred = data["y_pred"]
+
+            if self.task == "binary_classification":
+                metrics = binary_classification_metrics(y_true, y_pred, y_prob)
+            elif self.task == "multi_class_classification":
+                n_classes = len(np.unique(np.concatenate([y_true, y_pred])))
+                metrics = multi_class_prevalence(y_true, y_pred, n_classes)
+            elif self.task == "multi_label_classification":
+                metrics = multi_label_classification_metrics(y_true, y_pred, y_prob)
+            elif self.task == "regression":
+                metrics = regression_metrics(y_true, y_pred)
+
+            metric_sliced_dict[group] = metrics
+
+        return metric_sliced_dict
+
 
 if __name__ == "__main__":
     # Test the class
@@ -95,5 +118,6 @@ if __name__ == "__main__":
     eq.grouper(groupings_vars=["race", "sex"])
 
     data = eq.slicer("race")
+    race_metrics = eq.get_metrics(data)
 
-    print(data)
+    print(race_metrics)
