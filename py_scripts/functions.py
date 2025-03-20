@@ -448,7 +448,6 @@ def plot_metrics_with_ks_test(
     categories="all",
     include_legend=True,
     cmap="tab20c",
-    significance_level=0.05,
 ):
     """
     Plots violin plots for specified metric columns grouped by attribute names
@@ -463,8 +462,6 @@ def plot_metrics_with_ks_test(
     include_legend (bool): Whether to include the legend in the plots.
     Default is True.
     cmap (str): The color map to use for the plots. Default is 'tab20c'.
-    significance_level (float): The significance level for the KS test
-    Default is 0.05.
     """
 
     # Ensure necessary columns are in the DataFrame
