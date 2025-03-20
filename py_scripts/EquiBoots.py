@@ -1,6 +1,12 @@
 import pandas as pd
 import numpy as np
-from metrics import binary_classification_metrics, multi_class_prevalence, multi_label_classification_metrics, regression_metrics
+from metrics import (
+    binary_classification_metrics,
+    multi_class_prevalence,
+    multi_label_classification_metrics,
+    regression_metrics,
+)
+
 
 class EquiBoots:
 
@@ -71,13 +77,10 @@ class EquiBoots:
         return data
 
 
-    def get_metrics(self, group_dict):
-        
-
 if __name__ == "__main__":
     # Test the class
     y_prob = np.random.rand(1000)
-    y_pred = (y_prob > 0.5)
+    y_pred = y_prob > 0.5
     y_true = np.random.randint(0, 2, 1000)
     race = np.random.choice(["white", "black", "asian", "hispanic"], 1000).reshape(
         -1, 1

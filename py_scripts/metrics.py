@@ -51,7 +51,7 @@ def binary_classification_metrics(
         "Precision": precision_score(y_true, y_pred),
         "Recall": recall_score(y_true, y_pred),
         "F1 Score": f1_score(y_true, y_pred),
-        "Specificity": tn / (tn + fp) if tn + fp > 0 else 0,  # Specificity calculation
+        "Specificity": recall_score(y_true, y_pred, pos_label=0),
         "TP Rate": tp / (tp + fn) if tp + fn > 0 else 0,
         "FP Rate": fp / (fp + tn) if fp + tn > 0 else 0,
         "FN Rate": fn / (tp + fn) if tp + fn > 0 else 0,
