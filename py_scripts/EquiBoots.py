@@ -26,7 +26,7 @@ class EquiBoots:
         bootstrap_flag: bool = False,
         num_bootstraps: int = 10,
         boot_sample_size: int = 100,
-        balanced: bool = True, # sample balanced or stratified
+        balanced: bool = True,  # sample balanced or stratified
     ) -> None:
 
         self.fairness_vars = fairness_vars
@@ -75,19 +75,22 @@ class EquiBoots:
 
     def grouper(self, groupings_vars: list) -> pd.DataFrame:
         """
-            Groups data by categorical variables and stores indices for each category.
+        Groups data by categorical variables and stores indices for each category.
 
-            Parameters:
-            groupings_vars : list
-                Categorical variables to group by.
+        Parameters:
+        groupings_vars : list
+            Categorical variables to group by.
 
-            Returns:
-            None
+        Returns:
+        None
         """
         if self.bootstrap_flag:
-            self.groups = self.bootstrap(groupings_vars=groupings_vars, n_iterations=self.num_bootstraps,
-                                         sample_size=self.boot_sample_size,
-                                         balanced=self.balanced)
+            self.groups = self.bootstrap(
+                groupings_vars=groupings_vars,
+                n_iterations=self.num_bootstraps,
+                sample_size=self.boot_sample_size,
+                balanced=self.balanced,
+            )
             print("Groups created")
             return
         else:
@@ -103,39 +106,39 @@ class EquiBoots:
                     ].index
             print("Groups created")
             return
-    
+
     def bootstrap(
         self,
-        seeds: list = [1,2,3,4,5,6,7,8,9,10],
-        n_iterations:int =2,
-        sample_size:int =10,
+        seeds: list = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
+        n_iterations: int = 2,
+        sample_size: int = 10,
         groupings_vars: list = None,
         balanced: bool = True,
     ):
         """
-            Perform balanced bootstrap sampling on the dataset.
+        Perform balanced bootstrap sampling on the dataset.
 
-            Parameters:
-            seeds : list
-                List of random seeds for reproducibility.
-            n_iterations : int
-                Number of bootstrap iterations.
-            sample_size : int
-                Size of each bootstrap sample.
-            groupings_vars : list
-                Variables to group by during sampling.
-            balanced : bool
-                Whether to balance samples across groups.
+        Parameters:
+        seeds : list
+            List of random seeds for reproducibility.
+        n_iterations : int
+            Number of bootstrap iterations.
+        sample_size : int
+            Size of each bootstrap sample.
+        groupings_vars : list
+            Variables to group by during sampling.
+        balanced : bool
+            Whether to balance samples across groups.
 
-            Returns:
-            list
-                List of bootstrapped samples with group indices.
+        Returns:
+        list
+            List of bootstrapped samples with group indices.
         """
 
         bootstrapped_samples = []
         for indx in tqdm(range(n_iterations), desc="Bootstrapping iterations"):
             groups = {}
-            
+
             for var in groupings_vars:
                 categories = self.fairness_df[var].unique()
                 n_categories = len(categories)
@@ -144,13 +147,15 @@ class EquiBoots:
                 groups[var]["indices"] = {}
 
                 for cat in categories:
-                    
+
                     group = self.fairness_df[self.fairness_df[var] == cat].index
 
                     if balanced:
                         n_samples = max(1, int(sample_size / n_categories))
                     else:
-                        n_samples = max(1, int(len(group) * sample_size / len(self.fairness_df)))
+                        n_samples = max(
+                            1, int(len(group) * sample_size / len(self.fairness_df))
+                        )
 
                     sampled_group = resample(
                         group,
@@ -166,35 +171,35 @@ class EquiBoots:
 
     def slicer(self, slicing_var: str) -> pd.DataFrame:
         """
-            Slices y_true, y_prob, and y_pred by a categorical variable, with or without bootstrapping.
+        Slices y_true, y_prob, and y_pred by a categorical variable, with or without bootstrapping.
 
-            Parameters:
-            slicing_var : str
-                The categorical variable to slice by.
+        Parameters:
+        slicing_var : str
+            The categorical variable to slice by.
 
-            Returns:
-            list of dictionaries or dictionary
-                Sliced data grouped by the variable's categories.
+        Returns:
+        list of dictionaries or dictionary
+            Sliced data grouped by the variable's categories.
         """
 
         if self.bootstrap_flag:
             return [self.groups_slicer(groups, slicing_var) for groups in self.groups]
         else:
             return self.groups_slicer(self.groups, slicing_var)
-    
+
     def groups_slicer(self, groups, slicing_var: str) -> pd.DataFrame:
         """
-            Slices y_true, y_prob, and y_pred into categories of a given variable.
+        Slices y_true, y_prob, and y_pred into categories of a given variable.
 
-            Parameters:
-            groups : dict
-                Group indices for slicing.
-            slicing_var : str
-                The categorical variable to slice by.
+        Parameters:
+        groups : dict
+            Group indices for slicing.
+        slicing_var : str
+            The categorical variable to slice by.
 
-            Returns:
-            dictionary
-                Sliced data grouped by categories.
+        Returns:
+        dictionary
+            Sliced data grouped by categories.
         """
 
         data = {}
@@ -206,9 +211,16 @@ class EquiBoots:
             data[cat] = {"y_true": y_true, "y_prob": y_prob, "y_pred": y_pred}
         return data
 
-    def get_metrics(self, sliced_dict: dict) -> dict:
+    def get_metrics(self, sliced_dict) -> dict:
         """Calculate metrics for each group based on the task type."""
-        metric_sliced_dict = {}
+        if self.bootstrap_flag:
+            return [self.get_groups_metrics(sliced) for sliced in sliced_dict]
+        else:
+            return self.get_groups_metrics(sliced_dict)
+
+    def get_groups_metrics(self, sliced_dict: dict) -> dict:
+        """Calculate metrics for each group based on the task type."""
+        sliced_dict_metrics = {}
 
         for group, data in sliced_dict.items():
             y_true = data["y_true"]
@@ -225,9 +237,9 @@ class EquiBoots:
             elif self.task == "regression":
                 metrics = regression_metrics(y_true, y_pred)
 
-            metric_sliced_dict[group] = metrics
+            sliced_dict_metrics[group] = metrics
 
-        return metric_sliced_dict
+        return sliced_dict_metrics
 
     def calculate_disparities(self, sliced_dict: dict, group: str) -> dict:
         """
@@ -266,7 +278,7 @@ class EquiBoots:
 if __name__ == "__main__":
     # Test the class
     y_prob = np.random.rand(1000)
-    y_pred = (y_prob > 0.5)*1
+    y_pred = (y_prob > 0.5) * 1
     y_true = np.random.randint(0, 2, 1000)
     race = np.random.choice(["white", "black", "asian", "hispanic"], 1000).reshape(
         -1, 1
@@ -284,10 +296,10 @@ if __name__ == "__main__":
         fairness_vars=["race", "sex"],
         reference_groups=["white", "M"],
         task="binary_classification",
-        bootstrap_flag = True,
-        num_bootstraps = 10,
-        boot_sample_size = 100,
-        balanced = False, # False is stratified, True is balanced
+        bootstrap_flag=True,
+        num_bootstraps=10,
+        boot_sample_size=100,
+        balanced=False,  # False is stratified, True is balanced
     )
 
     eq.grouper(groupings_vars=["race", "sex"])
@@ -296,11 +308,15 @@ if __name__ == "__main__":
 
     data = eq.slicer("race")
 
-    print(data[0]["black"]["y_true"].shape) 
-    print(data[0]["white"]["y_true"].shape) 
-    print(data[0]["asian"]["y_true"].shape) 
-    print(data[0]["hispanic"]["y_true"].shape) 
-    # race_metrics = eq.get_metrics(data)
+    print(data[0]["black"]["y_true"].shape)
+    print(data[0]["white"]["y_true"].shape)
+    print(data[0]["asian"]["y_true"].shape)
+    print(data[0]["hispanic"]["y_true"].shape)
+
+    race_metrics = eq.get_metrics(data)
+
+    print(race_metrics)
+    print(len(race_metrics))
 
     # dispa = eq.calculate_disparities(data, "race")
 
