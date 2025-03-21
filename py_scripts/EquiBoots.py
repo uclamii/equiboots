@@ -21,6 +21,7 @@ class EquiBoots:
         y_pred: np.array,
         fairness_df: pd.DataFrame,
         fairness_vars: list,
+        seeds: list = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
         reference_groups: list = None,
         task: str = "binary_classification",
         bootstrap_flag: bool = False,
@@ -36,7 +37,7 @@ class EquiBoots:
         self.y_pred = y_pred
         self.fairness_df = fairness_df
         self.groups = {}
-        self.seeds = []
+        self.seeds = seeds
         self.check_task(task)
         self.check_fairness_vars(fairness_vars)
         self.set_reference_groups(reference_groups)
@@ -88,6 +89,7 @@ class EquiBoots:
         if self.bootstrap_flag:
             self.groups = self.bootstrap(
                 groupings_vars=groupings_vars,
+                seeds=self.seeds,
                 n_iterations=self.num_bootstraps,
                 sample_size=self.boot_sample_size,
                 balanced=self.balanced,
@@ -296,13 +298,16 @@ class EquiBoots:
 
 if __name__ == "__main__":
     # Test the class
-    y_prob = np.random.rand(1000)
+    # fix seed
+    y_prob = np.random.RandomState(3).rand(1000)
     y_pred = (y_prob > 0.5) * 1
-    y_true = np.random.randint(0, 2, 1000)
-    race = np.random.choice(["white", "black", "asian", "hispanic"], 1000).reshape(
-        -1, 1
+    y_true = np.random.RandomState(30).randint(0, 2, 1000)
+    race = (
+        np.random.RandomState(3)
+        .choice(["white", "black", "asian", "hispanic"], 1000)
+        .reshape(-1, 1)
     )
-    sex = np.random.choice(["M", "F"], 1000).reshape(-1, 1)
+    sex = np.random.RandomState(31).choice(["M", "F"], 1000).reshape(-1, 1)
     fairness_df = pd.DataFrame(
         data=np.concatenate((race, sex), axis=1), columns=["race", "sex"]
     )
@@ -320,7 +325,7 @@ if __name__ == "__main__":
         boot_sample_size=100,
         balanced=False,  # False is stratified, True is balanced
     )
-    
+
     # Set seeds
     eq.set_fix_seeds([42, 123, 222, 999])
 
