@@ -189,6 +189,6 @@ if __name__ == "__main__":
     print(dispa)
 
     # Set seeds
-    eq.set_fix_seeds([42, 123, 999])
+    eq.set_fix_seeds([42, 123, 222, 999])
 
     print(eq.seeds)
