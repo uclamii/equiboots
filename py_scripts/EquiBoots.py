@@ -36,6 +36,7 @@ class EquiBoots:
         self.y_pred = y_pred
         self.fairness_df = fairness_df
         self.groups = {}
+        self.seeds = []
         self.check_task(task)
         self.check_fairness_vars(fairness_vars)
         self.set_reference_groups(reference_groups)
@@ -284,6 +285,14 @@ class EquiBoots:
 
         return disparities
 
+    def set_fix_seeds(self, seeds: list) -> None:
+        """
+        Set fixed random seeds for bootstrapping or reproducibility.
+        """
+        if not all(isinstance(seed, int) for seed in seeds):
+            raise ValueError("All seeds must be integers.")
+        self.seeds = seeds
+
 
 if __name__ == "__main__":
     # Test the class
@@ -311,6 +320,11 @@ if __name__ == "__main__":
         boot_sample_size=100,
         balanced=False,  # False is stratified, True is balanced
     )
+    
+    # Set seeds
+    eq.set_fix_seeds([42, 123, 222, 999])
+
+    print(eq.seeds)
 
     eq.grouper(groupings_vars=["race", "sex"])
 
