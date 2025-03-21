@@ -241,16 +241,26 @@ class EquiBoots:
 
         return sliced_dict_metrics
 
-    def calculate_disparities(self, sliced_dict: dict, group: str) -> dict:
+    def calculate_disparities(self, metric_dict, var_name: str) -> dict:
+        """Calculate metrics for each group based on the task type."""
+        if self.bootstrap_flag:
+            return [
+                self.calculate_groups_disparities(metrics, var_name=var_name)
+                for metrics in metric_dict
+            ]
+        else:
+            return self.calculate_groups_disparities(metric_dict, var_name=var_name)
+
+    def calculate_groups_disparities(self, metric_dict: dict, var_name: str) -> dict:
         """
         Calculate disparities between each group and the reference group.
         """
-        metric_dict = self.get_metrics(sliced_dict)
-        ref_group = self.reference_groups[group]
+        # metric_dict = self.get_metrics(sliced_dict)
+        ref_cat = self.reference_groups[var_name]
         disparities = {}
 
         # Get reference group metrics
-        ref_metrics = metric_dict[ref_group]
+        ref_metrics = metric_dict[ref_cat]
 
         # Calculate disparities for each group
         for category, metrics in metric_dict.items():
@@ -318,6 +328,7 @@ if __name__ == "__main__":
     print(race_metrics)
     print(len(race_metrics))
 
-    # dispa = eq.calculate_disparities(data, "race")
+    dispa = eq.calculate_disparities(race_metrics, "race")
 
-    # print(dispa)
+    print(dispa)
+    print(len(dispa))
