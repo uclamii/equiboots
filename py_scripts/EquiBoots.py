@@ -8,6 +8,8 @@ from metrics import (
 )
 from scipy import stats
 import itertools
+from tqdm import tqdm
+from sklearn.utils import resample
 
 
 class EquiBoots:
@@ -21,6 +23,10 @@ class EquiBoots:
         fairness_vars: list,
         reference_groups: list = None,
         task: str = "binary_classification",
+        bootstrap_flag: bool = False,
+        num_bootstraps: int = 10,
+        boot_sample_size: int = 100,
+        balanced: bool = True, # sample balanced or stratified
     ) -> None:
 
         self.fairness_vars = fairness_vars
@@ -33,7 +39,10 @@ class EquiBoots:
         self.check_task(task)
         self.check_fairness_vars(fairness_vars)
         self.set_reference_groups(reference_groups)
-        pass
+        self.bootstrap_flag = bootstrap_flag
+        self.num_bootstraps = num_bootstraps
+        self.boot_sample_size = boot_sample_size
+        self.balanced = balanced
 
     def set_reference_groups(self, reference_groups):
         ### zip the reference groups
@@ -65,29 +74,135 @@ class EquiBoots:
             raise ValueError("fairness_vars must be a list")
 
     def grouper(self, groupings_vars: list) -> pd.DataFrame:
-        """Method that given a list of categorical variables, returns indices of each category."""
-        for var in groupings_vars:
-            self.groups[var] = {}
-            # Replace NaN with 'missing' to treat missing values as a category
-            self.fairness_df[var] = self.fairness_df[var].fillna("missing")
-            self.groups[var]["categories"] = self.fairness_df[var].unique()
-            self.groups[var]["indices"] = {}
-            for cat in self.groups[var]["categories"]:
-                self.groups[var]["indices"][cat] = self.fairness_df[
-                    self.fairness_df[var] == cat
-                ].index
-        print("Groups created")
-        return
+        """
+            Groups data by categorical variables and stores indices for each category.
+
+            Parameters:
+            groupings_vars : list
+                Categorical variables to group by.
+
+            Returns:
+            None
+        """
+        if self.bootstrap_flag:
+            self.groups = self.bootstrap(groupings_vars=groupings_vars, n_iterations=self.num_bootstraps,
+                                         sample_size=self.boot_sample_size,
+                                         balanced=self.balanced)
+            print("Groups created")
+            return
+        else:
+            for var in groupings_vars:
+                self.groups[var] = {}
+                # Replace NaN with 'missing' to treat missing values as a category
+                self.fairness_df[var] = self.fairness_df[var].fillna("missing")
+                self.groups[var]["categories"] = self.fairness_df[var].unique()
+                self.groups[var]["indices"] = {}
+                for cat in self.groups[var]["categories"]:
+                    self.groups[var]["indices"][cat] = self.fairness_df[
+                        self.fairness_df[var] == cat
+                    ].index
+            print("Groups created")
+            return
+    
+    def bootstrap(
+        self,
+        seeds: list = [1,2,3,4,5,6,7,8,9,10],
+        n_iterations:int =2,
+        sample_size:int =10,
+        groupings_vars: list = None,
+        balanced: bool = True,
+    ):
+        """
+            Perform balanced bootstrap sampling on the dataset.
+
+            Parameters:
+            seeds : list
+                List of random seeds for reproducibility.
+            n_iterations : int
+                Number of bootstrap iterations.
+            sample_size : int
+                Size of each bootstrap sample.
+            groupings_vars : list
+                Variables to group by during sampling.
+            balanced : bool
+                Whether to balance samples across groups.
+
+            Returns:
+            list
+                List of bootstrapped samples with group indices.
+        """
+
+        bootstrapped_samples = []
+        for indx in tqdm(range(n_iterations), desc="Bootstrapping iterations"):
+            groups = {}
+            
+            for var in groupings_vars:
+                categories = self.fairness_df[var].unique()
+                n_categories = len(categories)
+                groups[var] = {}
+                groups[var]["categories"] = categories
+                groups[var]["indices"] = {}
+
+                for cat in categories:
+                    
+                    group = self.fairness_df[self.fairness_df[var] == cat].index
+
+                    if balanced:
+                        n_samples = max(1, int(sample_size / n_categories))
+                    else:
+                        n_samples = max(1, int(len(group) * sample_size / len(self.fairness_df)))
+
+                    sampled_group = resample(
+                        group,
+                        replace=True,
+                        n_samples=n_samples,
+                        random_state=seeds[indx % len(seeds)],
+                    )
+
+                    groups[var]["indices"][cat] = sampled_group
+            bootstrapped_samples.append(groups)
+
+        return bootstrapped_samples
 
     def slicer(self, slicing_var: str) -> pd.DataFrame:
-        """Method that given a categorical variable,
-        slices the y_true and y_prob into the different categories of the variable"""
+        """
+            Slices y_true, y_prob, and y_pred by a categorical variable, with or without bootstrapping.
+
+            Parameters:
+            slicing_var : str
+                The categorical variable to slice by.
+
+            Returns:
+            list of dictionaries or dictionary
+                Sliced data grouped by the variable's categories.
+        """
+
+        if self.bootstrap_flag:
+            return [self.groups_slicer(groups, slicing_var) for groups in self.groups]
+        else:
+            return self.groups_slicer(self.groups, slicing_var)
+    
+    def groups_slicer(self, groups, slicing_var: str) -> pd.DataFrame:
+        """
+            Slices y_true, y_prob, and y_pred into categories of a given variable.
+
+            Parameters:
+            groups : dict
+                Group indices for slicing.
+            slicing_var : str
+                The categorical variable to slice by.
+
+            Returns:
+            dictionary
+                Sliced data grouped by categories.
+        """
+
         data = {}
-        categories = self.groups[slicing_var]["categories"]
+        categories = groups[slicing_var]["categories"]
         for cat in categories:
-            y_true = self.y_true[self.groups[slicing_var]["indices"][cat]]
-            y_prob = self.y_prob[self.groups[slicing_var]["indices"][cat]]
-            y_pred = self.y_pred[self.groups[slicing_var]["indices"][cat]]
+            y_true = self.y_true[groups[slicing_var]["indices"][cat]]
+            y_prob = self.y_prob[groups[slicing_var]["indices"][cat]]
+            y_pred = self.y_pred[groups[slicing_var]["indices"][cat]]
             data[cat] = {"y_true": y_true, "y_prob": y_prob, "y_pred": y_pred}
         return data
 
@@ -151,7 +266,7 @@ class EquiBoots:
 if __name__ == "__main__":
     # Test the class
     y_prob = np.random.rand(1000)
-    y_pred = y_prob > 0.5
+    y_pred = (y_prob > 0.5)*1
     y_true = np.random.randint(0, 2, 1000)
     race = np.random.choice(["white", "black", "asian", "hispanic"], 1000).reshape(
         -1, 1
@@ -167,14 +282,26 @@ if __name__ == "__main__":
         y_pred,
         fairness_df,
         fairness_vars=["race", "sex"],
-        # reference_groups=["white", "M"],
+        reference_groups=["white", "M"],
+        task="binary_classification",
+        bootstrap_flag = True,
+        num_bootstraps = 10,
+        boot_sample_size = 100,
+        balanced = False, # False is stratified, True is balanced
     )
 
     eq.grouper(groupings_vars=["race", "sex"])
 
+    print(eq.groups)
+
     data = eq.slicer("race")
-    race_metrics = eq.get_metrics(data)
 
-    dispa = eq.calculate_disparities(data, "race")
+    print(data[0]["black"]["y_true"].shape) 
+    print(data[0]["white"]["y_true"].shape) 
+    print(data[0]["asian"]["y_true"].shape) 
+    print(data[0]["hispanic"]["y_true"].shape) 
+    # race_metrics = eq.get_metrics(data)
 
-    print(dispa)
+    # dispa = eq.calculate_disparities(data, "race")
+
+    # print(dispa)
