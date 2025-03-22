@@ -24,7 +24,7 @@ def eq_plot_roc_auc(
     filename: str = "roc_auc_by_group",
     title: str = "ROC Curve by Group",
     figsize: tuple = (8, 6),
-    dpi: int = 300,
+    dpi: int = 100,
     tick_fontsize: int = 10,
     decimal_places: int = 2,
 ):
@@ -97,9 +97,9 @@ def eq_plot_roc_auc(
             os.path.join(save_path, f"{filename}.png"),
             bbox_inches="tight",
         )
-        plt.close(fig)
-
-    return fig
+        plt.close(fig)  # prevent display in notebook
+    else:
+        plt.show()  # only show if not saving
 
 
 ################################################################################
@@ -113,7 +113,7 @@ def eq_plot_precision_recall(
     filename: str = "precision_recall_by_group",
     title: str = "Precision-Recall Curve by Group",
     figsize: tuple = (8, 6),
-    dpi: int = 300,
+    dpi: int = 100,
     tick_fontsize: int = 10,
     decimal_places: int = 2,
 ):
@@ -185,9 +185,9 @@ def eq_plot_precision_recall(
             os.path.join(save_path, f"{filename}.png"),
             bbox_inches="tight",
         )
-        plt.close(fig)
-
-    return fig
+        plt.close(fig)  # prevent display in notebook
+    else:
+        plt.show()  # only show if not saving
 
 
 ################################################################################
@@ -199,7 +199,7 @@ def eq_calibration_curve_plot(
     data: dict,
     n_bins: int = 10,
     figsize: tuple = (8, 6),
-    dpi: int = 300,
+    dpi: int = 100,
     title: str = "Calibration Curve by Group",
     filename: str = "calibration_by_group",
     save_path: str = None,
@@ -293,9 +293,9 @@ def eq_calibration_curve_plot(
             os.path.join(save_path, f"{filename}.png"),
             bbox_inches="tight",
         )
-        plt.close(fig)
-
-    return fig
+        plt.close(fig)  # prevent display in notebook
+    else:
+        plt.show()  # only show if not saving
 
 
 ################################################################################
@@ -303,15 +303,46 @@ def eq_calibration_curve_plot(
 ################################################################################
 
 
+def get_layout(n_metrics, max_cols=None, figsize=None, strict_layout=True):
+    if strict_layout:
+        if max_cols is None:
+            max_cols = 6  # fallback default
+        n_cols = max_cols
+        n_rows = int(np.ceil(n_metrics / n_cols))
+        fig_width = 24 if figsize is None else figsize[0]
+        fig_height = 4 * n_rows if figsize is None else figsize[1]
+    else:
+        if figsize is not None:
+            if max_cols is None:
+                max_cols = int(np.ceil(np.sqrt(n_metrics)))
+            n_cols = min(max_cols, n_metrics)
+            n_rows = int(np.ceil(n_metrics / n_cols))
+            fig_width, fig_height = figsize
+        else:
+            if max_cols is None:
+                max_cols = int(np.ceil(np.sqrt(n_metrics)))
+            n_cols = min(max_cols, n_metrics)
+            n_rows = int(np.ceil(n_metrics / n_cols))
+            fig_width = 5 * n_cols
+            fig_height = 5 * n_rows
+
+    return n_rows, n_cols, (fig_width, fig_height)
+
+
 def eq_disparity_metrics_plot(
     dispa,
     metric_cols,
     name,
+    plot_kind="violinplot",
     categories="all",
     include_legend=True,
     cmap="tab20c",
     save_path=None,
     filename="Disparity_Metrics",
+    max_cols=None,
+    strict_layout=True,
+    figsize=None,
+    **plot_kwargs,
 ):
     # Ensure necessary columns are in the DataFrame
     if type(dispa) is not list:
@@ -341,10 +372,19 @@ def eq_disparity_metrics_plot(
     ]
 
     n_metrics = len(metric_cols)
-    n_cols = 6
-    n_rows = int(np.ceil(n_metrics / n_cols))
+    n_rows, n_cols, final_figsize = get_layout(
+        n_metrics,
+        max_cols=max_cols,
+        figsize=figsize,
+        strict_layout=strict_layout,
+    )
 
-    fig, axs = plt.subplots(n_rows, n_cols, figsize=(24, 4), squeeze=False)
+    fig, axs = plt.subplots(
+        n_rows,
+        n_cols,
+        figsize=final_figsize,
+        squeeze=False,
+    )
 
     for i, col in enumerate(metric_cols):
         ax = axs[i // n_cols, i % n_cols]
@@ -355,7 +395,16 @@ def eq_disparity_metrics_plot(
                 x_vals.append(key)
                 y_vals.append(val[col])
 
-        sns.violinplot(ax=ax, x=x_vals, y=y_vals)
+        # Validate and get the Seaborn plotting function
+        try:
+            plot_func = getattr(sns, plot_kind)
+        except AttributeError:
+            raise ValueError(
+                f"Unsupported plot_kind: '{plot_kind}'. Must be one of: "
+                "'violinplot', 'boxplot', 'stripplot', 'swarmplot', etc."
+            )
+        plot_color = colors[0]
+        plot_func(ax=ax, x=x_vals, y=y_vals, color=plot_color, **plot_kwargs)
         ax.set_title(name + "_" + col)
         ax.set_xlabel("")
         ax.set_xticks(range(len(label_values)))
@@ -379,18 +428,20 @@ def eq_disparity_metrics_plot(
         ax.set_xlim([-1, len(value_labels)])
         ax.set_ylim(-2, 4)
 
-    # Remove any empty subplots
+    # Keep empty axes but hide them (preserves layout spacing)
     for j in range(i + 1, n_rows * n_cols):
-        fig.delaxes(axs[j // n_cols, j % n_cols])
+        ax = axs[j // n_cols, j % n_cols]
+        ax.axis("off")
 
-    # Add a single legend at the top of the figure if include_legend is True
+    # Before showing or saving
     if include_legend:
         fig.legend(
             handles=legend_handles,
             loc="upper center",
-            ncol=len(label_values),
             bbox_to_anchor=(0.5, 1.15),
+            ncol=len(label_values),
             fontsize="large",
+            frameon=False,
         )
 
     plt.tight_layout(
@@ -403,9 +454,9 @@ def eq_disparity_metrics_plot(
             os.path.join(save_path, f"{filename}.png"),
             bbox_inches="tight",
         )
-        plt.close(fig)
-
-    return fig
+        plt.close(fig)  # prevent display in notebook
+    else:
+        plt.show()  # only show if not saving
 
 
 if __name__ == "__main__":
