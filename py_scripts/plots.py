@@ -1,9 +1,9 @@
 from sklearn.calibration import calibration_curve
 import matplotlib.pyplot as plt
+import seaborn as sns
 import numpy as np
 import pandas as pd
 import os
-from EquiBoots import EquiBoots
 from sklearn.metrics import (
     roc_curve,
     auc,
@@ -11,6 +11,7 @@ from sklearn.metrics import (
     average_precision_score,
     brier_score_loss,
 )
+from EquiBoots import EquiBoots
 
 ################################################################################
 # ROC AUC Curve Plot
@@ -297,6 +298,116 @@ def eq_calibration_curve_plot(
     return fig
 
 
+################################################################################
+# Disparity Metrics (Violin or Box Plots)
+################################################################################
+
+
+def eq_disparity_metrics_plot(
+    dispa,
+    metric_cols,
+    name,
+    categories="all",
+    include_legend=True,
+    cmap="tab20c",
+    save_path=None,
+    filename="Disparity_Metrics",
+):
+    # Ensure necessary columns are in the DataFrame
+    if type(dispa) is not list:
+        raise TypeError("dispa should be a list")
+
+    # Filter the DataFrame based on the specified categories
+    if categories != "all":
+        attributes = categories
+    else:
+        attributes = list(dispa[0].keys())
+
+    # Create a dictionary to map attribute_value to labels A, B, C, etc.
+    value_labels = {value: chr(65 + i) for i, value in enumerate(attributes)}
+
+    # Reverse the dictionary to use in plotting
+    label_values = {v: k for k, v in value_labels.items()}
+
+    # Use a color map to generate colors
+    color_map = plt.get_cmap(cmap)  # Allow user to specify colormap
+    num_colors = len(label_values)
+    colors = [color_map(i / num_colors) for i in range(num_colors)]
+
+    # Create custom legend handles
+    legend_handles = [
+        plt.Line2D([0], [0], color=colors[j], lw=4, label=f"{label} = {value}")
+        for j, (label, value) in enumerate(label_values.items())
+    ]
+
+    n_metrics = len(metric_cols)
+    n_cols = 6
+    n_rows = int(np.ceil(n_metrics / n_cols))
+
+    fig, axs = plt.subplots(n_rows, n_cols, figsize=(24, 4), squeeze=False)
+
+    for i, col in enumerate(metric_cols):
+        ax = axs[i // n_cols, i % n_cols]
+        x_vals = []
+        y_vals = []
+        for row in dispa:
+            for key, val in row.items():
+                x_vals.append(key)
+                y_vals.append(val[col])
+
+        sns.violinplot(ax=ax, x=x_vals, y=y_vals)
+        ax.set_title(name + "_" + col)
+        ax.set_xlabel("")
+        ax.set_xticks(range(len(label_values)))
+        ax.set_xticklabels(
+            label_values.keys(),
+            rotation=0,
+            fontweight="bold",
+        )
+
+        # Set the color and font weight of each tick label to match the
+        # corresponding color in the legend
+        for tick_label in ax.get_xticklabels():
+            tick_label.set_color(
+                colors[list(label_values.keys()).index(tick_label.get_text())]
+            )
+            tick_label.set_fontweight("bold")
+
+        ax.hlines(0, -1, len(value_labels) + 1, ls=":", color="red")
+        ax.hlines(1, -1, len(value_labels) + 1, ls=":")
+        ax.hlines(2, -1, len(value_labels) + 1, ls=":", color="red")
+        ax.set_xlim([-1, len(value_labels)])
+        ax.set_ylim(-2, 4)
+
+    # Remove any empty subplots
+    for j in range(i + 1, n_rows * n_cols):
+        fig.delaxes(axs[j // n_cols, j % n_cols])
+
+    # Add a single legend at the top of the figure if include_legend is True
+    if include_legend:
+        fig.legend(
+            handles=legend_handles,
+            loc="upper center",
+            ncol=len(label_values),
+            bbox_to_anchor=(0.5, 1.15),
+            fontsize="large",
+        )
+
+    plt.tight_layout(
+        w_pad=2, h_pad=2, rect=[0.01, 0.01, 1.01, 1]
+    )  # Adjust rect to make space for the legend and reduce white space
+
+    if save_path:
+        os.makedirs(save_path, exist_ok=True)
+        fig.savefig(
+            os.path.join(save_path, f"{filename}.png"),
+            bbox_inches="tight",
+        )
+        plt.close(fig)
+
+    return fig
+
+
 if __name__ == "__main__":
 
     # Generate synthetic test data
@@ -314,15 +425,40 @@ if __name__ == "__main__":
     )
 
     # Initialize and process groups
-    eq = EquiBoots(
+    eq1 = EquiBoots(
         y_true=y_true,
         y_prob=y_prob,
         y_pred=y_pred,
         fairness_df=fairness_df,
         fairness_vars=["race", "sex"],
     )
-    eq.grouper(groupings_vars=["race", "sex"])
-    sliced_data = eq.slicer("race")
+    eq1.grouper(groupings_vars=["race", "sex"])
+    sliced_data = eq1.slicer("race")
+
+    eq2 = EquiBoots(
+        y_true,
+        y_prob,
+        y_pred,
+        fairness_df,
+        fairness_vars=["race", "sex"],
+        reference_groups=["white", "M"],
+        task="binary_classification",
+        bootstrap_flag=True,
+        num_bootstraps=10,
+        boot_sample_size=100,
+        balanced=False,  # False is stratified, True is balanced
+    )
+
+    # Set seeds
+    eq2.set_fix_seeds([42, 123, 222, 999])
+    eq2.grouper(groupings_vars=["race", "sex"])
+    data = eq2.slicer("race")
+    race_metrics = eq2.get_metrics(data)
+    dispa = eq2.calculate_disparities(race_metrics, "race")
+
+    ############################################################################
+    # Plots
+    ############################################################################
 
     # ROC plot
     fig1 = eq_plot_roc_auc(
@@ -351,3 +487,12 @@ if __name__ == "__main__":
         decimal_places=3,
     )
     fig3.show()
+
+    fig4 = eq_disparity_metrics_plot(
+        dispa,
+        metric_cols=["Accuracy_ratio", "Precision_ratio"],
+        name="race",
+        categories="all",
+    )
+
+    fig4.show()

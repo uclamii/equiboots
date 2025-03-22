@@ -6,8 +6,6 @@ from metrics import (
     multi_label_classification_metrics,
     regression_metrics,
 )
-from scipy import stats
-import itertools
 from tqdm import tqdm
 from sklearn.utils import resample
 
@@ -174,7 +172,8 @@ class EquiBoots:
 
     def slicer(self, slicing_var: str) -> pd.DataFrame:
         """
-        Slices y_true, y_prob, and y_pred by a categorical variable, with or without bootstrapping.
+        Slices y_true, y_prob, and y_pred by a categorical variable, with or
+        without bootstrapping.
 
         Parameters:
         slicing_var : str
@@ -231,12 +230,20 @@ class EquiBoots:
             y_pred = data["y_pred"]
 
             if self.task == "binary_classification":
-                metrics = binary_classification_metrics(y_true, y_pred, y_prob)
+                metrics = binary_classification_metrics(
+                    y_true,
+                    y_pred,
+                    y_prob,
+                )
             elif self.task == "multi_class_classification":
                 n_classes = len(np.unique(np.concatenate([y_true, y_pred])))
                 metrics = multi_class_prevalence(y_true, y_pred, n_classes)
             elif self.task == "multi_label_classification":
-                metrics = multi_label_classification_metrics(y_true, y_pred, y_prob)
+                metrics = multi_label_classification_metrics(
+                    y_true,
+                    y_pred,
+                    y_prob,
+                )
             elif self.task == "regression":
                 metrics = regression_metrics(y_true, y_pred)
 
@@ -252,7 +259,10 @@ class EquiBoots:
                 for metrics in metric_dict
             ]
         else:
-            return self.calculate_groups_disparities(metric_dict, var_name=var_name)
+            return self.calculate_groups_disparities(
+                metric_dict,
+                var_name=var_name,
+            )
 
     def calculate_groups_disparities(self, metric_dict: dict, var_name: str) -> dict:
         """
@@ -329,11 +339,11 @@ if __name__ == "__main__":
     # Set seeds
     eq.set_fix_seeds([42, 123, 222, 999])
 
-    print(eq.seeds)
+    print("seeds", eq.seeds)
 
     eq.grouper(groupings_vars=["race", "sex"])
 
-    print(eq.groups)
+    print("groups", eq.groups)
 
     data = eq.slicer("race")
 
@@ -344,10 +354,19 @@ if __name__ == "__main__":
 
     race_metrics = eq.get_metrics(data)
 
-    print(race_metrics)
-    print(len(race_metrics))
+    print("race_metrics", race_metrics)
+    print("len(race_metrics)", len(race_metrics))
 
     dispa = eq.calculate_disparities(race_metrics, "race")
 
-    print(dispa)
-    print(len(dispa))
+    melted = pd.DataFrame(dispa).melt()
+    df = (
+        melted["value"]
+        .apply(pd.Series)
+        .assign(
+            attribute_value=melted["variable"],
+        )
+    )
+
+    print("dispa", dispa)
+    print("len(dispa)", len(dispa))
