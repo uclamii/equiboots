@@ -1,3 +1,5 @@
+import numpy as np
+
 from sklearn.metrics import (
     accuracy_score,
     precision_score,
@@ -15,8 +17,6 @@ from sklearn.metrics import (
     explained_variance_score,
     mean_squared_log_error,
 )
-import numpy as np
-
 
 from sklearn.preprocessing import MultiLabelBinarizer
 from typing import Optional, List, Dict, Tuple
@@ -38,8 +38,9 @@ def binary_classification_metrics(
 
     Returns:
     - metrics: Dict[str, float]
-        Dictionary with various metrics such as accuracy, precision, recall, f1 score,
-        TP, FP, FN, TN rates, prevalence, predicted prevalence, and optionally ROC AUC, log loss, and Brier score.
+        Dictionary with various metrics such as accuracy, precision, recall,
+        f1 score, TP, FP, FN, TN rates, prevalence, predicted prevalence, and
+        optionally ROC AUC, log loss, and Brier score.
     """
     tn, fp, fn, tp = confusion_matrix(y_true, y_pred).ravel()
 
@@ -121,7 +122,8 @@ def multi_class_classification_metrics(
     Returns:
     - metrics: Dict[str, List[float]]
         Dictionary with metrics like accuracy, precision, recall, f1 score,
-        TP, FP, FN, TN rates, prevalence, predicted prevalence, and optionally ROC AUC, log loss, and Brier score.
+        TP, FP, FN, TN rates, prevalence, predicted prevalence, and optionally
+        ROC AUC, log loss, and Brier score.
     """
     # only for average precision required input format
     mlb = MultiLabelBinarizer()
@@ -176,7 +178,8 @@ def multi_label_classification_metrics(
     Returns:
     - metrics: dict
         Dictionary containing the calculated metrics, such as accuracy,
-        precision, recall, f1 score, and optionally ROC AUC, average precision score, log loss, and confusion matrix rates.
+        precision, recall, f1 score, and optionally ROC AUC, average precision
+        score, log loss, and confusion matrix rates.
     """
 
     # Calculate unique row prevalence and predicted prevalence
@@ -222,9 +225,9 @@ def regression_metrics(y_true: np.ndarray, y_pred: np.ndarray) -> Dict[str, floa
 
     Returns:
     - metrics: Dict[str, float]
-        Dictionary containing the calculated metrics. Keys include 'Mean Absolute Error',
-        'Mean Squared Error', 'Root Mean Squared Error', 'R^2 Score',
-        'Explained Variance', and 'Mean Squared Log Error'.
+        Dictionary containing the calculated metrics. Keys include
+        'Mean Absolute Error', 'Mean Squared Error', 'Root Mean Squared Error',
+        'R^2 Score', 'Explained Variance', and 'Mean Squared Log Error'.
     """
     metrics = {
         "Mean Absolute Error": mean_absolute_error(y_true, y_pred),
@@ -240,8 +243,6 @@ def regression_metrics(y_true: np.ndarray, y_pred: np.ndarray) -> Dict[str, floa
 
 
 ####################################### toy examples
-
-import numpy as np
 
 
 def binary_classification_example():
