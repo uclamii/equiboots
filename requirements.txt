@@ -1,7 +1,9 @@
+-e .
 matplotlib==3.10.1
 numpy==2.2.4
 pandas==2.2.3
 pytest==8.3.5
+pytest_cov==6.0.0
 scikit-learn==1.5.2
 scipy==1.15.2
 seaborn==0.13.2
