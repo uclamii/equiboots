@@ -8,21 +8,24 @@ import builtins
 
 # Detailed Documentation
 
-detailed_doc = """                                                               
-The `model_tuner` library is a versatile and powerful tool designed to 
-facilitate the training, tuning, and evaluation of machine learning models. 
-It supports various functionalities such as handling imbalanced data, applying 
-different scaling and imputation techniques, calibrating models, and conducting 
-cross-validation. This library is particularly useful for hyperparameter tuning
-and ensuring optimal performance across different metrics.
+detailed_doc = """
+The `equiboots` library is a fairness-aware model evaluation toolkit designed to
+audit performance disparities across demographic groups. It provides robust, 
+bootstrapped metrics for binary, multi-class, and multi-label classification, 
+as well as regression models. The library supports group-wise performance slicing, 
+fairness diagnostics, and customizable visualizations to support equitable AI/ML 
+development.
 
-PyPI: https://pypi.org/project/equiboots
+EquiBoots is particularly useful in clinical, social, and policy domains where 
+transparency, bias mitigation, and outcome fairness are critical for responsible 
+deployment.
+
+PyPI: https://pypi.org/project/equiboots  
 Documentation: https://uclamii.github.io/equiboots/
 
-
 Version: 0.0.0a
-
 """
+
 
 # Assign only the detailed documentation to __doc__
 __doc__ = detailed_doc
