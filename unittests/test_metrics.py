@@ -11,7 +11,6 @@ sys.path.insert(
 import numpy as np
 from sklearn.preprocessing import MultiLabelBinarizer
 
-# type: ignore
 from metrics import (
     binary_classification_metrics,
     multi_class_prevalence,
