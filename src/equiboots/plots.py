@@ -11,7 +11,7 @@ from sklearn.metrics import (
     average_precision_score,
     brier_score_loss,
 )
-from EquiBoots import EquiBoots
+from .EquiBoots import EquiBoots
 
 ################################################################################
 # ROC AUC Curve Plot

@@ -1,6 +1,6 @@
 import pandas as pd
 import numpy as np
-from metrics import (
+from .metrics import (
     binary_classification_metrics,
     multi_class_prevalence,
     multi_label_classification_metrics,

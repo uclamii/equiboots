@@ -1,17 +1,7 @@
-import sys
-import os
-
-sys.path.insert(
-    0,
-    os.path.abspath(
-        os.path.join(os.path.dirname(__file__), "..", "src"),
-    ),
-)
-
 import numpy as np
 from sklearn.preprocessing import MultiLabelBinarizer
 
-from metrics import (
+from src.equiboots.metrics import (
     binary_classification_metrics,
     multi_class_prevalence,
     multi_class_classification_metrics,
