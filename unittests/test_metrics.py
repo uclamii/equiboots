@@ -4,12 +4,14 @@ import os
 sys.path.insert(
     0,
     os.path.abspath(
-        os.path.join(os.path.dirname(__file__), "..", "py_scripts"),
+        os.path.join(os.path.dirname(__file__), "..", "src"),
     ),
 )
 
 import numpy as np
 from sklearn.preprocessing import MultiLabelBinarizer
+
+# type: ignore
 from metrics import (
     binary_classification_metrics,
     multi_class_prevalence,
