@@ -1,0 +1,102 @@
+import pandas as pd
+import numpy as np
+import inspect
+import pytest
+from src.equiboots.EquiBoots import EquiBoots
+
+
+# Synthetic dataset fixture
+@pytest.fixture
+def equiboots_fixture():
+    np.random.seed(42)
+    y_prob = np.random.rand(100)
+    y_pred = (y_prob > 0.5).astype(int)
+    y_true = np.random.randint(0, 2, size=100)
+    fairness_df = pd.DataFrame(
+        {
+            "race": np.random.choice(["white", "black", "asian"], 100),
+            "sex": np.random.choice(["M", "F"], 100),
+        }
+    )
+
+    eq = EquiBoots(
+        y_true=y_true,
+        y_prob=y_prob,
+        y_pred=y_pred,
+        fairness_df=fairness_df,
+        fairness_vars=["race", "sex"],
+        reference_groups=["white", "M"],
+        task="binary_classification",
+        bootstrap_flag=False,
+    )
+    return eq
+
+
+def test_init_sets_attributes(equiboots_fixture):
+    eq = equiboots_fixture
+    assert isinstance(eq.fairness_vars, list)
+    assert eq.task == "binary_classification"
+    assert eq.reference_groups["race"] == "white"
+
+
+def test_set_fix_seeds(equiboots_fixture):
+    eq = equiboots_fixture
+    eq.set_fix_seeds([11, 22, 33])
+    assert eq.seeds == [11, 22, 33]
+
+
+def test_invalid_task_raises():
+    with pytest.raises(ValueError):
+        EquiBoots(
+            y_true=np.array([1, 0]),
+            y_prob=np.array([0.9, 0.1]),
+            y_pred=np.array([1, 0]),
+            fairness_df=pd.DataFrame(
+                {"race": ["white", "black"], "sex": ["M", "F"]},
+            ),
+            fairness_vars=["race"],
+            task="invalid_task",
+        )
+
+
+def test_check_fairness_vars_type():
+    with pytest.raises(ValueError):
+        EquiBoots(
+            y_true=np.array([1, 0]),
+            y_prob=np.array([0.9, 0.1]),
+            y_pred=np.array([1, 0]),
+            fairness_df=pd.DataFrame(
+                {"race": ["white", "black"], "sex": ["M", "F"]},
+            ),
+            fairness_vars=None,
+        )
+
+
+def test_get_metrics(equiboots_fixture):
+    eq = equiboots_fixture
+    eq.grouper(groupings_vars=["race"])
+    data = eq.slicer("race")
+    metrics = eq.get_metrics(data)
+    assert isinstance(metrics, dict)
+    assert all(isinstance(val, dict) for val in metrics.values())
+
+
+def test_calculate_disparities(equiboots_fixture):
+    eq = equiboots_fixture
+    eq.grouper(groupings_vars=["race"])
+    data = eq.slicer("race")
+    metrics = eq.get_metrics(data)
+    disparities = eq.calculate_disparities(metrics, "race")
+    assert isinstance(disparities, dict)
+    assert all(isinstance(val, dict) for val in disparities.values())
+
+
+test_functions = [
+    obj
+    for name, obj in globals().items()
+    if inspect.isfunction(obj) and name.startswith("test_")
+]
+test_names = [fn.__name__ for fn in test_functions]
+
+df = pd.DataFrame(test_names, columns=["Test Function"])
+print(df)
