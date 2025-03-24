@@ -2,13 +2,13 @@ import pandas as pd
 import numpy as np
 from metrics import (
     binary_classification_metrics,
-    multi_class_prevalence,
+    multi_class_classification_metrics,
     multi_label_classification_metrics,
     regression_metrics,
 )
 from tqdm import tqdm
 from sklearn.utils import resample
-
+from sklearn.preprocessing import MultiLabelBinarizer
 
 class EquiBoots:
 
@@ -207,10 +207,16 @@ class EquiBoots:
         data = {}
         categories = groups[slicing_var]["categories"]
         for cat in categories:
-            y_true = self.y_true[groups[slicing_var]["indices"][cat]]
-            y_prob = self.y_prob[groups[slicing_var]["indices"][cat]]
-            y_pred = self.y_pred[groups[slicing_var]["indices"][cat]]
-            data[cat] = {"y_true": y_true, "y_prob": y_prob, "y_pred": y_pred}
+            if self.task in ["binary_classification", "multi_label_classification","multi_class_classification",]:
+                y_true = self.y_true[groups[slicing_var]["indices"][cat]]
+                y_prob = self.y_prob[groups[slicing_var]["indices"][cat]]
+                y_pred = self.y_pred[groups[slicing_var]["indices"][cat]]
+                data[cat] = {"y_true": y_true, "y_prob": y_prob, "y_pred": y_pred}
+            elif self.task == "regression":
+                y_true = self.y_true[groups[slicing_var]["indices"][cat]]
+                y_pred = self.y_pred[groups[slicing_var]["indices"][cat]]
+                data[cat] = {"y_true": y_true, "y_pred": y_pred}
+
         return data
 
     def get_metrics(self, sliced_dict) -> dict:
@@ -225,26 +231,34 @@ class EquiBoots:
         sliced_dict_metrics = {}
 
         for group, data in sliced_dict.items():
-            y_true = data["y_true"]
-            y_prob = data["y_prob"]
-            y_pred = data["y_pred"]
-
+            
             if self.task == "binary_classification":
+                y_true = data["y_true"]
+                y_prob = data["y_prob"]
+                y_pred = data["y_pred"]
                 metrics = binary_classification_metrics(
                     y_true,
                     y_pred,
                     y_prob,
                 )
             elif self.task == "multi_class_classification":
+                y_true = data["y_true"]
+                y_prob = data["y_prob"]
+                y_pred = data["y_pred"]
                 n_classes = len(np.unique(np.concatenate([y_true, y_pred])))
-                metrics = multi_class_prevalence(y_true, y_pred, n_classes)
+                metrics = multi_class_classification_metrics(y_true, y_pred, y_prob, n_classes)
             elif self.task == "multi_label_classification":
+                y_true = data["y_true"]
+                y_prob = data["y_prob"]
+                y_pred = data["y_pred"]
                 metrics = multi_label_classification_metrics(
                     y_true,
                     y_pred,
                     y_prob,
                 )
             elif self.task == "regression":
+                y_true = data["y_true"]
+                y_pred = data["y_pred"]
                 metrics = regression_metrics(y_true, y_pred)
 
             sliced_dict_metrics[group] = metrics
@@ -307,17 +321,57 @@ class EquiBoots:
 
 
 if __name__ == "__main__":
-    # Test the class
-    # fix seed
-    y_prob = np.random.RandomState(3).rand(1000)
-    y_pred = (y_prob > 0.5) * 1
-    y_true = np.random.RandomState(30).randint(0, 2, 1000)
+    # Choose a task
+    # task = 'binary_classification'
+    # task = 'multi_class_classification'
+    # task = 'regression'
+    task = "multi_label_classification"
+
+    if task == 'binary_classification':
+        n_classes = 2
+        n_samples = 1000
+        y_prob = np.random.RandomState(3).rand(n_samples)
+        y_pred = (y_prob > 0.5) * 1
+        y_true = np.random.RandomState(30).randint(0, n_classes, n_samples)
+    elif task == 'multi_class_classification':
+        n_classes = 3
+        n_samples = 1000
+        y_prob = np.random.RandomState(3).rand(n_samples, n_classes) 
+        y_prob /= y_prob.sum(axis=1, keepdims=True)
+        y_pred = np.argmax(y_prob, axis=1)
+        y_true = np.random.RandomState(30).randint(0, n_classes, n_samples)
+    elif task == 'regression':
+        n_classes = 3
+        n_samples = 1000
+        y_true = np.random.RandomState(3).rand(n_samples)
+        y_pred = np.random.RandomState(30).rand(n_samples)
+        y_prob = None
+    elif task == 'multi_label_classification':
+        n_classes = 3
+        n_samples = 7000
+        # need to specify seeds for reproducibility
+        y_true = [
+            np.random.RandomState(seed+1).choice(
+                range(n_classes), size=np.random.RandomState(seed).randint(1, n_classes + 1), replace=False
+            )
+            for seed,_ in enumerate(range(n_samples))
+        ]
+        # one-hot encode sequences
+        mlb = MultiLabelBinarizer()
+        y_true = mlb.fit_transform(y_true)
+        y_prob = np.random.RandomState(3).rand(n_samples, n_classes) # 3 classes
+        y_prob /= y_prob.sum(axis=1, keepdims=True)
+        y_pred = (y_prob > 0.5) * 1
+    else:
+        raise ValueError("Invalid task")
+    
+    # fix seed for reproducibility
     race = (
         np.random.RandomState(3)
-        .choice(["white", "black", "asian", "hispanic"], 1000)
+        .choice(["white", "black", "asian", "hispanic"], n_samples)
         .reshape(-1, 1)
     )
-    sex = np.random.RandomState(31).choice(["M", "F"], 1000).reshape(-1, 1)
+    sex = np.random.RandomState(31).choice(["M", "F"], n_samples).reshape(-1, 1)
     fairness_df = pd.DataFrame(
         data=np.concatenate((race, sex), axis=1), columns=["race", "sex"]
     )
@@ -329,7 +383,7 @@ if __name__ == "__main__":
         fairness_df,
         fairness_vars=["race", "sex"],
         reference_groups=["white", "M"],
-        task="binary_classification",
+        task=task,
         bootstrap_flag=True,
         num_bootstraps=10,
         boot_sample_size=100,
