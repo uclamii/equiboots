@@ -1,0 +1,39 @@
+[build-system]
+requires = ["setuptools", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "equiboots"
+version = "0.0.0a"
+description = "A Python library for fairness-aware model evaluation, bias auditing, and performance visualization, supporting classification and regression models with robust analytics across demographic groups."
+readme = { file = "README_min.md", content-type = "text/markdown" }
+authors = [
+    { name = "UCLA CTSI ML Team: Leonid Shpaner, Arthur Funnell, Panayiotis Petousis", email = "pp89@ucla.edu" }
+]
+
+requires-python = ">=3.7.4"
+
+dependencies = [
+    "matplotlib>=3.5.3, <=3.10.1",
+    "numpy>=1.21.6, <=2.2.4",
+    "pandas>=1.3.5, <=2.2.3",
+    "scikit-learn>=1.0.2, <=1.5.2",
+    "scipy>=1.8.0, <=1.15.2",
+    "seaborn>=0.11.2, <=0.13.2",
+    "tqdm>=4.66.4, <=4.67.1"
+]
+
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Operating System :: OS Independent"
+]
+
+
+[project.urls]
+"Author Website" = "https://www.mii.ucla.edu/"
+"Documentation" = "https://uclamii.github.io/model_tuner"
+"Zenodo Archive" = "https://zenodo.org/doi/10.5281/zenodo.12727322"
+"Source Code" = "https://github.com/uclamii/model_tuner/"
+
+[tool.setuptools.packages.find]
+where = ["src"]
