@@ -518,7 +518,6 @@ if __name__ == "__main__":
         tick_fontsize=8,
         decimal_places=3,
     )
-    fig1.show()
 
     # Precision-Recall plot
     fig2 = eq_plot_precision_recall(
@@ -527,7 +526,6 @@ if __name__ == "__main__":
         tick_fontsize=8,
         decimal_places=3,
     )
-    fig2.show()
 
     # Calibration plot
     fig3 = eq_calibration_curve_plot(
@@ -537,7 +535,6 @@ if __name__ == "__main__":
         tick_fontsize=8,
         decimal_places=3,
     )
-    fig3.show()
 
     fig4 = eq_disparity_metrics_plot(
         dispa,
@@ -545,5 +542,3 @@ if __name__ == "__main__":
         name="race",
         categories="all",
     )
-
-    fig4.show()
