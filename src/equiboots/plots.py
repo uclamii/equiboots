@@ -620,8 +620,13 @@ def eq_plot_bootstrapped_roc_curves(
         mean_tpr = np.mean(tpr_array, axis=0)
         lower = np.percentile(tpr_array, 2.5, axis=0)
         upper = np.percentile(tpr_array, 97.5, axis=0)
+        aucs = [np.trapz(tpr, fpr_grid) for tpr in tpr_array]
+        mean_auc = np.mean(aucs)
+        lower_auc = np.percentile(aucs, 2.5)
+        upper_auc = np.percentile(aucs, 97.5)
+        auc_str = f"AUC = {mean_auc:.2f} [{lower_auc:.2f}, {upper_auc:.2f}]"
 
-        ax.plot(fpr_grid, mean_tpr, label="Mean ROC", color=color)
+        ax.plot(fpr_grid, mean_tpr, label=auc_str, color=color)
         ax.fill_between(
             fpr_grid,
             lower,
@@ -629,6 +634,26 @@ def eq_plot_bootstrapped_roc_curves(
             alpha=alpha_fill,
             color=color,
         )
+
+        bar_every = 10
+        for j in range(0, len(fpr_grid), bar_every):
+            fpr_val = fpr_grid[j]
+            mean_val = mean_tpr[j]
+            err_low = mean_val - lower[j]
+            err_high = upper[j] - mean_val
+
+            ax.errorbar(
+                fpr_val,
+                mean_val,
+                yerr=[[err_low], [err_high]],
+                fmt="o",
+                color=color,
+                markersize=3,
+                capsize=2,
+                elinewidth=1,
+                alpha=0.6,
+            )
+
         ax.plot([0, 1], [0, 1], linestyle="--", color="gray", lw=1)
         ax.set_xlim(0, 1)
         ax.set_ylim(0, 1)
@@ -653,8 +678,6 @@ def eq_plot_bootstrapped_roc_curves(
         plt.close(fig)
     else:
         plt.show()
-
-    return fig
 
 
 def extract_group_metrics(race_metrics):
