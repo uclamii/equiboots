@@ -11,7 +11,6 @@ from sklearn.metrics import (
     average_precision_score,
     brier_score_loss,
 )
-from EquiBoots import EquiBoots
 
 ################################################################################
 # ROC AUC Curve Plot
@@ -459,6 +458,120 @@ def eq_disparity_metrics_plot(
         plt.show()  # only show if not saving
 
 
+def eq_plot_roc_auc_bootstrap(
+    group_specific_dict: dict,
+    save_path: str = None,
+    filename: str = "roc_auc_by_group",
+    title: str = "ROC Curve by Group",
+    figsize: tuple = (8, 6),
+    dpi: int = 100,
+    tick_fontsize: int = 10,
+    decimal_places: int = 2,
+):
+    """
+    Plots ROC AUC curves for each group in a fairness dictionary.
+
+    Parameters
+    ----------
+    data : dict
+        Dictionary with group names as keys and 'y_true' and 'y_prob' arrays as values.
+    save_path : str, optional
+        Directory to save the plot. If None, the plot is returned.
+    filename : str, optional
+        Name of the output file (no extension).
+    title : str, optional
+        Plot title.
+    figsize : tuple, optional
+        Size of the plot.
+    dpi : int, optional
+        Resolution of the plot.
+    tick_fontsize : int, optional
+        Font size for legend text.
+    decimal_places : int, optional
+        Decimal precision for AUC in the legend.
+
+    Returns
+    -------
+    matplotlib.figure.Figure
+        The ROC AUC plot figure.
+    """
+
+    metrics, unique_groups = extract_group_metrics(group_specific_dict)
+    conf_intervals = compute_confidence_intervals(metrics)
+
+    group_means = {}
+    for group, metric_values in metrics.items():
+        mean_TPR = np.mean([v for v in metric_values["TPR"] if v is not None])
+        mean_FPR = np.mean([v for v in metric_values["FPR"] if v is not None])
+        group_means[group] = {"TPR": mean_TPR, "FPR": mean_FPR}
+
+    error_bars = {}
+    for group in group_means:
+        lower_TPR, upper_TPR = conf_intervals[group]["TPR"]
+        lower_FPR, upper_FPR = conf_intervals[group]["FPR"]
+
+        # Calculate error bar lengths (lower and upper differences)
+        error_TPR = [
+            [group_means[group]["TPR"] - lower_TPR],
+            [upper_TPR - group_means[group]["TPR"]],
+        ]
+        error_FPR = [
+            [group_means[group]["FPR"] - lower_FPR],
+            [upper_FPR - group_means[group]["FPR"]],
+        ]
+
+        error_bars[group] = {"TPR": error_TPR, "FPR": error_FPR}
+
+    # Plot error bars for each group
+    plt.figure(figsize=(8, 6))
+    for group in group_means:
+        plt.errorbar(
+            group_means[group]["FPR"],
+            group_means[group]["TPR"],
+            xerr=error_bars[group]["FPR"],
+            yerr=error_bars[group]["TPR"],
+            fmt="o",
+            capsize=5,
+            label=group,
+        )
+
+    plt.xlabel("FPR")
+    plt.ylabel("TPR")
+    plt.title("ROC Metrics with 95% Confidence Intervals")
+    plt.legend()
+    plt.show()
+
+
+def extract_group_metrics(race_metrics):
+    unique_groups = set()
+    for sample in race_metrics:
+        unique_groups.update(sample.keys())
+
+    metrics = {group: {"TPR": [], "FPR": []} for group in unique_groups}
+    for sample in race_metrics:
+        for group in unique_groups:
+            metrics[group]["TPR"].append(sample[group].get("TP Rate"))
+            metrics[group]["FPR"].append(sample[group].get("FP Rate"))
+    return metrics, unique_groups
+
+
+def compute_confidence_intervals(metrics, conf=95):
+    conf_intervals = {}
+    lower_percentile = (100 - conf) / 2
+    upper_percentile = 100 - lower_percentile
+    for group, group_metrics in metrics.items():
+        conf_intervals[group] = {}
+        for metric_name, values in group_metrics.items():
+            values_clean = [v for v in values if v is not None]
+            if values_clean:
+                lower_bound = np.percentile(values_clean, lower_percentile)
+                upper_bound = np.percentile(values_clean, upper_percentile)
+                conf_intervals[group][metric_name] = (lower_bound, upper_bound)
+            else:
+                conf_intervals[group][metric_name] = (None, None)
+    return conf_intervals
+
+
 if __name__ == "__main__":
 
     # Generate synthetic test data
@@ -504,6 +617,9 @@ if __name__ == "__main__":
     eq2.set_fix_seeds([42, 123, 222, 999])
     eq2.grouper(groupings_vars=["race", "sex"])
     data = eq2.slicer("race")
+
+    print(data)
+
     race_metrics = eq2.get_metrics(data)
     dispa = eq2.calculate_disparities(race_metrics, "race")
 
@@ -542,3 +658,5 @@ if __name__ == "__main__":
         name="race",
         categories="all",
     )
+
+    fig5 = eq_plot_roc_auc_bootstrap(race_metrics)

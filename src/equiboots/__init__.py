@@ -1,4 +1,4 @@
-from .EquiBoots import *
+from .EquiBootsClass import *
 from .metrics import *
 from .plots import *
 from .logo import *
