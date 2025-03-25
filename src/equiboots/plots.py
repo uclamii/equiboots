@@ -471,6 +471,7 @@ def eq_plot_bootstrapped_roc_curves(
     common_grid=np.linspace(0, 1, 100),
     alpha_fill=0.2,
     color="#1f77b4",
+    bar_every=10,
 ):
     """
     Plot bootstrapped ROC curves with shaded confidence intervals,
@@ -549,8 +550,7 @@ def eq_plot_bootstrapped_roc_curves(
             color=color,
         )
 
-        bar_every = 10
-        for j in range(0, len(common_grid), bar_every):
+        for j in range(0, len(common_grid), int(np.ceil(len(common_grid) / bar_every))):
             fpr_val = common_grid[j]
             mean_val = mean_tpr[j]
             err_low = mean_val - lower[j]
@@ -603,6 +603,7 @@ def eq_plot_bootstrapped_pr_curves(
     common_grid=np.linspace(0, 1, 100),
     alpha_fill=0.2,
     color="#1f77b4",
+    bar_every=10,
 ):
     """
     Plot bootstrapped ROC curves with shaded confidence intervals,
@@ -685,8 +686,7 @@ def eq_plot_bootstrapped_pr_curves(
             color=color,
         )
 
-        bar_every = 10
-        for j in range(0, len(common_grid), bar_every):
+        for j in range(0, len(common_grid), int(np.ceil(len(common_grid) / bar_every))):
             fpr_val = common_grid[j]
             mean_val = mean_precision[j]
             err_low = mean_val - lower[j]
