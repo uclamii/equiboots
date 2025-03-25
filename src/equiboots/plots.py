@@ -461,90 +461,6 @@ def eq_disparity_metrics_plot(
         plt.show()  # only show if not saving
 
 
-# def eq_plot_roc_auc_bootstrap(
-#     group_specific_dict: dict,
-#     save_path: str = None,
-#     filename: str = "roc_auc_by_group",
-#     title: str = "ROC Curve by Group",
-#     figsize: tuple = (8, 6),
-#     dpi: int = 100,
-#     tick_fontsize: int = 10,
-#     decimal_places: int = 2,
-# ):
-#     """
-#     Plots ROC AUC curves for each group in a fairness dictionary.
-
-#     Parameters
-#     ----------
-#     data : dict
-#         Dictionary with group names as keys and 'y_true' and 'y_prob' arrays as values.
-#     save_path : str, optional
-#         Directory to save the plot. If None, the plot is returned.
-#     filename : str, optional
-#         Name of the output file (no extension).
-#     title : str, optional
-#         Plot title.
-#     figsize : tuple, optional
-#         Size of the plot.
-#     dpi : int, optional
-#         Resolution of the plot.
-#     tick_fontsize : int, optional
-#         Font size for legend text.
-#     decimal_places : int, optional
-#         Decimal precision for AUC in the legend.
-
-#     Returns
-#     -------
-#     matplotlib.figure.Figure
-#         The ROC AUC plot figure.
-#     """
-
-#     metrics, unique_groups = extract_group_metrics(group_specific_dict)
-#     conf_intervals = compute_confidence_intervals(metrics)
-
-#     group_means = {}
-#     for group, metric_values in metrics.items():
-#         mean_TPR = np.mean([v for v in metric_values["TPR"] if v is not None])
-#         mean_FPR = np.mean([v for v in metric_values["FPR"] if v is not None])
-#         group_means[group] = {"TPR": mean_TPR, "FPR": mean_FPR}
-
-#     error_bars = {}
-#     for group in group_means:
-#         lower_TPR, upper_TPR = conf_intervals[group]["TPR"]
-#         lower_FPR, upper_FPR = conf_intervals[group]["FPR"]
-
-#         # Calculate error bar lengths (lower and upper differences)
-#         error_TPR = [
-#             [group_means[group]["TPR"] - lower_TPR],
-#             [upper_TPR - group_means[group]["TPR"]],
-#         ]
-#         error_FPR = [
-#             [group_means[group]["FPR"] - lower_FPR],
-#             [upper_FPR - group_means[group]["FPR"]],
-#         ]
-
-#         error_bars[group] = {"TPR": error_TPR, "FPR": error_FPR}
-
-#     # Plot error bars for each group
-#     plt.figure(figsize=(8, 6))
-#     for group in group_means:
-#         plt.errorbar(
-#             group_means[group]["FPR"],
-#             group_means[group]["TPR"],
-#             xerr=error_bars[group]["FPR"],
-#             yerr=error_bars[group]["TPR"],
-#             fmt="o",
-#             capsize=5,
-#             label=group,
-#         )
-
-#     plt.xlabel("FPR")
-#     plt.ylabel("TPR")
-#     plt.title("ROC Metrics with 95% Confidence Intervals")
-#     plt.legend()
-#     plt.show()
-
-
 def eq_plot_bootstrapped_roc_curves(
     boot_sliced_data,
     title="Bootstrapped ROC Curves by Group",
@@ -552,7 +468,7 @@ def eq_plot_bootstrapped_roc_curves(
     save_path=None,
     dpi=100,
     figsize_per_plot=(6, 5),
-    fpr_grid=np.linspace(0, 1, 100),
+    common_grid=np.linspace(0, 1, 100),
     alpha_fill=0.2,
     color="#1f77b4",
 ):
@@ -564,14 +480,13 @@ def eq_plot_bootstrapped_roc_curves(
     ----------
     boot_sliced_data : list of dicts
         Output of EquiBoots.slicer() with bootstrap_flag=True.
-    fpr_grid : np.ndarray
+    common_grid : np.ndarray
         Common FPR grid to interpolate TPRs across bootstraps.
     figsize_per_plot : tuple
         Size (w, h) of each subplot.
     """
     group_fpr_tpr = {}
 
-    # Step 1: Interpolate ROC curves per group per bootstrap
     for bootstrap_iter in boot_sliced_data:
         for group, values in bootstrap_iter.items():
             y_true = values["y_true"]
@@ -585,16 +500,15 @@ def eq_plot_bootstrapped_roc_curves(
                     bounds_error=False,
                     fill_value=(0, 1),
                 )
-                tpr_interp = interp(fpr_grid)
+                tpr_interp = interp(common_grid)
             except ValueError:
-                tpr_interp = np.full_like(fpr_grid, np.nan)
+                tpr_interp = np.full_like(common_grid, np.nan)
 
             if group not in group_fpr_tpr:
                 group_fpr_tpr[group] = []
 
             group_fpr_tpr[group].append(tpr_interp)
 
-    # Step 2: Grid layout
     group_names = sorted(group_fpr_tpr.keys())
     num_groups = len(group_names)
     n_cols = 2
@@ -620,15 +534,15 @@ def eq_plot_bootstrapped_roc_curves(
         mean_tpr = np.mean(tpr_array, axis=0)
         lower = np.percentile(tpr_array, 2.5, axis=0)
         upper = np.percentile(tpr_array, 97.5, axis=0)
-        aucs = [np.trapz(tpr, fpr_grid) for tpr in tpr_array]
+        aucs = [np.trapz(tpr, common_grid) for tpr in tpr_array]
         mean_auc = np.mean(aucs)
         lower_auc = np.percentile(aucs, 2.5)
         upper_auc = np.percentile(aucs, 97.5)
-        auc_str = f"AUC = {mean_auc:.2f} [{lower_auc:.2f}, {upper_auc:.2f}]"
+        auc_str = f"Mean AUROC = {mean_auc:.2f} [{lower_auc:.2f}, {upper_auc:.2f}]"
 
-        ax.plot(fpr_grid, mean_tpr, label=auc_str, color=color)
+        ax.plot(common_grid, mean_tpr, label=auc_str, color=color)
         ax.fill_between(
-            fpr_grid,
+            common_grid,
             lower,
             upper,
             alpha=alpha_fill,
@@ -636,8 +550,8 @@ def eq_plot_bootstrapped_roc_curves(
         )
 
         bar_every = 10
-        for j in range(0, len(fpr_grid), bar_every):
-            fpr_val = fpr_grid[j]
+        for j in range(0, len(common_grid), bar_every):
+            fpr_val = common_grid[j]
             mean_val = mean_tpr[j]
             err_low = mean_val - lower[j]
             err_high = upper[j] - mean_val
@@ -662,7 +576,141 @@ def eq_plot_bootstrapped_roc_curves(
         ax.set_ylabel("True Positive Rate")
         ax.legend(loc="lower right", fontsize=8)
 
-    # Hide any empty axes
+    for j in range(i + 1, len(axes)):
+        axes[j].axis("off")
+
+    fig.suptitle(title, fontsize=14)
+    plt.tight_layout(rect=[0, 0, 1, 0.97])
+
+    if save_path:
+        os.makedirs(save_path, exist_ok=True)
+        fig.savefig(
+            os.path.join(save_path, f"{filename}.png"),
+            bbox_inches="tight",
+        )
+        plt.close(fig)
+    else:
+        plt.show()
+
+
+def eq_plot_bootstrapped_pr_curves(
+    boot_sliced_data,
+    title="Bootstrapped PR Curves by Group",
+    filename="roc_curves_by_group_grid",
+    save_path=None,
+    dpi=100,
+    figsize_per_plot=(6, 5),
+    common_grid=np.linspace(0, 1, 100),
+    alpha_fill=0.2,
+    color="#1f77b4",
+):
+    """
+    Plot bootstrapped ROC curves with shaded confidence intervals,
+    one group per subplot (grid layout).
+
+    Parameters
+    ----------
+    boot_sliced_data : list of dicts
+        Output of EquiBoots.slicer() with bootstrap_flag=True.
+    common_grid : np.ndarray
+        Common FPR grid to interpolate TPRs across bootstraps.
+    figsize_per_plot : tuple
+        Size (w, h) of each subplot.
+    """
+    group_pr = {}
+
+    for bootstrap_iter in boot_sliced_data:
+        for group, values in bootstrap_iter.items():
+            y_true = values["y_true"]
+            y_prob = values["y_prob"]
+
+            try:
+                precisions, recalls, _ = precision_recall_curve(y_true, y_prob)
+                interp = interp1d(
+                    recalls,
+                    precisions,
+                    bounds_error=False,
+                    fill_value=(0, 1),
+                )
+                precision_interp_func = interp(common_grid)
+            except ValueError:
+                precision_interp_func = np.full_like(common_grid, np.nan)
+
+            if group not in group_pr:
+                group_pr[group] = []
+
+            group_pr[group].append(precision_interp_func)
+
+    group_names = sorted(group_pr.keys())
+    num_groups = len(group_names)
+    n_cols = 2
+    n_rows = math.ceil(num_groups / n_cols)
+    figsize = (figsize_per_plot[0] * n_cols, figsize_per_plot[1] * n_rows)
+
+    fig, axes = plt.subplots(
+        n_rows,
+        n_cols,
+        figsize=figsize,
+        dpi=dpi,
+    )
+    axes = axes.flatten()
+
+    for i, group in enumerate(group_names):
+        ax = axes[i]
+        precision_array = np.vstack(
+            [
+                precision
+                for precision in group_pr[group]
+                if not np.isnan(precision).any()
+            ]
+        )
+        if precision_array.shape[0] == 0:
+            continue
+
+        mean_precision = np.mean(precision_array, axis=0)
+        lower = np.percentile(precision_array, 2.5, axis=0)
+        upper = np.percentile(precision_array, 97.5, axis=0)
+        aucs = [np.trapz(tpr, common_grid) for tpr in precision_array]
+        mean_auc = np.mean(aucs)
+        lower_auc = np.percentile(aucs, 2.5)
+        upper_auc = np.percentile(aucs, 97.5)
+        auc_str = f"Mean AUCPR = {mean_auc:.2f} [{lower_auc:.2f}, {upper_auc:.2f}]"
+
+        ax.plot(common_grid, mean_precision, label=auc_str, color=color)
+        ax.fill_between(
+            common_grid,
+            lower,
+            upper,
+            alpha=alpha_fill,
+            color=color,
+        )
+
+        bar_every = 10
+        for j in range(0, len(common_grid), bar_every):
+            fpr_val = common_grid[j]
+            mean_val = mean_precision[j]
+            err_low = mean_val - lower[j]
+            err_high = upper[j] - mean_val
+
+            ax.errorbar(
+                fpr_val,
+                mean_val,
+                yerr=[[err_low], [err_high]],
+                fmt="o",
+                color=color,
+                markersize=3,
+                capsize=2,
+                elinewidth=1,
+                alpha=0.6,
+            )
+
+        ax.set_xlim(0, 1)
+        ax.set_ylim(0, 1)
+        ax.set_title(group, fontsize=12)
+        ax.set_xlabel("Recall")
+        ax.set_ylabel("Precision")
+        ax.legend(loc="lower right", fontsize=8)
+
     for j in range(i + 1, len(axes)):
         axes[j].axis("off")
 
