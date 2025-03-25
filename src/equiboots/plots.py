@@ -728,6 +728,192 @@ def eq_plot_bootstrapped_pr_curves(
         plt.show()
 
 
+def eq_plot_bootstrapped_calibration_curves(
+    boot_sliced_data,
+    title="Bootstrapped Calibration Curves by Group",
+    filename="calibration_curves_by_group_grid",
+    save_path=None,
+    dpi=100,
+    figsize_per_plot=(6, 5),
+    n_bins=10,
+    alpha_fill=0.2,
+    color="#1f77b4",
+    decimal_places=2,
+):
+    """
+    Plot bootstrapped calibration curves (fraction of positives vs. predicted probability)
+    with shaded confidence intervals, one group per subplot (grid layout). The curves
+    are computed using fixed bins so that they remain jagged (i.e., not smoothed).
+
+    Parameters
+    ----------
+    boot_sliced_data : list of dict
+        Each element in the list represents one bootstrap iteration.
+        Each element is a dictionary of the form:
+            {
+              "groupA": {"y_true": np.array([...]), "y_prob": np.array([...])},
+              "groupB": {"y_true": np.array([...]), "y_prob": np.array([...])},
+              ...
+            }
+    title : str
+        Plot title.
+    filename : str
+        Name of the file to save (without extension).
+    save_path : str or None
+        Directory to save the plot. If None, the plot is shown instead of saved.
+    dpi : int
+        Dots per inch (plot resolution).
+    figsize_per_plot : tuple
+        Size (width, height) for each subplot.
+    n_bins : int
+        Number of bins to use for the calibration curve.
+    alpha_fill : float
+        Alpha (transparency) for the confidence interval shading.
+    color : str
+        Color for the main curve and shading.
+    n_bars : int
+        Approximate number of points at which to plot error bars.
+    decimal_places : int
+        Decimal precision for displayed metrics (e.g., Brier scores).
+
+    Returns
+    -------
+    matplotlib.figure.Figure
+        The figure containing the subplots.
+    """
+    # Create fixed bin edges and corresponding bin centers
+    bins = np.linspace(0, 1, n_bins + 1)
+    bin_centers = (bins[:-1] + bins[1:]) / 2
+
+    # Dictionaries to hold calibration curves and Brier scores for each group
+    group_cal = (
+        {}
+    )  # Will store an array of fraction_of_positives per bootstrap iteration
+    group_brier = {}  # Will store the Brier score per bootstrap iteration
+
+    # 1. Gather calibration data for each bootstrap iteration
+    for bootstrap_iter in boot_sliced_data:
+        for group, values in bootstrap_iter.items():
+            y_true = values["y_true"]
+            y_prob = values["y_prob"]
+
+            # Compute fraction of positives in each fixed bin
+            frac_positives = np.empty(n_bins)
+            frac_positives[:] = np.nan  # initialize as NaN
+            for i in range(n_bins):
+                # Use [bins[i], bins[i+1]) except for the last bin, which includes 1.
+                if i < n_bins - 1:
+                    bin_mask = (y_prob >= bins[i]) & (y_prob < bins[i + 1])
+                else:
+                    bin_mask = (y_prob >= bins[i]) & (y_prob <= bins[i + 1])
+                if np.any(bin_mask):
+                    frac_positives[i] = np.mean(y_true[bin_mask])
+                else:
+                    frac_positives[i] = np.nan
+
+            # Store the calibration curve (jagged, per fixed bins)
+            group_cal.setdefault(group, []).append(frac_positives)
+
+            # Compute and store the Brier score for this iteration
+            brier = brier_score_loss(y_true, y_prob)
+            group_brier.setdefault(group, []).append(brier)
+
+    # 2. Create the subplot grid
+    group_names = sorted(group_cal.keys())
+    num_groups = len(group_names)
+    n_cols = 2
+    n_rows = math.ceil(num_groups / n_cols)
+    figsize = (figsize_per_plot[0] * n_cols, figsize_per_plot[1] * n_rows)
+
+    fig, axes = plt.subplots(n_rows, n_cols, figsize=figsize, dpi=dpi)
+    if isinstance(axes, np.ndarray):
+        axes = axes.flatten()
+    else:
+        axes = [axes]
+
+    # 3. Plot each group's calibration curves
+    for i, group in enumerate(group_names):
+        ax = axes[i]
+
+        # Convert list of curves to a NumPy array: shape (num_bootstraps, n_bins)
+        cal_array = np.array(group_cal[group])
+        # Remove bootstrap iterations where all values are NaN
+        valid_rows = ~np.all(np.isnan(cal_array), axis=1)
+        cal_array = cal_array[valid_rows, :]
+        if cal_array.shape[0] == 0:
+            ax.set_title(group, fontsize=12)
+            ax.set_xlim(0, 1)
+            ax.set_ylim(0, 1)
+            ax.plot([0, 1], [0, 1], "--", color="gray")
+            continue
+
+        # Compute mean calibration and 95% confidence bounds across bootstraps
+        mean_cal = np.nanmean(cal_array, axis=0)
+        lower_cal = np.nanpercentile(cal_array, 2.5, axis=0)
+        upper_cal = np.nanpercentile(cal_array, 97.5, axis=0)
+
+        # Compute Brier score statistics
+        briers = np.array(group_brier[group])
+        mean_brier = np.mean(briers)
+        lower_brier = np.percentile(briers, 2.5)
+        upper_brier = np.percentile(briers, 97.5)
+        brier_str = (
+            f"Mean Brier = {mean_brier:.{decimal_places}f} "
+            f"[{lower_brier:.{decimal_places}f}, {upper_brier:.{decimal_places}f}]"
+        )
+
+        # Plot the mean calibration curve (using bin centers) with markers to show jagged steps
+        ax.plot(bin_centers, mean_cal, label=brier_str, color=color, marker="o")
+
+        # Shade the confidence interval
+        ax.fill_between(
+            bin_centers, lower_cal, upper_cal, alpha=alpha_fill, color=color
+        )
+
+        # Optionally, add error bars at a subset of points
+        selected_indices = np.linspace(0, n_bins - 1, 10, dtype=int)
+        for j in selected_indices:
+            x_val = bin_centers[j]
+            mean_val = mean_cal[j]
+            err_low = mean_val - lower_cal[j]
+            err_high = upper_cal[j] - mean_val
+            ax.errorbar(
+                x_val,
+                mean_val,
+                yerr=[[err_low], [err_high]],
+                fmt="o",
+                color=color,
+                markersize=3,
+                capsize=2,
+                elinewidth=1,
+                alpha=0.6,
+            )  # Plot the diagonal for perfect calibration
+        ax.plot([0, 1], [0, 1], "--", color="gray")
+
+        ax.set_xlim(0, 1)
+        ax.set_ylim(0, 1)
+        ax.set_title(group, fontsize=12)
+        ax.set_xlabel("Predicted Probability")
+        ax.set_ylabel("Fraction of Positives")
+        ax.legend(loc="lower right", fontsize=8)
+        ax.grid(True)
+
+    # Turn off any unused subplots
+    for j in range(i + 1, len(axes)):
+        axes[j].axis("off")
+
+    # 4. Final formatting and save/show the figure
+    fig.suptitle(title, fontsize=14)
+    plt.tight_layout(rect=[0, 0, 1, 0.97])
+
+    if save_path:
+        os.makedirs(save_path, exist_ok=True)
+        fig.savefig(os.path.join(save_path, f"{filename}.png"), bbox_inches="tight")
+        plt.close(fig)
+    else:
+        plt.show()
+
+
 def extract_group_metrics(race_metrics):
     unique_groups = set()
     for sample in race_metrics:
