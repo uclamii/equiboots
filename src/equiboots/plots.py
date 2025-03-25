@@ -3,7 +3,10 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 import numpy as np
 import pandas as pd
+from scipy.interpolate import interp1d
 import os
+import math
+
 from sklearn.metrics import (
     roc_curve,
     auc,
@@ -458,88 +461,200 @@ def eq_disparity_metrics_plot(
         plt.show()  # only show if not saving
 
 
-def eq_plot_roc_auc_bootstrap(
-    group_specific_dict: dict,
-    save_path: str = None,
-    filename: str = "roc_auc_by_group",
-    title: str = "ROC Curve by Group",
-    figsize: tuple = (8, 6),
-    dpi: int = 100,
-    tick_fontsize: int = 10,
-    decimal_places: int = 2,
+# def eq_plot_roc_auc_bootstrap(
+#     group_specific_dict: dict,
+#     save_path: str = None,
+#     filename: str = "roc_auc_by_group",
+#     title: str = "ROC Curve by Group",
+#     figsize: tuple = (8, 6),
+#     dpi: int = 100,
+#     tick_fontsize: int = 10,
+#     decimal_places: int = 2,
+# ):
+#     """
+#     Plots ROC AUC curves for each group in a fairness dictionary.
+
+#     Parameters
+#     ----------
+#     data : dict
+#         Dictionary with group names as keys and 'y_true' and 'y_prob' arrays as values.
+#     save_path : str, optional
+#         Directory to save the plot. If None, the plot is returned.
+#     filename : str, optional
+#         Name of the output file (no extension).
+#     title : str, optional
+#         Plot title.
+#     figsize : tuple, optional
+#         Size of the plot.
+#     dpi : int, optional
+#         Resolution of the plot.
+#     tick_fontsize : int, optional
+#         Font size for legend text.
+#     decimal_places : int, optional
+#         Decimal precision for AUC in the legend.
+
+#     Returns
+#     -------
+#     matplotlib.figure.Figure
+#         The ROC AUC plot figure.
+#     """
+
+#     metrics, unique_groups = extract_group_metrics(group_specific_dict)
+#     conf_intervals = compute_confidence_intervals(metrics)
+
+#     group_means = {}
+#     for group, metric_values in metrics.items():
+#         mean_TPR = np.mean([v for v in metric_values["TPR"] if v is not None])
+#         mean_FPR = np.mean([v for v in metric_values["FPR"] if v is not None])
+#         group_means[group] = {"TPR": mean_TPR, "FPR": mean_FPR}
+
+#     error_bars = {}
+#     for group in group_means:
+#         lower_TPR, upper_TPR = conf_intervals[group]["TPR"]
+#         lower_FPR, upper_FPR = conf_intervals[group]["FPR"]
+
+#         # Calculate error bar lengths (lower and upper differences)
+#         error_TPR = [
+#             [group_means[group]["TPR"] - lower_TPR],
+#             [upper_TPR - group_means[group]["TPR"]],
+#         ]
+#         error_FPR = [
+#             [group_means[group]["FPR"] - lower_FPR],
+#             [upper_FPR - group_means[group]["FPR"]],
+#         ]
+
+#         error_bars[group] = {"TPR": error_TPR, "FPR": error_FPR}
+
+#     # Plot error bars for each group
+#     plt.figure(figsize=(8, 6))
+#     for group in group_means:
+#         plt.errorbar(
+#             group_means[group]["FPR"],
+#             group_means[group]["TPR"],
+#             xerr=error_bars[group]["FPR"],
+#             yerr=error_bars[group]["TPR"],
+#             fmt="o",
+#             capsize=5,
+#             label=group,
+#         )
+
+#     plt.xlabel("FPR")
+#     plt.ylabel("TPR")
+#     plt.title("ROC Metrics with 95% Confidence Intervals")
+#     plt.legend()
+#     plt.show()
+
+
+def eq_plot_bootstrapped_roc_curves(
+    boot_sliced_data,
+    title="Bootstrapped ROC Curves by Group",
+    filename="roc_curves_by_group_grid",
+    save_path=None,
+    dpi=100,
+    figsize_per_plot=(6, 5),
+    fpr_grid=np.linspace(0, 1, 100),
+    alpha_fill=0.2,
+    color="#1f77b4",
 ):
     """
-    Plots ROC AUC curves for each group in a fairness dictionary.
+    Plot bootstrapped ROC curves with shaded confidence intervals,
+    one group per subplot (grid layout).
 
     Parameters
     ----------
-    data : dict
-        Dictionary with group names as keys and 'y_true' and 'y_prob' arrays as values.
-    save_path : str, optional
-        Directory to save the plot. If None, the plot is returned.
-    filename : str, optional
-        Name of the output file (no extension).
-    title : str, optional
-        Plot title.
-    figsize : tuple, optional
-        Size of the plot.
-    dpi : int, optional
-        Resolution of the plot.
-    tick_fontsize : int, optional
-        Font size for legend text.
-    decimal_places : int, optional
-        Decimal precision for AUC in the legend.
-
-    Returns
-    -------
-    matplotlib.figure.Figure
-        The ROC AUC plot figure.
+    boot_sliced_data : list of dicts
+        Output of EquiBoots.slicer() with bootstrap_flag=True.
+    fpr_grid : np.ndarray
+        Common FPR grid to interpolate TPRs across bootstraps.
+    figsize_per_plot : tuple
+        Size (w, h) of each subplot.
     """
+    group_fpr_tpr = {}
 
-    metrics, unique_groups = extract_group_metrics(group_specific_dict)
-    conf_intervals = compute_confidence_intervals(metrics)
+    # Step 1: Interpolate ROC curves per group per bootstrap
+    for bootstrap_iter in boot_sliced_data:
+        for group, values in bootstrap_iter.items():
+            y_true = values["y_true"]
+            y_prob = values["y_prob"]
 
-    group_means = {}
-    for group, metric_values in metrics.items():
-        mean_TPR = np.mean([v for v in metric_values["TPR"] if v is not None])
-        mean_FPR = np.mean([v for v in metric_values["FPR"] if v is not None])
-        group_means[group] = {"TPR": mean_TPR, "FPR": mean_FPR}
+            try:
+                fpr, tpr, _ = roc_curve(y_true, y_prob)
+                interp = interp1d(
+                    fpr,
+                    tpr,
+                    bounds_error=False,
+                    fill_value=(0, 1),
+                )
+                tpr_interp = interp(fpr_grid)
+            except ValueError:
+                tpr_interp = np.full_like(fpr_grid, np.nan)
 
-    error_bars = {}
-    for group in group_means:
-        lower_TPR, upper_TPR = conf_intervals[group]["TPR"]
-        lower_FPR, upper_FPR = conf_intervals[group]["FPR"]
+            if group not in group_fpr_tpr:
+                group_fpr_tpr[group] = []
 
-        # Calculate error bar lengths (lower and upper differences)
-        error_TPR = [
-            [group_means[group]["TPR"] - lower_TPR],
-            [upper_TPR - group_means[group]["TPR"]],
-        ]
-        error_FPR = [
-            [group_means[group]["FPR"] - lower_FPR],
-            [upper_FPR - group_means[group]["FPR"]],
-        ]
+            group_fpr_tpr[group].append(tpr_interp)
 
-        error_bars[group] = {"TPR": error_TPR, "FPR": error_FPR}
+    # Step 2: Grid layout
+    group_names = sorted(group_fpr_tpr.keys())
+    num_groups = len(group_names)
+    n_cols = 2
+    n_rows = math.ceil(num_groups / n_cols)
+    figsize = (figsize_per_plot[0] * n_cols, figsize_per_plot[1] * n_rows)
 
-    # Plot error bars for each group
-    plt.figure(figsize=(8, 6))
-    for group in group_means:
-        plt.errorbar(
-            group_means[group]["FPR"],
-            group_means[group]["TPR"],
-            xerr=error_bars[group]["FPR"],
-            yerr=error_bars[group]["TPR"],
-            fmt="o",
-            capsize=5,
-            label=group,
+    fig, axes = plt.subplots(
+        n_rows,
+        n_cols,
+        figsize=figsize,
+        dpi=dpi,
+    )
+    axes = axes.flatten()
+
+    for i, group in enumerate(group_names):
+        ax = axes[i]
+        tpr_array = np.vstack(
+            [tpr for tpr in group_fpr_tpr[group] if not np.isnan(tpr).any()]
         )
+        if tpr_array.shape[0] == 0:
+            continue
 
-    plt.xlabel("FPR")
-    plt.ylabel("TPR")
-    plt.title("ROC Metrics with 95% Confidence Intervals")
-    plt.legend()
-    plt.show()
+        mean_tpr = np.mean(tpr_array, axis=0)
+        lower = np.percentile(tpr_array, 2.5, axis=0)
+        upper = np.percentile(tpr_array, 97.5, axis=0)
+
+        ax.plot(fpr_grid, mean_tpr, label="Mean ROC", color=color)
+        ax.fill_between(
+            fpr_grid,
+            lower,
+            upper,
+            alpha=alpha_fill,
+            color=color,
+        )
+        ax.plot([0, 1], [0, 1], linestyle="--", color="gray", lw=1)
+        ax.set_xlim(0, 1)
+        ax.set_ylim(0, 1)
+        ax.set_title(group, fontsize=12)
+        ax.set_xlabel("False Positive Rate")
+        ax.set_ylabel("True Positive Rate")
+        ax.legend(loc="lower right", fontsize=8)
+
+    # Hide any empty axes
+    for j in range(i + 1, len(axes)):
+        axes[j].axis("off")
+
+    fig.suptitle(title, fontsize=14)
+    plt.tight_layout(rect=[0, 0, 1, 0.97])
+
+    if save_path:
+        os.makedirs(save_path, exist_ok=True)
+        fig.savefig(
+            os.path.join(save_path, f"{filename}.png"),
+            bbox_inches="tight",
+        )
+        plt.close(fig)
+    else:
+        plt.show()
+
+    return fig
 
 
 def extract_group_metrics(race_metrics):
