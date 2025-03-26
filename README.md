@@ -46,9 +46,9 @@ https://www.mii.ucla.edu/
 
 `equiboots` is distributed under the Apache License. See [LICENSE](https://github.com/uclamii/equiboots?tab=Apache-2.0-1-ov-file) for more information.
 
-## 📚 Citing `model_tuner`
+## 📚 Citing `equiboots`
 
-If you use `model_tuner` in your research or projects, please consider citing it.
+If you use `equiboots` in your research or projects, please consider citing it.
 
 ```bibtex
 @software{shpaner_2025_15086941,
