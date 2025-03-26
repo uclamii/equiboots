@@ -2,7 +2,6 @@ from sklearn.calibration import calibration_curve
 import matplotlib.pyplot as plt
 import seaborn as sns
 import numpy as np
-import pandas as pd
 from scipy.interpolate import interp1d
 import os
 import math
