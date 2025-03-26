@@ -6,7 +6,7 @@ build-backend = "setuptools.build_meta"
 name = "equiboots"
 version = "0.0.0a"
 description = "A Python library for fairness-aware model evaluation, bias auditing, and performance visualization, supporting classification and regression models with robust analytics across demographic groups."
-readme = { file = "README_min.md", content-type = "text/markdown" }
+readme = { file = "README.md", content-type = "text/markdown" }
 authors = [
     { name = "UCLA CTSI ML Team: Leonid Shpaner, Arthur Funnell, Panayiotis Petousis", email = "pp89@ucla.edu" }
 ]
