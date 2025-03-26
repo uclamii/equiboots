@@ -1,8 +1,8 @@
 name: Publish `equiboots` Python Package to PyPI
 
 on:
-  push:
-    branches: [main]
+  release:
+    types: [created]
 
 jobs:
   build:
@@ -30,4 +30,4 @@ jobs:
         TWINE_PASSWORD: ${{ secrets.PYPI_API_KEY }}
       run: |
         python -m build  # Use build to handle pyproject.toml
-      # twine upload dist/*
+        twine upload dist/*
