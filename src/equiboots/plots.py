@@ -2,8 +2,10 @@ from sklearn.calibration import calibration_curve
 import matplotlib.pyplot as plt
 import seaborn as sns
 import numpy as np
-import pandas as pd
+from scipy.interpolate import interp1d
 import os
+import math
+
 from sklearn.metrics import (
     roc_curve,
     auc,
@@ -11,7 +13,6 @@ from sklearn.metrics import (
     average_precision_score,
     brier_score_loss,
 )
-from EquiBoots import EquiBoots
 
 ################################################################################
 # ROC AUC Curve Plot
@@ -459,86 +460,484 @@ def eq_disparity_metrics_plot(
         plt.show()  # only show if not saving
 
 
-if __name__ == "__main__":
+def eq_plot_bootstrapped_roc_curves(
+    boot_sliced_data,
+    title="Bootstrapped ROC Curves by Group",
+    filename="roc_curves_by_group_grid",
+    save_path=None,
+    dpi=100,
+    figsize_per_plot=(6, 5),
+    common_grid=np.linspace(0, 1, 100),
+    alpha_fill=0.2,
+    color="#1f77b4",
+    bar_every=10,
+):
+    """
+    Plot bootstrapped ROC curves with shaded confidence intervals,
+    one group per subplot (grid layout).
 
-    # Generate synthetic test data
-    y_prob = np.random.rand(1000)
-    y_pred = y_prob > 0.5
-    y_true = np.random.randint(0, 2, 1000)
+    Parameters
+    ----------
+    boot_sliced_data : list of dicts
+        Output of EquiBoots.slicer() with bootstrap_flag=True.
+    common_grid : np.ndarray
+        Common FPR grid to interpolate TPRs across bootstraps.
+    figsize_per_plot : tuple
+        Size (w, h) of each subplot.
+    """
+    group_fpr_tpr = {}
 
-    race = np.random.choice(["white", "black", "asian", "hispanic"], 1000).reshape(
-        -1, 1
+    for bootstrap_iter in boot_sliced_data:
+        for group, values in bootstrap_iter.items():
+            y_true = values["y_true"]
+            y_prob = values["y_prob"]
+
+            try:
+                fpr, tpr, _ = roc_curve(y_true, y_prob)
+                interp = interp1d(
+                    fpr,
+                    tpr,
+                    bounds_error=False,
+                    fill_value=(0, 1),
+                )
+                tpr_interp = interp(common_grid)
+            except ValueError:
+                tpr_interp = np.full_like(common_grid, np.nan)
+
+            if group not in group_fpr_tpr:
+                group_fpr_tpr[group] = []
+
+            group_fpr_tpr[group].append(tpr_interp)
+
+    group_names = sorted(group_fpr_tpr.keys())
+    num_groups = len(group_names)
+    n_cols = 2
+    n_rows = math.ceil(num_groups / n_cols)
+    figsize = (figsize_per_plot[0] * n_cols, figsize_per_plot[1] * n_rows)
+
+    fig, axes = plt.subplots(
+        n_rows,
+        n_cols,
+        figsize=figsize,
+        dpi=dpi,
     )
-    sex = np.random.choice(["M", "F"], 1000).reshape(-1, 1)
+    axes = axes.flatten()
 
-    fairness_df = pd.DataFrame(
-        data=np.concatenate((race, sex), axis=1), columns=["race", "sex"]
+    for i, group in enumerate(group_names):
+        ax = axes[i]
+        tpr_array = np.vstack(
+            [tpr for tpr in group_fpr_tpr[group] if not np.isnan(tpr).any()]
+        )
+        if tpr_array.shape[0] == 0:
+            continue
+
+        mean_tpr = np.mean(tpr_array, axis=0)
+        lower = np.percentile(tpr_array, 2.5, axis=0)
+        upper = np.percentile(tpr_array, 97.5, axis=0)
+        aucs = [np.trapz(tpr, common_grid) for tpr in tpr_array]
+        mean_auc = np.mean(aucs)
+        lower_auc = np.percentile(aucs, 2.5)
+        upper_auc = np.percentile(aucs, 97.5)
+        auc_str = f"Mean AUROC = {mean_auc:.2f} [{lower_auc:.2f}, {upper_auc:.2f}]"
+
+        ax.plot(common_grid, mean_tpr, label=auc_str, color=color)
+        ax.fill_between(
+            common_grid,
+            lower,
+            upper,
+            alpha=alpha_fill,
+            color=color,
+        )
+
+        for j in range(0, len(common_grid), int(np.ceil(len(common_grid) / bar_every))):
+            fpr_val = common_grid[j]
+            mean_val = mean_tpr[j]
+            err_low = mean_val - lower[j]
+            err_high = upper[j] - mean_val
+
+            ax.errorbar(
+                fpr_val,
+                mean_val,
+                yerr=[[err_low], [err_high]],
+                fmt="o",
+                color=color,
+                markersize=3,
+                capsize=2,
+                elinewidth=1,
+                alpha=0.6,
+            )
+
+        ax.plot([0, 1], [0, 1], linestyle="--", color="gray", lw=1)
+        ax.set_xlim(0, 1)
+        ax.set_ylim(0, 1)
+        ax.set_title(group, fontsize=12)
+        ax.set_xlabel("False Positive Rate")
+        ax.set_ylabel("True Positive Rate")
+        ax.legend(loc="lower right", fontsize=8)
+
+    for j in range(i + 1, len(axes)):
+        axes[j].axis("off")
+
+    fig.suptitle(title, fontsize=14)
+    plt.tight_layout(rect=[0, 0, 1, 0.97])
+
+    if save_path:
+        os.makedirs(save_path, exist_ok=True)
+        fig.savefig(
+            os.path.join(save_path, f"{filename}.png"),
+            bbox_inches="tight",
+        )
+        plt.close(fig)
+    else:
+        plt.show()
+
+
+def eq_plot_bootstrapped_pr_curves(
+    boot_sliced_data,
+    title="Bootstrapped PR Curves by Group",
+    filename="roc_curves_by_group_grid",
+    save_path=None,
+    dpi=100,
+    figsize_per_plot=(6, 5),
+    common_grid=np.linspace(0, 1, 100),
+    alpha_fill=0.2,
+    color="#1f77b4",
+    bar_every=10,
+):
+    """
+    Plot bootstrapped ROC curves with shaded confidence intervals,
+    one group per subplot (grid layout).
+
+    Parameters
+    ----------
+    boot_sliced_data : list of dicts
+        Output of EquiBoots.slicer() with bootstrap_flag=True.
+    common_grid : np.ndarray
+        Common FPR grid to interpolate TPRs across bootstraps.
+    figsize_per_plot : tuple
+        Size (w, h) of each subplot.
+    """
+    group_pr = {}
+
+    for bootstrap_iter in boot_sliced_data:
+        for group, values in bootstrap_iter.items():
+            y_true = values["y_true"]
+            y_prob = values["y_prob"]
+
+            try:
+                precisions, recalls, _ = precision_recall_curve(y_true, y_prob)
+                interp = interp1d(
+                    recalls,
+                    precisions,
+                    bounds_error=False,
+                    fill_value=(0, 1),
+                )
+                precision_interp_func = interp(common_grid)
+            except ValueError:
+                precision_interp_func = np.full_like(common_grid, np.nan)
+
+            if group not in group_pr:
+                group_pr[group] = []
+
+            group_pr[group].append(precision_interp_func)
+
+    group_names = sorted(group_pr.keys())
+    num_groups = len(group_names)
+    n_cols = 2
+    n_rows = math.ceil(num_groups / n_cols)
+    figsize = (figsize_per_plot[0] * n_cols, figsize_per_plot[1] * n_rows)
+
+    fig, axes = plt.subplots(
+        n_rows,
+        n_cols,
+        figsize=figsize,
+        dpi=dpi,
     )
+    axes = axes.flatten()
 
-    # Initialize and process groups
-    eq1 = EquiBoots(
-        y_true=y_true,
-        y_prob=y_prob,
-        y_pred=y_pred,
-        fairness_df=fairness_df,
-        fairness_vars=["race", "sex"],
-    )
-    eq1.grouper(groupings_vars=["race", "sex"])
-    sliced_data = eq1.slicer("race")
+    for i, group in enumerate(group_names):
+        ax = axes[i]
+        precision_array = np.vstack(
+            [
+                precision
+                for precision in group_pr[group]
+                if not np.isnan(precision).any()
+            ]
+        )
+        if precision_array.shape[0] == 0:
+            continue
 
-    eq2 = EquiBoots(
-        y_true,
-        y_prob,
-        y_pred,
-        fairness_df,
-        fairness_vars=["race", "sex"],
-        reference_groups=["white", "M"],
-        task="binary_classification",
-        bootstrap_flag=True,
-        num_bootstraps=10,
-        boot_sample_size=100,
-        balanced=False,  # False is stratified, True is balanced
-    )
+        mean_precision = np.mean(precision_array, axis=0)
+        lower = np.percentile(precision_array, 2.5, axis=0)
+        upper = np.percentile(precision_array, 97.5, axis=0)
+        aucs = [np.trapz(tpr, common_grid) for tpr in precision_array]
+        mean_auc = np.mean(aucs)
+        lower_auc = np.percentile(aucs, 2.5)
+        upper_auc = np.percentile(aucs, 97.5)
+        auc_str = f"Mean AUCPR = {mean_auc:.2f} [{lower_auc:.2f}, {upper_auc:.2f}]"
 
-    # Set seeds
-    eq2.set_fix_seeds([42, 123, 222, 999])
-    eq2.grouper(groupings_vars=["race", "sex"])
-    data = eq2.slicer("race")
-    race_metrics = eq2.get_metrics(data)
-    dispa = eq2.calculate_disparities(race_metrics, "race")
+        ax.plot(common_grid, mean_precision, label=auc_str, color=color)
+        ax.fill_between(
+            common_grid,
+            lower,
+            upper,
+            alpha=alpha_fill,
+            color=color,
+        )
 
-    ############################################################################
-    # Plots
-    ############################################################################
+        for j in range(0, len(common_grid), int(np.ceil(len(common_grid) / bar_every))):
+            fpr_val = common_grid[j]
+            mean_val = mean_precision[j]
+            err_low = mean_val - lower[j]
+            err_high = upper[j] - mean_val
 
-    # ROC plot
-    fig1 = eq_plot_roc_auc(
-        data=sliced_data,
-        title="ROC Curve by Race",
-        tick_fontsize=8,
-        decimal_places=3,
-    )
+            ax.errorbar(
+                fpr_val,
+                mean_val,
+                yerr=[[err_low], [err_high]],
+                fmt="o",
+                color=color,
+                markersize=3,
+                capsize=2,
+                elinewidth=1,
+                alpha=0.6,
+            )
 
-    # Precision-Recall plot
-    fig2 = eq_plot_precision_recall(
-        data=sliced_data,
-        title="Precision-Recall Curve by Race",
-        tick_fontsize=8,
-        decimal_places=3,
-    )
+        ax.set_xlim(0, 1)
+        ax.set_ylim(0, 1)
+        ax.set_title(group, fontsize=12)
+        ax.set_xlabel("Recall")
+        ax.set_ylabel("Precision")
+        ax.legend(loc="lower right", fontsize=8)
 
-    # Calibration plot
-    fig3 = eq_calibration_curve_plot(
-        data=sliced_data,
-        n_bins=10,
-        title="Calibration Curve by Race",
-        tick_fontsize=8,
-        decimal_places=3,
-    )
+    for j in range(i + 1, len(axes)):
+        axes[j].axis("off")
 
-    fig4 = eq_disparity_metrics_plot(
-        dispa,
-        metric_cols=["Accuracy_ratio", "Precision_ratio"],
-        name="race",
-        categories="all",
-    )
+    fig.suptitle(title, fontsize=14)
+    plt.tight_layout(rect=[0, 0, 1, 0.97])
+
+    if save_path:
+        os.makedirs(save_path, exist_ok=True)
+        fig.savefig(
+            os.path.join(save_path, f"{filename}.png"),
+            bbox_inches="tight",
+        )
+        plt.close(fig)
+    else:
+        plt.show()
+
+
+def eq_plot_bootstrapped_calibration_curves(
+    boot_sliced_data,
+    title="Bootstrapped Calibration Curves by Group",
+    filename="calibration_curves_by_group_grid",
+    save_path=None,
+    dpi=100,
+    figsize_per_plot=(6, 5),
+    n_bins=10,
+    alpha_fill=0.2,
+    color="#1f77b4",
+    decimal_places=2,
+):
+    """
+    Plot bootstrapped calibration curves (fraction of positives vs. predicted probability)
+    with shaded confidence intervals, one group per subplot (grid layout). The curves
+    are computed using fixed bins so that they remain jagged (i.e., not smoothed).
+
+    Parameters
+    ----------
+    boot_sliced_data : list of dict
+        Each element in the list represents one bootstrap iteration.
+        Each element is a dictionary of the form:
+            {
+              "groupA": {"y_true": np.array([...]), "y_prob": np.array([...])},
+              "groupB": {"y_true": np.array([...]), "y_prob": np.array([...])},
+              ...
+            }
+    title : str
+        Plot title.
+    filename : str
+        Name of the file to save (without extension).
+    save_path : str or None
+        Directory to save the plot. If None, the plot is shown instead of saved.
+    dpi : int
+        Dots per inch (plot resolution).
+    figsize_per_plot : tuple
+        Size (width, height) for each subplot.
+    n_bins : int
+        Number of bins to use for the calibration curve.
+    alpha_fill : float
+        Alpha (transparency) for the confidence interval shading.
+    color : str
+        Color for the main curve and shading.
+    n_bars : int
+        Approximate number of points at which to plot error bars.
+    decimal_places : int
+        Decimal precision for displayed metrics (e.g., Brier scores).
+
+    Returns
+    -------
+    matplotlib.figure.Figure
+        The figure containing the subplots.
+    """
+    # Create fixed bin edges and corresponding bin centers
+    bins = np.linspace(0, 1, n_bins + 1)
+    bin_centers = (bins[:-1] + bins[1:]) / 2
+
+    # Dictionaries to hold calibration curves and Brier scores for each group
+    group_cal = (
+        {}
+    )  # Will store an array of fraction_of_positives per bootstrap iteration
+    group_brier = {}  # Will store the Brier score per bootstrap iteration
+
+    # 1. Gather calibration data for each bootstrap iteration
+    for bootstrap_iter in boot_sliced_data:
+        for group, values in bootstrap_iter.items():
+            y_true = values["y_true"]
+            y_prob = values["y_prob"]
+
+            # Compute fraction of positives in each fixed bin
+            frac_positives = np.empty(n_bins)
+            frac_positives[:] = np.nan  # initialize as NaN
+            for i in range(n_bins):
+                # Use [bins[i], bins[i+1]) except for the last bin, which includes 1.
+                if i < n_bins - 1:
+                    bin_mask = (y_prob >= bins[i]) & (y_prob < bins[i + 1])
+                else:
+                    bin_mask = (y_prob >= bins[i]) & (y_prob <= bins[i + 1])
+                if np.any(bin_mask):
+                    frac_positives[i] = np.mean(y_true[bin_mask])
+                else:
+                    frac_positives[i] = np.nan
+
+            # Store the calibration curve (jagged, per fixed bins)
+            group_cal.setdefault(group, []).append(frac_positives)
+
+            # Compute and store the Brier score for this iteration
+            brier = brier_score_loss(y_true, y_prob)
+            group_brier.setdefault(group, []).append(brier)
+
+    # 2. Create the subplot grid
+    group_names = sorted(group_cal.keys())
+    num_groups = len(group_names)
+    n_cols = 2
+    n_rows = math.ceil(num_groups / n_cols)
+    figsize = (figsize_per_plot[0] * n_cols, figsize_per_plot[1] * n_rows)
+
+    fig, axes = plt.subplots(n_rows, n_cols, figsize=figsize, dpi=dpi)
+    if isinstance(axes, np.ndarray):
+        axes = axes.flatten()
+    else:
+        axes = [axes]
+
+    # 3. Plot each group's calibration curves
+    for i, group in enumerate(group_names):
+        ax = axes[i]
+
+        # Convert list of curves to a NumPy array: shape (num_bootstraps, n_bins)
+        cal_array = np.array(group_cal[group])
+        # Remove bootstrap iterations where all values are NaN
+        valid_rows = ~np.all(np.isnan(cal_array), axis=1)
+        cal_array = cal_array[valid_rows, :]
+        if cal_array.shape[0] == 0:
+            ax.set_title(group, fontsize=12)
+            ax.set_xlim(0, 1)
+            ax.set_ylim(0, 1)
+            ax.plot([0, 1], [0, 1], "--", color="gray")
+            continue
+
+        # Compute mean calibration and 95% confidence bounds across bootstraps
+        mean_cal = np.nanmean(cal_array, axis=0)
+        lower_cal = np.nanpercentile(cal_array, 2.5, axis=0)
+        upper_cal = np.nanpercentile(cal_array, 97.5, axis=0)
+
+        # Compute Brier score statistics
+        briers = np.array(group_brier[group])
+        mean_brier = np.mean(briers)
+        lower_brier = np.percentile(briers, 2.5)
+        upper_brier = np.percentile(briers, 97.5)
+        brier_str = (
+            f"Mean Brier = {mean_brier:.{decimal_places}f} "
+            f"[{lower_brier:.{decimal_places}f}, {upper_brier:.{decimal_places}f}]"
+        )
+
+        # Plot the mean calibration curve (using bin centers) with markers to show jagged steps
+        ax.plot(bin_centers, mean_cal, label=brier_str, color=color, marker="o")
+
+        # Shade the confidence interval
+        ax.fill_between(
+            bin_centers, lower_cal, upper_cal, alpha=alpha_fill, color=color
+        )
+
+        # Optionally, add error bars at a subset of points
+        selected_indices = np.linspace(0, n_bins - 1, 10, dtype=int)
+        for j in selected_indices:
+            x_val = bin_centers[j]
+            mean_val = mean_cal[j]
+            err_low = mean_val - lower_cal[j]
+            err_high = upper_cal[j] - mean_val
+            ax.errorbar(
+                x_val,
+                mean_val,
+                yerr=[[err_low], [err_high]],
+                fmt="o",
+                color=color,
+                markersize=3,
+                capsize=2,
+                elinewidth=1,
+                alpha=0.6,
+            )  # Plot the diagonal for perfect calibration
+        ax.plot([0, 1], [0, 1], "--", color="gray")
+
+        ax.set_xlim(0, 1)
+        ax.set_ylim(0, 1)
+        ax.set_title(group, fontsize=12)
+        ax.set_xlabel("Predicted Probability")
+        ax.set_ylabel("Fraction of Positives")
+        ax.legend(loc="lower right", fontsize=8)
+        ax.grid(True)
+
+    # Turn off any unused subplots
+    for j in range(i + 1, len(axes)):
+        axes[j].axis("off")
+
+    # 4. Final formatting and save/show the figure
+    fig.suptitle(title, fontsize=14)
+    plt.tight_layout(rect=[0, 0, 1, 0.97])
+
+    if save_path:
+        os.makedirs(save_path, exist_ok=True)
+        fig.savefig(os.path.join(save_path, f"{filename}.png"), bbox_inches="tight")
+        plt.close(fig)
+    else:
+        plt.show()
+
+
+def extract_group_metrics(race_metrics):
+    unique_groups = set()
+    for sample in race_metrics:
+        unique_groups.update(sample.keys())
+
+    metrics = {group: {"TPR": [], "FPR": []} for group in unique_groups}
+    for sample in race_metrics:
+        for group in unique_groups:
+            metrics[group]["TPR"].append(sample[group].get("TP Rate"))
+            metrics[group]["FPR"].append(sample[group].get("FP Rate"))
+    return metrics, unique_groups
+
+
+def compute_confidence_intervals(metrics, conf=95):
+    conf_intervals = {}
+    lower_percentile = (100 - conf) / 2
+    upper_percentile = 100 - lower_percentile
+    for group, group_metrics in metrics.items():
+        conf_intervals[group] = {}
+        for metric_name, values in group_metrics.items():
+            values_clean = [v for v in values if v is not None]
+            if values_clean:
+                lower_bound = np.percentile(values_clean, lower_percentile)
+                upper_bound = np.percentile(values_clean, upper_percentile)
+                conf_intervals[group][metric_name] = (lower_bound, upper_bound)
+            else:
+                conf_intervals[group][metric_name] = (None, None)
+    return conf_intervals
