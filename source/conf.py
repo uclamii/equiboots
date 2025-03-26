@@ -10,7 +10,7 @@ from docutils.parsers.rst import roles
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#project-information
 
 project = "EquiBoots"
-copyright = "2025, Leonid Shpaner, Arthur Funnell, Panayiotis Petousis"
+copyright = "UCLA CTSI ML Team: Leonid Shpaner, Arthur Funnell, Panayiotis Petousis"
 author = "Leonid Shpaner, Arthur Funnell, Panayiotis Petousis"
 release = "0.0.1a"
 
