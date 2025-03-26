@@ -1,4 +1,4 @@
-[![Downloads](https://pepy.tech/badge/model_tuner)](https://pepy.tech/project/model_tuner) [![PyPI](https://img.shields.io/pypi/v/model_tuner.svg)](https://pypi.org/project/model_tuner/) [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://opensource.org/licenses/Apache-2.0) [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.12727322.svg)](https://doi.org/10.5281/zenodo.12727322)
+[![Downloads](https://pepy.tech/badge/equiboots)](https://pepy.tech/project/equiboots) [![PyPI](https://img.shields.io/pypi/v/equiboots.svg)](https://pypi.org/project/equiboots/) [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 
 The `equiboots` library is a fairness-aware model evaluation toolkit designed to audit performance disparities across demographic groups. It provides robust, bootstrapped metrics for binary, multi-class, and multi-label classification, as well as regression models. The library supports group-wise performance slicing, fairness diagnostics, and customizable visualizations to support equitable AI/ML development.
 
@@ -43,31 +43,12 @@ https://www.mii.ucla.edu/
 
 ## ⚖️ License
 
-`model_tuner` is distributed under the Apache License. See [LICENSE](https://github.com/uclamii/model_tuner?tab=Apache-2.0-1-ov-file) for more information.
-
-## 📚 Citing `model_tuner`
-
-If you use `model_tuner` in your research or projects, please consider citing it.
-
-```bibtex
-@software{funnell_2024_12727322,
-  author       = {Funnell, Arthur and
-                  Shpaner, Leonid and
-                  Petousis, Panayiotis},
-  title        = {Model Tuner},
-  month        = jul,
-  year         = 2024,
-  publisher    = {Zenodo},
-  version      = {0.0.28b},
-  doi          = {10.5281/zenodo.12727322},
-  url          = {https://doi.org/10.5281/zenodo.12727322}
-}
-```
+`equiboots` is distributed under the Apache License. See [LICENSE](https://github.com/uclamii/equiboots?tab=Apache-2.0-1-ov-file) for more information.
 
 ## Support
 
-If you have any questions or issues with `model_tuner`, please open an issue on this [GitHub repository](https://github.com/uclamii/model_tuner/).
+If you have any questions or issues with `equiboots`, please open an issue on this [GitHub repository](https://github.com/uclamii/equiboots/).
 
 ## Acknowledgements
 
-This work was supported by the UCLA Medical Informatics Institute (MII) and the Clinical and Translational Science Institute (CTSI). Special thanks to Dr. Alex Bui for his invaluable guidance and support, and to Panayiotis Petousis for his original contributions to this codebase.
+This work was supported by the UCLA Medical Informatics Institute (MII) and the Clinical and Translational Science Institute (CTSI). Special thanks to Dr. Alex Bui for his invaluable guidance and support, and to Panayiotis Petousis, PhD, for his original contributions to this codebase.
