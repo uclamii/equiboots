@@ -16,14 +16,14 @@ Before installing `equiboots`, ensure your system meets the following requiremen
 
 The following dependencies will be automatically installed with `equiboots`:
 
-`matplotlib>=3.5.3, <=3.10.1`
-`numpy>=1.21.6, <=2.2.4`
-`pandas>=1.3.5, <=2.2.3`
-`scikit-learn>=1.0.2, <=1.5.2`
-`scipy>=1.8.0, <=1.15.2`
-`seaborn>=0.11.2, <=0.13.2`
-`tqdm>=4.66.4, <=4.67.1`
-`
+`matplotlib>=3.5.3, <=3.10.1`  
+`numpy>=1.21.6, <=2.2.4`  
+`pandas>=1.3.5, <=2.2.3`  
+`scikit-learn>=1.0.2, <=1.5.2`  
+`scipy>=1.8.0, <=1.15.2`  
+`seaborn>=0.11.2, <=0.13.2`  
+`tqdm>=4.66.4, <=4.67.1`  
+
 ## 💾 Installation
 
 You can install `equiboots` directly from PyPI:
@@ -44,6 +44,25 @@ https://www.mii.ucla.edu/
 ## ⚖️ License
 
 `equiboots` is distributed under the Apache License. See [LICENSE](https://github.com/uclamii/equiboots?tab=Apache-2.0-1-ov-file) for more information.
+
+## 📚 Citing `model_tuner`
+
+If you use `model_tuner` in your research or projects, please consider citing it.
+
+```bibtex
+@software{shpaner_2025_15086941,
+  author       = {Shpaner, Leonid and
+                  Funnell, Arthur and
+                  Petousis, Panayiotis},
+  title        = {EquiBoots},
+  month        = mar,
+  year         = 2025,
+  publisher    = {Zenodo},
+  version      = {0.0.0a2},
+  doi          = {10.5281/zenodo.15086941},
+  url          = {https://doi.org/10.5281/zenodo.15086941}
+}
+```
 
 ## Support
 
