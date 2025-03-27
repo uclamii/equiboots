@@ -26,6 +26,7 @@ class EquiBoots:
         num_bootstraps: int = 10,
         boot_sample_size: int = 100,
         balanced: bool = True,  # sample balanced or stratified
+        stratify_by_outcome: bool = False, # sample stratified by outcome
     ) -> None:
 
         self.fairness_vars = fairness_vars
@@ -43,6 +44,7 @@ class EquiBoots:
         self.num_bootstraps = num_bootstraps
         self.boot_sample_size = boot_sample_size
         self.balanced = balanced
+        self.stratify_by_outcome = stratify_by_outcome
 
     def set_reference_groups(self, reference_groups):
         ### zip the reference groups
@@ -65,6 +67,14 @@ class EquiBoots:
             raise ValueError(
                 f"Invalid task, please supply one of 'binary_classification', "
                 f"'multi_class_classification', 'regression' or 'multi_label_classification'"
+            )
+        
+    def check_classification_task(self, task):
+        if task == "regression":
+            raise ValueError(
+                f"Invalid task, please supply one of 'binary_classification', "
+                f"'multi_class_classification' or 'multi_label_classification'"
+                f" to stratify by outcome."
             )
 
     def check_fairness_vars(self, fairness_vars):
@@ -90,7 +100,6 @@ class EquiBoots:
                 seeds=self.seeds,
                 n_iterations=self.num_bootstraps,
                 sample_size=self.boot_sample_size,
-                balanced=self.balanced,
             )
             print("Groups created")
             return
@@ -114,7 +123,6 @@ class EquiBoots:
         n_iterations: int = 2,
         sample_size: int = 10,
         groupings_vars: list = None,
-        balanced: bool = True,
     ):
         """
         Perform balanced bootstrap sampling on the dataset.
@@ -128,8 +136,6 @@ class EquiBoots:
             Size of each bootstrap sample.
         groupings_vars : list
             Variables to group by during sampling.
-        balanced : bool
-            Whether to balance samples across groups.
 
         Returns:
         list
@@ -149,26 +155,79 @@ class EquiBoots:
 
                 for cat in categories:
 
-                    group = self.fairness_df[self.fairness_df[var] == cat].index
+                    if self.stratify_by_outcome:
 
-                    if balanced:
-                        n_samples = max(1, int(sample_size / n_categories))
+                        self.check_classification_task(self.task)
+
+                        sampled_group = np.array([])
+                        # Stratified sampling by outcome
+                        for outcome in np.unique(self.y_true, axis=0):
+
+                            # Create a mask for the current category and outcome
+                            if self.y_true.ndim == 1:
+                                # 1D case: Direct comparison
+                                slicing_condition = (self.fairness_df[var] == cat) & (self.y_true == outcome)
+                            else:
+                                # Multi-dimensional case: Row-wise comparison
+                                slicing_condition = (self.fairness_df[var] == cat) & (np.all(self.y_true == outcome, axis=1))
+
+                            group = self.fairness_df[slicing_condition].index
+                            # Sample from the group and concatenate
+                            sampled_group = np.concatenate(
+                                (
+                                    sampled_group,
+                                    self.sample_group(
+                                        group, n_categories, indx, sample_size, seeds, self.balanced
+                                    ),
+                                )
+                            ).astype(int)
                     else:
-                        n_samples = max(
-                            1, int(len(group) * sample_size / len(self.fairness_df))
-                        )
-
-                    sampled_group = resample(
-                        group,
-                        replace=True,
-                        n_samples=n_samples,
-                        random_state=seeds[indx % len(seeds)],
-                    )
+                        # Regular sampling
+                        group = self.fairness_df[self.fairness_df[var] == cat].index
+                        sampled_group = self.sample_group(group, n_categories, indx, sample_size, seeds, self.balanced)
 
                     groups[var]["indices"][cat] = sampled_group
             bootstrapped_samples.append(groups)
 
         return bootstrapped_samples
+    
+    def sample_group(self, group, n_categories, indx, sample_size, seeds, balanced):
+        """
+        Samples a group with or without balancing.
+
+        Parameters:
+        group : array-like
+            Indices of the group to sample from.
+        n_categories : int
+            Number of categories in the grouping variable.
+        indx : int
+            Current iteration index for seed selection.
+        sample_size : int
+            Total sample size for bootstrapping.
+        seeds : list
+            List of random seeds for reproducibility.
+        balanced : bool
+            Whether to balance samples across categories.
+
+        Returns:
+        array
+            Sampled indices from the group.
+        """
+
+        if balanced:
+            n_samples = max(1, int(sample_size / n_categories))
+        else:
+            n_samples = max(
+                1, int(len(group) * sample_size / len(self.fairness_df))
+            )
+
+        sampled_group = resample(
+            group,
+            replace=True,
+            n_samples=n_samples,
+            random_state=seeds[indx % len(seeds)],
+        )
+        return sampled_group
 
     def slicer(self, slicing_var: str) -> pd.DataFrame:
         """
