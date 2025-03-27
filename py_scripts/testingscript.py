@@ -68,6 +68,7 @@ def eq_general_test(task):
         num_bootstraps=10,
         boot_sample_size=100,
         balanced=False,  # False is stratified, True is balanced
+        stratify_by_outcome=True,
     )
 
     # Set seeds
@@ -85,6 +86,12 @@ def eq_general_test(task):
     print(data[0]["white"]["y_true"].shape)
     print(data[0]["asian"]["y_true"].shape)
     print(data[0]["hispanic"]["y_true"].shape)
+
+
+    print(np.unique(data[0]["black"]["y_true"], axis=0, return_counts=True))
+    print(np.unique(data[0]["white"]["y_true"], axis=0, return_counts=True))
+    print(np.unique(data[0]["asian"]["y_true"], axis=0, return_counts=True))
+    print(np.unique(data[0]["hispanic"]["y_true"], axis=0, return_counts=True))
 
     race_metrics = eq.get_metrics(data)
 
@@ -107,5 +114,5 @@ def eq_general_test(task):
 
 
 if __name__ == "__main__":
-    task = "multi_label_classification"
+    task = "multi_class_classification"
     eq_general_test(task)
