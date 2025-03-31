@@ -26,7 +26,7 @@ class EquiBoots:
         num_bootstraps: int = 10,
         boot_sample_size: int = 100,
         balanced: bool = True,  # sample balanced or stratified
-        stratify_by_outcome: bool = False, # sample stratified by outcome
+        stratify_by_outcome: bool = False,  # sample stratified by outcome
     ) -> None:
 
         self.fairness_vars = fairness_vars
@@ -66,9 +66,10 @@ class EquiBoots:
         ]:
             raise ValueError(
                 f"Invalid task, please supply one of 'binary_classification', "
-                f"'multi_class_classification', 'regression' or 'multi_label_classification'"
+                f"'multi_class_classification', "
+                f"'regression' or 'multi_label_classification'"
             )
-        
+
     def check_classification_task(self, task):
         if task == "regression":
             raise ValueError(
@@ -166,10 +167,14 @@ class EquiBoots:
                             # Create a mask for the current category and outcome
                             if self.y_true.ndim == 1:
                                 # 1D case: Direct comparison
-                                slicing_condition = (self.fairness_df[var] == cat) & (self.y_true == outcome)
+                                slicing_condition = (self.fairness_df[var] == cat) & (
+                                    self.y_true == outcome
+                                )
                             else:
                                 # Multi-dimensional case: Row-wise comparison
-                                slicing_condition = (self.fairness_df[var] == cat) & (np.all(self.y_true == outcome, axis=1))
+                                slicing_condition = (self.fairness_df[var] == cat) & (
+                                    np.all(self.y_true == outcome, axis=1)
+                                )
 
                             group = self.fairness_df[slicing_condition].index
                             # Sample from the group and concatenate
@@ -177,20 +182,32 @@ class EquiBoots:
                                 (
                                     sampled_group,
                                     self.sample_group(
-                                        group, n_categories, indx, sample_size, seeds, self.balanced
+                                        group,
+                                        n_categories,
+                                        indx,
+                                        sample_size,
+                                        seeds,
+                                        self.balanced,
                                     ),
                                 )
                             ).astype(int)
                     else:
                         # Regular sampling
                         group = self.fairness_df[self.fairness_df[var] == cat].index
-                        sampled_group = self.sample_group(group, n_categories, indx, sample_size, seeds, self.balanced)
+                        sampled_group = self.sample_group(
+                            group,
+                            n_categories,
+                            indx,
+                            sample_size,
+                            seeds,
+                            self.balanced,
+                        )
 
                     groups[var]["indices"][cat] = sampled_group
             bootstrapped_samples.append(groups)
 
         return bootstrapped_samples
-    
+
     def sample_group(self, group, n_categories, indx, sample_size, seeds, balanced):
         """
         Samples a group with or without balancing.
@@ -217,9 +234,7 @@ class EquiBoots:
         if balanced:
             n_samples = max(1, int(sample_size / n_categories))
         else:
-            n_samples = max(
-                1, int(len(group) * sample_size / len(self.fairness_df))
-            )
+            n_samples = max(1, int(len(group) * sample_size / len(self.fairness_df)))
 
         sampled_group = resample(
             group,
