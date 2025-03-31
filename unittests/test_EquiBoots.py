@@ -2,7 +2,7 @@ import pandas as pd
 import numpy as np
 import inspect
 import pytest
-from src.equiboots.EquiBoots import EquiBoots
+from src.equiboots import EquiBoots
 
 
 # Synthetic dataset fixture
@@ -100,3 +100,161 @@ test_names = [fn.__name__ for fn in test_functions]
 
 df = pd.DataFrame(test_names, columns=["Test Function"])
 print(df)
+
+
+def test_bootstrap_grouper_returns_list():
+    np.random.seed(42)
+    y_prob = np.random.rand(100)
+    y_pred = (y_prob > 0.5).astype(int)
+    y_true = np.random.randint(0, 2, size=100)
+    fairness_df = pd.DataFrame(
+        {
+            "race": np.random.choice(["white", "black", "asian"], 100),
+            "sex": np.random.choice(["M", "F"], 100),
+        }
+    )
+
+    eq = EquiBoots(
+        y_true=y_true,
+        y_prob=y_prob,
+        y_pred=y_pred,
+        fairness_df=fairness_df,
+        fairness_vars=["race"],
+        reference_groups=["white"],
+        task="binary_classification",
+        bootstrap_flag=True,
+        num_bootstraps=3,
+        boot_sample_size=20,
+    )
+
+    eq.grouper(groupings_vars=["race"])
+    assert isinstance(eq.groups, list)
+    assert len(eq.groups) == 3
+
+
+def test_stratify_by_outcome_regression_raises():
+    y_true = np.random.rand(100)
+    y_pred = np.random.rand(100)
+    y_prob = np.random.rand(100)
+    fairness_df = pd.DataFrame(
+        {
+            "race": np.random.choice(["white", "black"], 100),
+        }
+    )
+
+    with pytest.raises(ValueError):
+        EquiBoots(
+            y_true=y_true,
+            y_prob=y_prob,
+            y_pred=y_pred,
+            fairness_df=fairness_df,
+            fairness_vars=["race"],
+            task="regression",
+            bootstrap_flag=True,
+            stratify_by_outcome=True,
+        ).grouper(groupings_vars=["race"])
+
+
+def test_bootstrap_slicer_returns_list():
+    np.random.seed(42)
+    y_prob = np.random.rand(100)
+    y_pred = (y_prob > 0.5).astype(int)
+    y_true = np.random.randint(0, 2, size=100)
+    fairness_df = pd.DataFrame(
+        {
+            "race": np.random.choice(["white", "black"], 100),
+        }
+    )
+
+    eq = EquiBoots(
+        y_true=y_true,
+        y_prob=y_prob,
+        y_pred=y_pred,
+        fairness_df=fairness_df,
+        fairness_vars=["race"],
+        bootstrap_flag=True,
+        num_bootstraps=2,
+        boot_sample_size=20,
+    )
+    eq.grouper(groupings_vars=["race"])
+    sliced = eq.slicer("race")
+    assert isinstance(sliced, list)
+    assert all(isinstance(d, dict) for d in sliced)
+
+
+def test_bootstrap_calculate_disparities_returns_list():
+    np.random.seed(42)
+    y_prob = np.random.rand(100)
+    y_pred = (y_prob > 0.5).astype(int)
+    y_true = np.random.randint(0, 2, size=100)
+    fairness_df = pd.DataFrame(
+        {
+            "race": np.random.choice(["white", "black"], 100),
+        }
+    )
+
+    eq = EquiBoots(
+        y_true=y_true,
+        y_prob=y_prob,
+        y_pred=y_pred,
+        fairness_df=fairness_df,
+        fairness_vars=["race"],
+        reference_groups=["white"],
+        task="binary_classification",
+        bootstrap_flag=True,
+        num_bootstraps=2,
+        boot_sample_size=20,
+    )
+    eq.grouper(groupings_vars=["race"])
+    sliced = eq.slicer("race")
+    metrics = eq.get_metrics(sliced)
+    disparities = eq.calculate_disparities(metrics, "race")
+    assert isinstance(disparities, list)
+    assert all(isinstance(d, dict) for d in disparities)
+
+
+def test_bootstrap_stratify_by_outcome_binary():
+    y_true = np.random.randint(0, 2, 100)
+    y_prob = np.random.rand(100)
+    y_pred = (y_prob > 0.5).astype(int)
+    fairness_df = pd.DataFrame({"race": np.random.choice(["white", "black"], 100)})
+
+    eq = EquiBoots(
+        y_true=y_true,
+        y_prob=y_prob,
+        y_pred=y_pred,
+        fairness_df=fairness_df,
+        fairness_vars=["race"],
+        reference_groups=["white"],
+        task="binary_classification",
+        bootstrap_flag=True,
+        stratify_by_outcome=True,
+        num_bootstraps=2,
+        boot_sample_size=20,
+    )
+    eq.grouper(groupings_vars=["race"])
+    assert isinstance(eq.groups, list)
+    assert len(eq.groups) == 2
+
+
+def test_sample_group_unbalanced():
+    y_true = np.random.randint(0, 2, 100)
+    y_prob = np.random.rand(100)
+    y_pred = (y_prob > 0.5).astype(int)
+    fairness_df = pd.DataFrame({"race": ["white"] * 100})
+
+    eq = EquiBoots(
+        y_true=y_true,
+        y_prob=y_prob,
+        y_pred=y_pred,
+        fairness_df=fairness_df,
+        fairness_vars=["race"],
+        task="binary_classification",
+        bootstrap_flag=True,
+        balanced=False,
+        num_bootstraps=1,
+        boot_sample_size=50,
+    )
+    group = fairness_df[fairness_df["race"] == "white"].index
+    result = eq.sample_group(group, 1, 0, 50, [42], balanced=False)
+    assert len(result) > 0
