@@ -1,5 +1,6 @@
 import numpy as np
 from sklearn.preprocessing import MultiLabelBinarizer
+from src.equiboots import metrics
 
 from src.equiboots.metrics import (
     binary_classification_metrics,
@@ -8,6 +9,22 @@ from src.equiboots.metrics import (
     multi_label_classification_metrics,
     regression_metrics,
 )
+
+
+def test_binary_classification_example_executes():
+    metrics.binary_classification_example()
+
+
+def test_multi_class_classification_example_executes():
+    metrics.multi_class_classification_example()
+
+
+def test_multi_label_classification_example_executes():
+    metrics.multi_label_classification_example()
+
+
+def test_regression_example_executes():
+    metrics.regression_example()
 
 
 def test_binary_classification_metrics():
@@ -86,3 +103,11 @@ def test_regression_metrics():
     assert "Root Mean Squared Error" in result
     assert "Mean Squared Log Error" in result
     assert result["R^2 Score"] <= 1.0
+
+
+def test_main_executes_examples(monkeypatch):
+    # Monkeypatch print to avoid clutter
+    monkeypatch.setattr("builtins.print", lambda *args, **kwargs: None)
+    import runpy
+
+    runpy.run_module("src.equiboots.metrics", run_name="__main__")
