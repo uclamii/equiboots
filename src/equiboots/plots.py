@@ -1,5 +1,6 @@
 from sklearn.calibration import calibration_curve
 import matplotlib.pyplot as plt
+from matplotlib.lines import Line2D
 import seaborn as sns
 import numpy as np
 from scipy.interpolate import interp1d
@@ -7,6 +8,7 @@ import os
 import math
 
 from sklearn.metrics import (
+    r2_score,
     roc_curve,
     auc,
     precision_recall_curve,
@@ -76,44 +78,54 @@ def eq_plot_residuals_by_group(
     color_by_group: bool = True,
     n_cols: int = 2,
     n_rows: int = None,
+    show_centroids: bool = False,
 ):
-    """
-    Plot residuals (y_true - y_prob) by group.
-
-    Parameters
-    ----------
-    y_true : np.ndarray
-        Ground truth values.
-    y_prob : np.ndarray
-        Predicted values.
-    group : np.ndarray
-        Group membership for each instance.
-    title : str
-        Title of the plot.
-    filename : str
-        Name of the output file (without extension).
-    save_path : str or None
-        Path to save the plot. If None, the plot is shown.
-    figsize : tuple
-        Size of the figure.
-    dpi : int
-        Dots per inch (resolution).
-    alpha : float
-        Transparency of the scatter points.
-    tick_fontsize : int
-        Font size for ticks and labels.
-    grid : bool
-        If True, show one subplot per group.
-    color_by_group : bool
-        Whether to use a separate color for each group.
-    n_cols : int
-        Number of columns in grid layout (only used if grid=True).
-    n_rows : int or None
-        Number of rows in grid layout. Computed if None.
-    """
+    import matplotlib.pyplot as plt
+    import numpy as np
+    import seaborn as sns
 
     residuals = y_true - y_prob
     unique_groups = np.unique(group)
+
+    palette = (
+        sns.color_palette("tab10", len(unique_groups))
+        if color_by_group
+        else ["gray"] * len(unique_groups)
+    )
+    color_map = dict(zip(unique_groups, palette))
+
+    def _scatter_with_centroid(ax, grp, mask, show_centroids=True):
+        ax.scatter(
+            y_prob[mask],
+            residuals[mask],
+            color=color_map[grp],
+            alpha=alpha,
+            label=str(grp),
+        )
+        if show_centroids:
+            # Drop shadow
+            ax.scatter(
+                np.mean(y_prob[mask]) + 0.3,
+                np.mean(residuals[mask]) - 0.3,
+                color="black",
+                marker="X",
+                s=130,
+                alpha=0.4,
+                linewidth=0,
+                zorder=4,
+            )
+            # Foreground marker
+            ax.scatter(
+                np.mean(y_prob[mask]),
+                np.mean(residuals[mask]),
+                color=color_map[grp],
+                marker="X",
+                s=120,
+                edgecolor="black",
+                linewidth=2,
+                zorder=5,
+                label=f"{grp} (centroid)" if not subplots else None,
+            )
 
     if subplots:
         if n_rows is None:
@@ -133,25 +145,13 @@ def eq_plot_residuals_by_group(
         )
         axes = axes.flatten()
 
-        palette = (
-            sns.color_palette("tab10", len(unique_groups))
-            if color_by_group
-            else ["gray"] * len(unique_groups)
-        )
-        color_map = dict(zip(unique_groups, palette))
-
         for i, grp in enumerate(unique_groups):
             if i >= len(axes):
                 break
             mask = group == grp
             ax = axes[i]
-            ax.scatter(
-                y_prob[mask],
-                residuals[mask],
-                color=color_map[grp],
-                alpha=alpha,
-                label=str(grp),
-            )
+            _scatter_with_centroid(ax, grp, mask, show_centroids=show_centroids)
+
             ax.axhline(0, linestyle="--", color="gray", linewidth=1)
             ax.set_title(str(grp), fontsize=tick_fontsize + 1)
             ax.set_xlabel("Predicted Value", fontsize=tick_fontsize)
@@ -167,21 +167,53 @@ def eq_plot_residuals_by_group(
     else:
         fig, ax = plt.subplots(figsize=figsize, dpi=dpi)
 
-        if color_by_group:
-            palette = sns.color_palette("tab10", len(unique_groups))
-            color_map = dict(zip(unique_groups, palette))
-            for grp in unique_groups:
-                mask = group == grp
-                ax.scatter(
-                    y_prob[mask],
-                    residuals[mask],
-                    color=color_map[grp],
-                    alpha=alpha,
-                    label=str(grp),
-                )
-            ax.legend(title="Group", bbox_to_anchor=(1.05, 1), loc="upper left")
-        else:
-            ax.scatter(y_prob, residuals, color="gray", alpha=alpha)
+        legend_entries = []
+
+        for grp in unique_groups:
+            mask = group == grp
+            _scatter_with_centroid(ax, grp, mask, show_centroids=show_centroids)
+
+            # Compute R² and class counts
+            y_true_grp = y_true[mask]
+            y_prob_grp = y_prob[mask]
+            residual_grp = residuals[mask]
+
+            r2 = r2_score(y_true_grp, y_prob_grp)
+            total = len(y_true_grp)
+            pos = np.sum(
+                y_true_grp >= y_prob_grp
+            )  # optionally: y_true_grp == 1 if binary
+            neg = total - pos
+
+            label = (
+                f"{grp} | R² = {r2:.{2}f}, "
+                f"Count: {total:,}, Pos: {pos:,}, Neg: {neg:,}"
+            )
+
+            legend_entries.append((label, color_map[grp]))
+
+        # Format legend
+        custom_handles = [
+            Line2D(
+                [0],
+                [0],
+                marker="o",
+                color="w",
+                label=label,
+                markerfacecolor=color,
+                markersize=8,
+            )
+            for label, color in legend_entries
+        ]
+
+        ax.legend(
+            handles=custom_handles,
+            loc="upper center",
+            bbox_to_anchor=(0.5, -0.25),
+            fontsize=tick_fontsize,
+            ncol=1,
+            title="Group Stats",
+        )
 
         ax.axhline(0, linestyle="--", color="gray", linewidth=1)
         ax.set_title(title, fontsize=tick_fontsize + 2)
