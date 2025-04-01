@@ -149,3 +149,9 @@ mlruns/
 
 # dirs
 plots/
+
+# image dirs
+images/
+**/images/
+imgs/
+**/imgs/
