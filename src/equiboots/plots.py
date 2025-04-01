@@ -14,6 +14,154 @@ from sklearn.metrics import (
     brier_score_loss,
 )
 
+
+################################################################################
+# Regression Residuals
+################################################################################
+
+
+def eq_plot_residuals_by_group(
+    y_true: np.ndarray,
+    y_prob: np.ndarray,
+    group: np.ndarray,
+    title: str = "Residuals by Group",
+    filename: str = "residuals_by_group",
+    save_path: str = None,
+    figsize: tuple = (8, 6),
+    dpi: int = 100,
+    alpha: float = 0.6,
+    tick_fontsize: int = 10,
+    subplots: bool = False,
+    color_by_group: bool = True,
+    n_cols: int = 2,
+    n_rows: int = None,
+):
+    """
+    Plot residuals (y_true - y_prob) by group.
+
+    Parameters
+    ----------
+    y_true : np.ndarray
+        Ground truth values.
+    y_prob : np.ndarray
+        Predicted values.
+    group : np.ndarray
+        Group membership for each instance.
+    title : str
+        Title of the plot.
+    filename : str
+        Name of the output file (without extension).
+    save_path : str or None
+        Path to save the plot. If None, the plot is shown.
+    figsize : tuple
+        Size of the figure.
+    dpi : int
+        Dots per inch (resolution).
+    alpha : float
+        Transparency of the scatter points.
+    tick_fontsize : int
+        Font size for ticks and labels.
+    grid : bool
+        If True, show one subplot per group.
+    color_by_group : bool
+        Whether to use a separate color for each group.
+    n_cols : int
+        Number of columns in grid layout (only used if grid=True).
+    n_rows : int or None
+        Number of rows in grid layout. Computed if None.
+    """
+
+    residuals = y_true - y_prob
+    unique_groups = np.unique(group)
+
+    if subplots:
+        if n_rows is None:
+            n_rows = int(np.ceil(len(unique_groups) / n_cols))
+        elif n_rows * n_cols < len(unique_groups):
+            print(
+                f"[Warning] Grid size {n_rows}x{n_cols} only supports {n_rows * n_cols} plots; "
+                f"showing first {n_rows * n_cols} of {len(unique_groups)} groups."
+            )
+
+        fig, axes = plt.subplots(
+            nrows=n_rows,
+            ncols=n_cols,
+            figsize=figsize,
+            dpi=dpi,
+            squeeze=False,
+        )
+        axes = axes.flatten()
+
+        palette = (
+            sns.color_palette("tab10", len(unique_groups))
+            if color_by_group
+            else ["gray"] * len(unique_groups)
+        )
+        color_map = dict(zip(unique_groups, palette))
+
+        for i, grp in enumerate(unique_groups):
+            if i >= len(axes):
+                break
+            mask = group == grp
+            ax = axes[i]
+            ax.scatter(
+                y_prob[mask],
+                residuals[mask],
+                color=color_map[grp],
+                alpha=alpha,
+                label=str(grp),
+            )
+            ax.axhline(0, linestyle="--", color="gray", linewidth=1)
+            ax.set_title(str(grp), fontsize=tick_fontsize + 1)
+            ax.set_xlabel("Predicted Value", fontsize=tick_fontsize)
+            ax.set_ylabel("Residual", fontsize=tick_fontsize)
+            ax.grid(True)
+
+        for j in range(i + 1, len(axes)):
+            axes[j].axis("off")
+
+        fig.suptitle(title, fontsize=tick_fontsize + 3)
+        fig.tight_layout(rect=[0, 0, 1, 0.95])
+
+    else:
+        fig, ax = plt.subplots(figsize=figsize, dpi=dpi)
+
+        if color_by_group:
+            palette = sns.color_palette("tab10", len(unique_groups))
+            color_map = dict(zip(unique_groups, palette))
+            for grp in unique_groups:
+                mask = group == grp
+                ax.scatter(
+                    y_prob[mask],
+                    residuals[mask],
+                    color=color_map[grp],
+                    alpha=alpha,
+                    label=str(grp),
+                )
+            ax.legend(title="Group", bbox_to_anchor=(1.05, 1), loc="upper left")
+        else:
+            ax.scatter(y_prob, residuals, color="gray", alpha=alpha)
+
+        ax.axhline(0, linestyle="--", color="gray", linewidth=1)
+        ax.set_title(title, fontsize=tick_fontsize + 2)
+        ax.set_xlabel("Predicted Value", fontsize=tick_fontsize)
+        ax.set_ylabel("Residual (y_true - y_prob)", fontsize=tick_fontsize)
+        ax.grid(True)
+        fig.tight_layout()
+
+    ##TODO: L.S. modularize this piece as it is reused
+
+    if save_path:
+        os.makedirs(save_path, exist_ok=True)
+        fig.savefig(
+            os.path.join(save_path, f"{filename}.png"),
+            bbox_inches="tight",
+        )
+        plt.close(fig)
+    else:
+        plt.show()
+
+
 ################################################################################
 # ROC AUC Curve Plot
 ################################################################################
@@ -35,7 +183,8 @@ def eq_plot_roc_auc(
     Parameters
     ----------
     data : dict
-        Dictionary with group names as keys and 'y_true' and 'y_prob' arrays as values.
+        Dictionary with group names as keys and 'y_true' and 'y_prob' arrays as
+        values.
     save_path : str, optional
         Directory to save the plot. If None, the plot is returned.
     filename : str, optional
@@ -460,6 +609,11 @@ def eq_disparity_metrics_plot(
         plt.show()  # only show if not saving
 
 
+################################################################################
+# Bootstrapped ROC AUC Curve Plot
+################################################################################
+
+
 def eq_plot_bootstrapped_roc_curves(
     boot_sliced_data,
     title="Bootstrapped ROC Curves by Group",
@@ -590,6 +744,11 @@ def eq_plot_bootstrapped_roc_curves(
         plt.close(fig)
     else:
         plt.show()
+
+
+################################################################################
+# Bootstrapped Precision-Recall Curve Plot
+################################################################################
 
 
 def eq_plot_bootstrapped_pr_curves(
@@ -727,6 +886,11 @@ def eq_plot_bootstrapped_pr_curves(
         plt.show()
 
 
+################################################################################
+# Bootstrapped Calibration Curve Plot
+################################################################################
+
+
 def eq_plot_bootstrapped_calibration_curves(
     boot_sliced_data,
     title="Bootstrapped Calibration Curves by Group",
@@ -740,9 +904,10 @@ def eq_plot_bootstrapped_calibration_curves(
     decimal_places=2,
 ):
     """
-    Plot bootstrapped calibration curves (fraction of positives vs. predicted probability)
-    with shaded confidence intervals, one group per subplot (grid layout). The curves
-    are computed using fixed bins so that they remain jagged (i.e., not smoothed).
+    Plot bootstrapped calibration curves (fraction of positives vs. predicted
+    probability) with shaded confidence intervals, one group per subplot
+    (grid layout). The curves are computed using fixed bins so that they remain
+    jagged (i.e., not smoothed).
 
     Parameters
     ----------
@@ -861,8 +1026,15 @@ def eq_plot_bootstrapped_calibration_curves(
             f"[{lower_brier:.{decimal_places}f}, {upper_brier:.{decimal_places}f}]"
         )
 
-        # Plot the mean calibration curve (using bin centers) with markers to show jagged steps
-        ax.plot(bin_centers, mean_cal, label=brier_str, color=color, marker="o")
+        # Plot the mean calibration curve (using bin centers) with markers to show
+        # jagged steps
+        ax.plot(
+            bin_centers,
+            mean_cal,
+            label=brier_str,
+            color=color,
+            marker="o",
+        )
 
         # Shade the confidence interval
         ax.fill_between(
@@ -907,7 +1079,10 @@ def eq_plot_bootstrapped_calibration_curves(
 
     if save_path:
         os.makedirs(save_path, exist_ok=True)
-        fig.savefig(os.path.join(save_path, f"{filename}.png"), bbox_inches="tight")
+        fig.savefig(
+            os.path.join(save_path, f"{filename}.png"),
+            bbox_inches="tight",
+        )
         plt.close(fig)
     else:
         plt.show()
