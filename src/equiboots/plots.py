@@ -16,6 +16,49 @@ from sklearn.metrics import (
 
 
 ################################################################################
+# Save or Show Plots Utility Function
+################################################################################
+
+
+def save_or_show_plot(
+    fig,
+    save_path=None,
+    filename="plot",
+    bbox_inches="tight",
+):
+    """
+    Save the plot to the specified path or show it if no path is provided.
+
+    Parameters
+    ----------
+    fig : matplotlib.figure.Figure
+        The figure object to save or show.
+
+    save_path : str, optional
+        Directory to save the plot. If None, the plot is shown instead.
+
+    filename : str, optional
+        Filename to use when saving the figure. Default is "plot".
+
+    bbox_inches : str, optional
+        Bounding box parameter for saving the figure. Default is "tight".
+
+    Returns
+    -------
+    None
+    """
+    if save_path:
+        os.makedirs(save_path, exist_ok=True)
+        fig.savefig(
+            os.path.join(save_path, f"{filename}.png"),
+            bbox_inches=bbox_inches,
+        )
+        plt.close(fig)
+    else:
+        plt.show()
+
+
+################################################################################
 # Regression Residuals
 ################################################################################
 
@@ -149,17 +192,7 @@ def eq_plot_residuals_by_group(
         ax.grid(True)
         fig.tight_layout()
 
-    ##TODO: L.S. modularize this piece as it is reused
-
-    if save_path:
-        os.makedirs(save_path, exist_ok=True)
-        fig.savefig(
-            os.path.join(save_path, f"{filename}.png"),
-            bbox_inches="tight",
-        )
-        plt.close(fig)
-    else:
-        plt.show()
+    save_or_show_plot(fig, save_path=save_path, filename=filename)
 
 
 ################################################################################
@@ -241,15 +274,7 @@ def eq_plot_roc_auc(
     ax.grid(True)
     plt.tight_layout()
 
-    if save_path:
-        os.makedirs(save_path, exist_ok=True)
-        fig.savefig(
-            os.path.join(save_path, f"{filename}.png"),
-            bbox_inches="tight",
-        )
-        plt.close(fig)  # prevent display in notebook
-    else:
-        plt.show()  # only show if not saving
+    save_or_show_plot(fig, save_path=save_path, filename=filename)
 
 
 ################################################################################
@@ -329,15 +354,7 @@ def eq_plot_precision_recall(
     ax.grid(True)
     plt.tight_layout()
 
-    if save_path:
-        os.makedirs(save_path, exist_ok=True)
-        fig.savefig(
-            os.path.join(save_path, f"{filename}.png"),
-            bbox_inches="tight",
-        )
-        plt.close(fig)  # prevent display in notebook
-    else:
-        plt.show()  # only show if not saving
+    save_or_show_plot(fig, save_path=save_path, filename=filename)
 
 
 ################################################################################
@@ -437,15 +454,7 @@ def eq_calibration_curve_plot(
     ax.grid(True)
     plt.tight_layout()
 
-    if save_path:
-        os.makedirs(save_path, exist_ok=True)
-        fig.savefig(
-            os.path.join(save_path, f"{filename}.png"),
-            bbox_inches="tight",
-        )
-        plt.close(fig)  # prevent display in notebook
-    else:
-        plt.show()  # only show if not saving
+    save_or_show_plot(fig, save_path=save_path, filename=filename)
 
 
 ################################################################################
@@ -598,15 +607,7 @@ def eq_disparity_metrics_plot(
         w_pad=2, h_pad=2, rect=[0.01, 0.01, 1.01, 1]
     )  # Adjust rect to make space for the legend and reduce white space
 
-    if save_path:
-        os.makedirs(save_path, exist_ok=True)
-        fig.savefig(
-            os.path.join(save_path, f"{filename}.png"),
-            bbox_inches="tight",
-        )
-        plt.close(fig)  # prevent display in notebook
-    else:
-        plt.show()  # only show if not saving
+    save_or_show_plot(fig, save_path=save_path, filename=filename)
 
 
 ################################################################################
@@ -735,15 +736,7 @@ def eq_plot_bootstrapped_roc_curves(
     fig.suptitle(title, fontsize=14)
     plt.tight_layout(rect=[0, 0, 1, 0.97])
 
-    if save_path:
-        os.makedirs(save_path, exist_ok=True)
-        fig.savefig(
-            os.path.join(save_path, f"{filename}.png"),
-            bbox_inches="tight",
-        )
-        plt.close(fig)
-    else:
-        plt.show()
+    save_or_show_plot(fig, save_path=save_path, filename=filename)
 
 
 ################################################################################
@@ -875,15 +868,7 @@ def eq_plot_bootstrapped_pr_curves(
     fig.suptitle(title, fontsize=14)
     plt.tight_layout(rect=[0, 0, 1, 0.97])
 
-    if save_path:
-        os.makedirs(save_path, exist_ok=True)
-        fig.savefig(
-            os.path.join(save_path, f"{filename}.png"),
-            bbox_inches="tight",
-        )
-        plt.close(fig)
-    else:
-        plt.show()
+    save_or_show_plot(fig, save_path=save_path, filename=filename)
 
 
 ################################################################################
@@ -1077,15 +1062,7 @@ def eq_plot_bootstrapped_calibration_curves(
     fig.suptitle(title, fontsize=14)
     plt.tight_layout(rect=[0, 0, 1, 0.97])
 
-    if save_path:
-        os.makedirs(save_path, exist_ok=True)
-        fig.savefig(
-            os.path.join(save_path, f"{filename}.png"),
-            bbox_inches="tight",
-        )
-        plt.close(fig)
-    else:
-        plt.show()
+    save_or_show_plot(fig, save_path=save_path, filename=filename)
 
 
 def extract_group_metrics(race_metrics):
