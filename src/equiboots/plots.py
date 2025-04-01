@@ -5,7 +5,6 @@ import seaborn as sns
 import numpy as np
 from scipy.interpolate import interp1d
 import os
-import math
 
 from sklearn.metrics import (
     r2_score,
@@ -16,7 +15,6 @@ from sklearn.metrics import (
     average_precision_score,
     brier_score_loss,
 )
-
 
 ################################################################################
 # Save or Show Plots Utility Function
@@ -64,165 +62,270 @@ def save_or_show_plot(
 ################################################################################
 
 
-def eq_plot_residuals_by_group(
-    y_true: np.ndarray,
-    y_prob: np.ndarray,
-    group: np.ndarray,
-    title: str = "Residuals by Group",
-    filename: str = "residuals_by_group",
-    save_path: str = None,
-    figsize: tuple = (8, 6),
-    dpi: int = 100,
-    alpha: float = 0.6,
-    tick_fontsize: int = 10,
-    subplots: bool = False,
-    color_by_group: bool = True,
-    n_cols: int = 2,
-    n_rows: int = None,
-    show_centroids: bool = False,
+def _plot_single_residual_ax(
+    ax,
+    y_true,
+    y_prob,
+    group_label,
+    label_fontsize=12,
+    tick_fontsize=10,
+    alpha=0.6,
+    color="tab:blue",
+    line_kwargs=None,
+    show_centroid=True,
 ):
-    import matplotlib.pyplot as plt
-    import numpy as np
-    import seaborn as sns
+    """
+    Helper function to plot residuals vs predicted values for a single group.
+
+    Used within grouped residual plotting routines to modularize logic, apply
+    consistent styling, and support optional centroid visualization for
+    interpretability.
+    """
 
     residuals = y_true - y_prob
-    unique_groups = np.unique(group)
+
+    line_kwargs = line_kwargs or {"linestyle": "--", "color": "gray", "linewidth": 1}
+
+    ax.scatter(y_prob, residuals, alpha=alpha, label=str(group_label), color=color)
+
+    if show_centroid:
+        ax.scatter(
+            np.mean(y_prob) + 0.3,
+            np.mean(residuals) - 0.3,
+            color="black",
+            marker="X",
+            s=130,
+            alpha=0.4,
+            linewidth=0,
+            zorder=4,
+        )
+        ax.scatter(
+            np.mean(y_prob),
+            np.mean(residuals),
+            color=color,
+            marker="X",
+            s=120,
+            edgecolor="black",
+            linewidth=2,
+            zorder=5,
+        )
+
+    ax.axhline(0, **line_kwargs)
+    ax.set_title(str(group_label), fontsize=label_fontsize)
+    ax.set_xlabel("Predicted Value", fontsize=label_fontsize)
+    ax.set_ylabel("Residual (y_true - y_prob)", fontsize=label_fontsize)
+    ax.tick_params(axis="both", labelsize=tick_fontsize)
+    ax.grid(True)
+
+
+def eq_plot_residuals_by_group(
+    data: dict,
+    save_path: str = None,
+    filename: str = "residuals_by_group",
+    title: str = "Residuals by Group",
+    figsize: tuple = (8, 6),
+    dpi: int = 100,
+    label_fontsize: int = 12,
+    tick_fontsize: int = 10,
+    decimal_places: int = 2,
+    subplots: bool = False,
+    n_cols: int = 2,
+    n_rows: int = None,
+    group: str = None,
+    color_by_group: bool = True,
+    line_kwgs: dict = None,
+    alpha: float = 0.6,
+    show_centroids: bool = False,
+):
+    """
+    Plot residuals vs predicted values by group, with options for overlay,
+    single, or subplot layout.
+
+    Parameters
+    ----------
+    data : dict — Group-level data with 'y_true' and 'y_prob' (or 'y_actual' / 'y_pred').
+    save_path : str, optional — Directory to save the plot; displays if None.
+    filename : str — Base filename for the saved plot.
+    title : str — Title for the plot or figure.
+    figsize : tuple — Figure size as (width, height).
+    dpi : int — Resolution of the figure in dots per inch.
+    label_fontsize : int — Font size for axis labels and titles.
+    tick_fontsize : int — Font size for tick marks and legend text.
+    decimal_places : int — Decimal places to show in summary stats.
+    subplots : bool — If True, create separate subplots per group.
+    n_cols : int — Number of subplot columns (when subplots=True).
+    n_rows : int, optional — Number of subplot rows; inferred if not set.
+    group : str, optional — If provided, only plot that group.
+    color_by_group : bool — Use unique colors per group if True; gray otherwise.
+    line_kwgs : dict, optional — Style dictionary for horizontal reference line.
+    alpha : float — Transparency level for scatter points.
+    show_centroids : bool — Plot centroid markers for each group's residuals if True.
+
+    Raises
+    ------
+    ValueError — If both `group` and `subplots=True` are specified.
+
+    Returns
+    -------
+    None — Saves or displays the resulting residual plot(s).
+    """
+
+    if group is not None and subplots:
+        raise ValueError("Cannot use subplots=True when a specific group is selected.")
+
+    groups = sorted(data.keys())
+    line_kwgs = line_kwgs or {"linestyle": "--", "color": "gray", "linewidth": 1}
 
     palette = (
-        sns.color_palette("tab10", len(unique_groups))
+        sns.color_palette("tab10", len(groups))
         if color_by_group
-        else ["gray"] * len(unique_groups)
+        else ["gray"] * len(groups)
     )
-    color_map = dict(zip(unique_groups, palette))
+    color_map = dict(zip(groups, palette))
 
-    def _scatter_with_centroid(ax, grp, mask, show_centroids=True):
-        ax.scatter(
-            y_prob[mask],
-            residuals[mask],
-            color=color_map[grp],
-            alpha=alpha,
-            label=str(grp),
+    if group:
+        if group not in data:
+            print(f"[Warning] Group '{group}' not found.")
+            return
+        fig, ax = plt.subplots(figsize=figsize, dpi=dpi)
+        group_data = data[group]
+        y_true = (
+            group_data["y_true"] if "y_true" in group_data else group_data["y_actual"]
         )
-        if show_centroids:
-            # Drop shadow
-            ax.scatter(
-                np.mean(y_prob[mask]) + 0.3,
-                np.mean(residuals[mask]) - 0.3,
-                color="black",
-                marker="X",
-                s=130,
-                alpha=0.4,
-                linewidth=0,
-                zorder=4,
-            )
-            # Foreground marker
-            ax.scatter(
-                np.mean(y_prob[mask]),
-                np.mean(residuals[mask]),
-                color=color_map[grp],
-                marker="X",
-                s=120,
-                edgecolor="black",
-                linewidth=2,
-                zorder=5,
-                label=f"{grp} (centroid)" if not subplots else None,
-            )
+        y_prob = (
+            group_data["y_prob"] if "y_prob" in group_data else group_data["y_pred"]
+        )
+        _plot_single_residual_ax(
+            ax,
+            y_true,
+            y_prob,
+            group,
+            label_fontsize=label_fontsize,
+            tick_fontsize=tick_fontsize,
+            alpha=alpha,
+            color=color_map[group],
+            line_kwargs=line_kwgs,
+            show_centroid=show_centroids,
+        )
+        ax.set_title(f"{title} ({group})", fontsize=label_fontsize)
+        fig.tight_layout()
+        save_or_show_plot(fig, save_path, f"{filename}_{group}")
+        return
 
     if subplots:
         if n_rows is None:
-            n_rows = int(np.ceil(len(unique_groups) / n_cols))
-        elif n_rows * n_cols < len(unique_groups):
+            n_rows = int(np.ceil(len(groups) / n_cols))
+        elif n_rows * n_cols < len(groups):
             print(
-                f"[Warning] Grid size {n_rows}x{n_cols} only supports {n_rows * n_cols} plots; "
-                f"showing first {n_rows * n_cols} of {len(unique_groups)} groups."
+                f"[Warning] Grid size {n_rows}x{n_cols} only supports "
+                f"{n_rows * n_cols} plots; showing first {n_rows * n_cols} of "
+                f"{len(groups)} groups."
             )
 
         fig, axes = plt.subplots(
             nrows=n_rows,
             ncols=n_cols,
-            figsize=figsize,
+            figsize=(figsize[0] * n_cols, figsize[1] * n_rows),
             dpi=dpi,
-            squeeze=False,
         )
         axes = axes.flatten()
 
-        for i, grp in enumerate(unique_groups):
+        for i, grp in enumerate(groups):
             if i >= len(axes):
                 break
-            mask = group == grp
-            ax = axes[i]
-            _scatter_with_centroid(ax, grp, mask, show_centroids=show_centroids)
-
-            ax.axhline(0, linestyle="--", color="gray", linewidth=1)
-            ax.set_title(str(grp), fontsize=tick_fontsize + 1)
-            ax.set_xlabel("Predicted Value", fontsize=tick_fontsize)
-            ax.set_ylabel("Residual", fontsize=tick_fontsize)
-            ax.grid(True)
+            group_data = data[grp]
+            yt = (
+                group_data["y_true"]
+                if "y_true" in group_data
+                else group_data["y_actual"]
+            )
+            yp = (
+                group_data["y_prob"] if "y_prob" in group_data else group_data["y_pred"]
+            )
+            _plot_single_residual_ax(
+                axes[i],
+                yt,
+                yp,
+                grp,
+                label_fontsize=tick_fontsize + 2,
+                tick_fontsize=tick_fontsize,
+                alpha=alpha,
+                color=color_map[grp],
+                line_kwargs=line_kwgs,
+                show_centroid=show_centroids,
+            )
 
         for j in range(i + 1, len(axes)):
             axes[j].axis("off")
 
         fig.suptitle(title, fontsize=tick_fontsize + 3)
-        fig.tight_layout(rect=[0, 0, 1, 0.95])
+        plt.tight_layout(rect=[0, 0, 1, 0.95])
+        save_or_show_plot(fig, save_path, filename)
+        return
 
-    else:
-        fig, ax = plt.subplots(figsize=figsize, dpi=dpi)
+    fig, ax = plt.subplots(figsize=figsize, dpi=dpi)
+    legend_entries = []
 
-        legend_entries = []
+    for grp in groups:
+        group_data = data[grp]
+        yt = group_data["y_true"] if "y_true" in group_data else group_data["y_actual"]
+        yp = group_data["y_prob"] if "y_prob" in group_data else group_data["y_pred"]
+        residuals_grp = yt - yp
 
-        for grp in unique_groups:
-            mask = group == grp
-            _scatter_with_centroid(ax, grp, mask, show_centroids=show_centroids)
-
-            y_true_grp = y_true[mask]
-            y_prob_grp = y_prob[mask]
-            residual_grp = y_true_grp - y_prob_grp
-
-            r2 = r2_score(y_true_grp, y_prob_grp)
-            mae = mean_absolute_error(y_true_grp, y_prob_grp)
-            residual_mean = np.mean(residual_grp)
-            n = len(y_true_grp)
-
-            label = (
-                f"R² for {grp} = {r2:.2f}, "
-                f"MAE = {mae:.2f}, "
-                f"Residual μ = {residual_mean:.2f}, "
-                f"n = {n:,}"
-            )
-
-            legend_entries.append((label, color_map[grp]))
-
-        # Format legend
-        custom_handles = [
-            Line2D(
-                [0],
-                [0],
-                marker="o",
-                color="w",
-                label=label,
-                markerfacecolor=color,
-                markersize=8,
-            )
-            for label, color in legend_entries
-        ]
-
-        ax.legend(
-            handles=custom_handles,
-            loc="upper center",
-            bbox_to_anchor=(0.5, -0.25),
-            fontsize=tick_fontsize,
-            ncol=1,
-            title="Group Stats",
+        _plot_single_residual_ax(
+            ax,
+            yt,
+            yp,
+            grp,
+            label_fontsize=tick_fontsize + 2,
+            tick_fontsize=tick_fontsize,
+            alpha=alpha,
+            color=color_map[grp],
+            line_kwargs=line_kwgs,
+            show_centroid=show_centroids,
         )
 
-        ax.axhline(0, linestyle="--", color="gray", linewidth=1)
-        ax.set_title(title, fontsize=tick_fontsize + 2)
-        ax.set_xlabel("Predicted Value", fontsize=tick_fontsize)
-        ax.set_ylabel("Residual (y_true - y_prob)", fontsize=tick_fontsize)
-        ax.grid(True)
-        fig.tight_layout()
+        r2 = r2_score(yt, yp)
+        mae = mean_absolute_error(yt, yp)
+        residual_mean = np.mean(residuals_grp)
+        n = len(yt)
 
-    save_or_show_plot(fig, save_path=save_path, filename=filename)
+        label = (
+            f"R² for {grp} = {r2:.{decimal_places}f}, "
+            f"MAE = {mae:.{decimal_places}f}, "
+            f"Residual μ = {residual_mean:.{decimal_places}f}, "
+            f"n = {n:,}"
+        )
+
+        legend_entries.append((label, color_map[grp]))
+
+    custom_handles = [
+        Line2D(
+            [0],
+            [0],
+            marker="o",
+            color="w",
+            label=label,
+            markerfacecolor=color,
+            markersize=8,
+        )
+        for label, color in legend_entries
+    ]
+
+    ax.legend(
+        handles=custom_handles,
+        loc="upper center",
+        bbox_to_anchor=(0.5, -0.25),
+        fontsize=tick_fontsize,
+        ncol=1,
+        title="Group Stats",
+    )
+    ax.set_title(title, fontsize=tick_fontsize + 2)
+    ax.set_xlabel("Predicted Value", fontsize=tick_fontsize)
+    ax.set_ylabel("Residual (y_true - y_prob)", fontsize=tick_fontsize)
+    ax.grid(True)
+    fig.tight_layout(rect=[0, 0, 1, 0.97])
+    save_or_show_plot(fig, save_path, f"{filename}_overlay")
 
 
 ################################################################################
@@ -244,8 +347,12 @@ def _plot_single_roc_ax(
     line_kwargs=None,
 ):
     """
-    Helper to extract data for `group` and plot ROC curve on the given axis.
+    Helper function to plot the ROC curve for a single group on a given axis.
+
+    Used by higher-level plotting routines to modularize group-wise plotting,
+    apply consistent labeling, and support optional custom styling and legends.
     """
+
     y_true = data[group]["y_true"]
     y_prob = data[group]["y_prob"]
 
@@ -304,15 +411,39 @@ def eq_plot_roc_auc(
     line_kwgs: dict = None,
 ):
     """
-    Plots ROC AUC curves for each group in a fairness dictionary, with support
-    for single group, all groups, or subplot layout. Allows custom styling for curves and discrimination line.
+    Plot ROC AUC curves by group with options for overlay, individual, or
+    subplot layout.
+
+    Parameters
+    ----------
+    data : dict — Dictionary of group-level data with 'y_true' and 'y_prob'.
+    save_path : str, optional — Directory to save the plot; displays if None.
+    filename : str — Base filename for the saved plot.
+    title : str — Title for the plot or figure.
+    figsize : tuple — Figure size as (width, height).
+    dpi : int — Resolution of the figure in dots per inch.
+    label_fontsize : int — Font size for axis labels and titles.
+    tick_fontsize : int — Font size for tick labels and legend text.
+    decimal_places : int — Number of decimal places in AUC and count stats.
+    subplots : bool — If True, plots each group in a separate subplot.
+    n_cols : int — Number of columns in subplot grid.
+    n_rows : int, optional — Number of rows in subplot grid; inferred if not set.
+    group : str, optional — If provided, plots only the specified group.
+    color_by_group : bool — If True, assigns a unique color to each group.
+    curve_kwgs : dict, optional — Per-group curve styling overrides.
+    line_kwgs : dict, optional — Styling for the diagonal reference line.
+
+    Raises
+    ------
+    ValueError — If both `group` and `subplots=True` are specified.
+
+    Returns
+    -------
+    None — Saves or displays the resulting ROC curve plot(s).
     """
 
     if group is not None and subplots:
         raise ValueError("Cannot use subplots=True when a specific group is selected.")
-
-    if title == None:
-        title = ""
 
     valid_data = {g: v for g, v in data.items() if len(set(v["y_true"])) > 1}
     groups = sorted(valid_data.keys())
@@ -422,7 +553,7 @@ def eq_plot_roc_auc(
         )
         fig.tight_layout()
 
-    save_or_show_plot(fig, save_path=save_path, filename=filename)
+        save_or_show_plot(fig, save_path, f"{filename}_overlay")
 
 
 ################################################################################
@@ -444,8 +575,15 @@ def _plot_single_pr_ax(
     line_kwargs=None,
 ):
     """
-    Helper to extract data for `group` and plot PR curve on the given axis.
+    Helper function to plot a Precision-Recall curve for a single group on the
+    given axis.
+
+    Used by grouped PR plotting routines to modularize per-group logic, apply
+    consistent styling,
+    and support optional customization of labels, legends, and baseline
+    reference lines.
     """
+
     y_true = data[group]["y_true"]
     y_prob = data[group]["y_prob"]
 
@@ -502,18 +640,42 @@ def eq_plot_precision_recall(
     line_kwgs: dict = None,
 ):
     """
-    Plots Precision-Recall curves for each group in a fairness dictionary.
+    Plot Precision-Recall curves by group with options for overlay, individual,
+    or subplot layout.
 
-    Supports: single group, overlay, or subplot layout with full styling options.
+    Parameters
+    ----------
+    data : dict — Dictionary of group-level data with 'y_true' and 'y_prob'.
+    save_path : str, optional — Directory to save the plot; displays if None.
+    filename : str — Base filename for the saved plot.
+    title : str — Title for the plot or figure.
+    figsize : tuple — Figure size as (width, height).
+    dpi : int — Resolution of the figure in dots per inch.
+    label_fontsize : int — Font size for axis labels and titles.
+    tick_fontsize : int — Font size for tick labels and legend text.
+    decimal_places : int — Number of decimal places in AP and count stats.
+    subplots : bool — If True, plots each group in a separate subplot.
+    n_cols : int — Number of columns in subplot grid.
+    n_rows : int, optional — Number of rows in subplot grid; inferred if not set.
+    group : str, optional — If provided, plots only the specified group.
+    color_by_group : bool — If True, assigns a unique color to each group.
+    curve_kwgs : dict, optional — Per-group curve styling overrides.
+    line_kwgs : dict, optional — Styling for the baseline reference line.
+
+    Raises
+    ------
+    ValueError — If both `group` and `subplots=True` are specified.
+
+    Returns
+    -------
+    None — Saves or displays the resulting PR curve plot(s).
     """
+
     if group is not None and subplots:
         raise ValueError("Cannot use subplots=True when a specific group is selected.")
 
     valid_data = {g: v for g, v in data.items() if len(set(v["y_true"])) > 1}
     groups = sorted(valid_data.keys())
-
-    if title == None:
-        title = ""
 
     if line_kwgs is None:
         line_kwgs = {"color": "k", "linestyle": "--", "linewidth": 1}
@@ -567,7 +729,12 @@ def eq_plot_precision_recall(
                 f"showing first {n_rows * n_cols} of {len(groups)} groups."
             )
 
-        fig, axes = plt.subplots(nrows=n_rows, ncols=n_cols, figsize=figsize, dpi=dpi)
+        fig, axes = plt.subplots(
+            nrows=n_rows,
+            ncols=n_cols,
+            figsize=figsize,
+            dpi=dpi,
+        )
         axes = np.atleast_1d(axes).flatten()
 
         for i, g in enumerate(groups):
@@ -619,7 +786,7 @@ def eq_plot_precision_recall(
         )
         fig.tight_layout()
 
-    save_or_show_plot(fig, save_path=save_path, filename=filename)
+        save_or_show_plot(fig, save_path, f"{filename}_overlay")
 
 
 ################################################################################
@@ -641,6 +808,14 @@ def _plot_single_calibration_ax(
     curve_kwargs=None,
     line_kwargs=None,
 ):
+    """
+    Helper function to plot a calibration curve for a single group on the given axis.
+
+    Used by group-level calibration routines to modularize plotting logic,
+    include Brier score summaries, and apply consistent styling, legends, and
+    reference line.
+    """
+
     y_true = data[group]["y_true"]
     y_prob = data[group]["y_prob"]
 
@@ -700,16 +875,40 @@ def eq_calibration_curve_plot(
     line_kwgs: dict = None,
 ):
     """
-    Plots calibration curves for each group in a fairness dictionary.
+    Plot calibration curves by group with options for overlay, individual, or
+    subplot layout.
 
-    Parameters match ROC and PR curve plotters for consistency.
+    Parameters
+    ----------
+    data : dict — Dictionary of group-level data with 'y_true' and 'y_prob'.
+    n_bins : int — Number of bins to compute calibration curve (default: 10).
+    save_path : str, optional — Directory to save the plot; displays if None.
+    filename : str — Base filename for the saved plot.
+    title : str — Title for the plot or figure.
+    figsize : tuple — Figure size as (width, height).
+    dpi : int — Resolution of the figure in dots per inch.
+    label_fontsize : int — Font size for axis labels and titles.
+    tick_fontsize : int — Font size for tick labels and legend text.
+    decimal_places : int — Decimal places for Brier score and axis values.
+    subplots : bool — If True, plots each group in a separate subplot.
+    n_cols : int — Number of columns in subplot grid.
+    n_rows : int, optional — Number of rows in subplot grid; inferred if not set.
+    group : str, optional — If provided, plots only the specified group.
+    color_by_group : bool — If True, assigns a unique color to each group.
+    curve_kwgs : dict, optional — Per-group curve styling overrides.
+    line_kwgs : dict, optional — Styling for the diagonal reference line.
+
+    Raises
+    ------
+    ValueError — If both `group` and `subplots=True` are specified.
+
+    Returns
+    -------
+    None — Saves or displays the resulting calibration plot(s).
     """
 
     if group is not None and subplots:
         raise ValueError("Cannot use subplots=True when a specific group is selected.")
-
-    if title == None:
-        title = ""
 
     valid_data = {g: v for g, v in data.items() if len(set(v["y_true"])) > 1}
     groups = sorted(valid_data.keys())
@@ -819,7 +1018,7 @@ def eq_calibration_curve_plot(
         )
         fig.tight_layout()
 
-    save_or_show_plot(fig, save_path=save_path, filename=filename)
+        save_or_show_plot(fig, save_path, f"{filename}_overlay")
 
 
 ################################################################################
@@ -828,6 +1027,14 @@ def eq_calibration_curve_plot(
 
 
 def get_layout(n_metrics, max_cols=None, figsize=None, strict_layout=True):
+    """
+    Determine subplot layout (rows, columns, figure size) for plotting multiple
+    metrics.
+
+    Supports both strict and flexible layout modes, with optional control over
+    column count and figure dimensions to ensure clean, readable visualizations.
+    """
+
     if strict_layout:
         if max_cols is None:
             max_cols = 6  # fallback default
@@ -868,6 +1075,38 @@ def eq_disparity_metrics_plot(
     figsize=None,
     **plot_kwargs,
 ):
+    """
+    Plot disparity metrics across categories using violin, box, or similar
+    seaborn-based plots.
+
+    Parameters
+    ----------
+    dispa : list — List of dictionaries containing group-wise metric values.
+    metric_cols : list — Names of the metrics to visualize (e.g., TPR disparity,
+    FPR disparity).
+    name : str — Prefix used for subplot titles.
+    plot_kind : str — Seaborn plot type to use (e.g., 'violinplot', 'boxplot').
+    categories : list or str — List of category keys to include; use "all" for all keys.
+    include_legend : bool — Whether to display a color-coded legend.
+    cmap : str — Matplotlib colormap name for group coloring (default: "tab20c").
+    save_path : str, optional — Directory to save the resulting plot; displays if None.
+    filename : str — Base filename for the saved plot.
+    max_cols : int, optional — Maximum number of subplot columns.
+    strict_layout : bool — If True, enforces fixed figure height per row.
+    figsize : tuple, optional — Custom figure size; overrides automatic layout.
+    **plot_kwargs : dict — Additional keyword arguments passed to the seaborn plot
+    function.
+
+    Raises
+    ------
+    TypeError — If `dispa` is not a list.
+    ValueError — If `plot_kind` is not a valid seaborn plot type.
+
+    Returns
+    -------
+    None — Saves or displays the resulting disparity metrics plot.
+    """
+
     # Ensure necessary columns are in the DataFrame
     if type(dispa) is not list:
         raise TypeError("dispa should be a list")
@@ -972,7 +1211,88 @@ def eq_disparity_metrics_plot(
         w_pad=2, h_pad=2, rect=[0.01, 0.01, 1.01, 1]
     )  # Adjust rect to make space for the legend and reduce white space
 
-    save_or_show_plot(fig, save_path=save_path, filename=filename)
+    save_or_show_plot(fig, save_path, f"{filename}_overlay")
+
+
+################################################################################
+# Bootstrapped ROC AUC and Precision-Recall Helper
+################################################################################
+
+
+def _plot_single_bootstrapped_curve_ax(
+    ax,
+    y_array,
+    common_grid,
+    group,
+    label_prefix="AUCPR",
+    label_fontsize=12,
+    tick_fontsize=10,
+    bar_every=10,
+    curve_kwargs=None,
+    fill_kwargs=None,
+    line_kwargs=None,
+    show_grid=True,
+    x_label="Recall",
+    y_label="Precision",
+    show_reference_line=False,
+):
+    """
+    Helper function to plot a bootstrapped performance curve with confidence
+    bands for a single group.
+
+    Used to visualize variability across bootstrapped iterations, including
+    error bars, shaded confidence intervals, and optional reference lines
+    (e.g., for AUROC).
+    """
+
+    mean_y = np.mean(y_array, axis=0)
+    lower = np.percentile(y_array, 2.5, axis=0)
+    upper = np.percentile(y_array, 97.5, axis=0)
+    aucs = [np.trapz(y, common_grid) for y in y_array]
+    mean_auc = np.mean(aucs)
+    lower_auc = np.percentile(aucs, 2.5)
+    upper_auc = np.percentile(aucs, 97.5)
+    label = f"{group} (Mean {label_prefix} = {mean_auc:.2f} [{lower_auc:.2f}, {upper_auc:.2f}])"
+
+    curve_kwargs = curve_kwargs or {}
+    fill_kwargs = fill_kwargs or {
+        "alpha": 0.2,
+        "color": curve_kwargs.get("color", "#1f77b4"),
+    }
+    line_kwargs = line_kwargs or {"color": "gray", "linestyle": "--", "linewidth": 1}
+
+    ax.plot(common_grid, mean_y, label=label, **curve_kwargs)
+    ax.fill_between(common_grid, lower, upper, **fill_kwargs)
+
+    for j in range(0, len(common_grid), int(np.ceil(len(common_grid) / bar_every))):
+        x_val = common_grid[j]
+        mean_val = mean_y[j]
+        err_low = mean_val - lower[j]
+        err_high = upper[j] - mean_val
+        ax.errorbar(
+            x_val,
+            mean_val,
+            yerr=[[err_low], [err_high]],
+            fmt="o",
+            color=curve_kwargs.get("color", "#1f77b4"),
+            markersize=3,
+            capsize=2,
+            elinewidth=1,
+            alpha=0.6,
+        )
+
+    if show_reference_line and label_prefix == "AUROC":
+        ax.plot([0, 1], [0, 1], **line_kwargs)
+
+    ax.set_xlim(0, 1)
+    ax.set_ylim(0, 1)
+    ax.set_title(group, fontsize=label_fontsize)
+    ax.set_xlabel(x_label, fontsize=label_fontsize)
+    ax.set_ylabel(y_label, fontsize=label_fontsize)
+    ax.tick_params(axis="both", labelsize=tick_fontsize)
+    ax.legend(loc="lower right", fontsize=tick_fontsize)
+    if show_grid:
+        ax.grid(True)
 
 
 ################################################################################
@@ -983,32 +1303,72 @@ def eq_disparity_metrics_plot(
 def eq_plot_bootstrapped_roc_curves(
     boot_sliced_data,
     title="Bootstrapped ROC Curves by Group",
-    filename="roc_curves_by_group_grid",
+    filename="roc_curves_by_group",
     save_path=None,
     dpi=100,
-    figsize_per_plot=(6, 5),
+    figsize=(6, 5),
     common_grid=np.linspace(0, 1, 100),
-    alpha_fill=0.2,
-    color="#1f77b4",
     bar_every=10,
+    label_fontsize=12,
+    tick_fontsize=10,
+    curve_kwgs=None,
+    fill_kwgs=None,
+    line_kwgs=None,
+    subplots=False,
+    n_cols=2,
+    n_rows=None,
+    group=None,
+    show_grid=False,
+    color_by_group=True,
+    uniform_color: str = None,
 ):
     """
-    Plot bootstrapped ROC curves with shaded confidence intervals,
-    one group per subplot (grid layout).
+    Plot bootstrapped ROC curves by group, with support for overlay, subplots,
+    or single-group display.
 
     Parameters
     ----------
-    boot_sliced_data : list of dicts
-        Output of EquiBoots.slicer() with bootstrap_flag=True.
-    common_grid : np.ndarray
-        Common FPR grid to interpolate TPRs across bootstraps.
-    figsize_per_plot : tuple
-        Size (w, h) of each subplot.
+    boot_sliced_data : list — List of dictionaries with 'y_true' and 'y_prob'
+    per group per bootstrap iteration.
+    title : str — Title for the plot or figure.
+    filename : str — Base filename for the saved plot.
+    save_path : str, optional — Directory to save the resulting plot; displays if None.
+    dpi : int — Resolution of the figure in dots per inch.
+    figsize : tuple — Base figure size for each subplot (width, height).
+    common_grid : np.ndarray — X-axis values to interpolate across (typically 0 to 1).
+    bar_every : int — Frequency of vertical error bars along the curve.
+    label_fontsize : int — Font size for axis labels and titles.
+    tick_fontsize : int — Font size for tick labels and legend text.
+    curve_kwgs : dict, optional — Per-group overrides for the line style of the
+    mean curve.
+    fill_kwgs : dict, optional — Per-group overrides for confidence interval shading.
+    line_kwgs : dict, optional — Style for the reference line (diagonal).
+    subplots : bool — If True, creates subplots per group; otherwise overlays
+    all curves.
+    n_cols : int — Number of subplot columns when subplots=True.
+    n_rows : int, optional — Number of subplot rows; inferred if not set.
+    group : str, optional — If provided, plots only the specified group.
+    show_grid : bool — Whether to enable grid on each subplot.
+    color_by_group : bool — If True, assigns unique colors per group.
+    uniform_color : str, optional — If provided, applies this color to all
+    groups (overrides palette).
+
+    Raises
+    ------
+    ValueError — If both `group` and `subplots=True` are specified.
+
+    Returns
+    -------
+    None — Saves or displays the resulting ROC curve plot(s).
     """
+
+    if group is not None and subplots:
+        raise ValueError("Cannot use subplots=True when a specific group is selected.")
+
     group_fpr_tpr = {}
 
     for bootstrap_iter in boot_sliced_data:
-        for group, values in bootstrap_iter.items():
+        for grp, values in bootstrap_iter.items():
             y_true = values["y_true"]
             y_prob = values["y_prob"]
 
@@ -1024,84 +1384,150 @@ def eq_plot_bootstrapped_roc_curves(
             except ValueError:
                 tpr_interp = np.full_like(common_grid, np.nan)
 
-            if group not in group_fpr_tpr:
-                group_fpr_tpr[group] = []
+            if grp not in group_fpr_tpr:
+                group_fpr_tpr[grp] = []
 
-            group_fpr_tpr[group].append(tpr_interp)
+            group_fpr_tpr[grp].append(tpr_interp)
 
     group_names = sorted(group_fpr_tpr.keys())
-    num_groups = len(group_names)
-    n_cols = 2
-    n_rows = math.ceil(num_groups / n_cols)
-    figsize = (figsize_per_plot[0] * n_cols, figsize_per_plot[1] * n_rows)
 
-    fig, axes = plt.subplots(
-        n_rows,
-        n_cols,
-        figsize=figsize,
-        dpi=dpi,
-    )
-    axes = axes.flatten()
+    if color_by_group:
+        palette = plt.get_cmap("tab10").colors
+        color_map = {g: palette[i % len(palette)] for i, g in enumerate(group_names)}
+    else:
+        fallback_color = uniform_color or "#1f77b4"
+        color_map = {g: fallback_color for g in group_names}
 
-    for i, group in enumerate(group_names):
-        ax = axes[i]
-        tpr_array = np.vstack(
-            [tpr for tpr in group_fpr_tpr[group] if not np.isnan(tpr).any()]
+    def get_plot_kwargs(grp):
+        group_curve_kwgs = {"color": color_map[grp]}
+        if curve_kwgs and grp in curve_kwgs:
+            group_curve_kwgs.update(curve_kwgs[grp])
+
+        group_fill_kwgs = {"alpha": 0.2, "color": color_map[grp]}
+        if fill_kwgs and grp in fill_kwgs:
+            group_fill_kwgs.update(fill_kwgs[grp])
+
+        return group_curve_kwgs, group_fill_kwgs
+
+    if group:
+        if group not in group_fpr_tpr:
+            print(f"[Warning] Group '{group}' not found in bootstrapped data.")
+            return
+
+        fig, ax = plt.subplots(figsize=figsize, dpi=dpi)
+        y_array = np.vstack([y for y in group_fpr_tpr[group] if not np.isnan(y).any()])
+        group_curve_kwgs, group_fill_kwgs = get_plot_kwargs(group)
+
+        _plot_single_bootstrapped_curve_ax(
+            ax=ax,
+            y_array=y_array,
+            common_grid=common_grid,
+            group=group,
+            label_prefix="AUROC",
+            label_fontsize=label_fontsize,
+            tick_fontsize=tick_fontsize,
+            bar_every=bar_every,
+            curve_kwargs=group_curve_kwgs,
+            fill_kwargs=group_fill_kwgs,
+            line_kwargs=line_kwgs,
+            show_grid=show_grid,
+            show_reference_line=True,
+            x_label="False Positive Rate",
+            y_label="True Positive Rate",
         )
-        if tpr_array.shape[0] == 0:
-            continue
 
-        mean_tpr = np.mean(tpr_array, axis=0)
-        lower = np.percentile(tpr_array, 2.5, axis=0)
-        upper = np.percentile(tpr_array, 97.5, axis=0)
-        aucs = [np.trapz(tpr, common_grid) for tpr in tpr_array]
-        mean_auc = np.mean(aucs)
-        lower_auc = np.percentile(aucs, 2.5)
-        upper_auc = np.percentile(aucs, 97.5)
-        auc_str = f"Mean AUROC = {mean_auc:.2f} [{lower_auc:.2f}, {upper_auc:.2f}]"
+        fig.suptitle(f"{title} ({group})", fontsize=label_fontsize + 2)
+        plt.tight_layout(rect=[0, 0, 1, 0.97])
 
-        ax.plot(common_grid, mean_tpr, label=auc_str, color=color)
-        ax.fill_between(
-            common_grid,
-            lower,
-            upper,
-            alpha=alpha_fill,
-            color=color,
-        )
-
-        for j in range(0, len(common_grid), int(np.ceil(len(common_grid) / bar_every))):
-            fpr_val = common_grid[j]
-            mean_val = mean_tpr[j]
-            err_low = mean_val - lower[j]
-            err_high = upper[j] - mean_val
-
-            ax.errorbar(
-                fpr_val,
-                mean_val,
-                yerr=[[err_low], [err_high]],
-                fmt="o",
-                color=color,
-                markersize=3,
-                capsize=2,
-                elinewidth=1,
-                alpha=0.6,
+    elif subplots:
+        num_groups = len(group_names)
+        if n_rows is None:
+            n_rows = int(np.ceil(num_groups / n_cols))
+        elif n_rows * n_cols < num_groups:
+            print(
+                f"[Warning] Grid size {n_rows}x{n_cols} only supports {n_rows * n_cols} plots; "
+                f"showing first {n_rows * n_cols} of {num_groups} groups."
             )
 
-        ax.plot([0, 1], [0, 1], linestyle="--", color="gray", lw=1)
-        ax.set_xlim(0, 1)
-        ax.set_ylim(0, 1)
-        ax.set_title(group, fontsize=12)
-        ax.set_xlabel("False Positive Rate")
-        ax.set_ylabel("True Positive Rate")
-        ax.legend(loc="lower right", fontsize=8)
+        fig_w = figsize[0] * n_cols
+        fig_h = figsize[1] * n_rows
+        fig, axes = plt.subplots(n_rows, n_cols, figsize=(fig_w, fig_h), dpi=dpi)
+        axes = axes.flatten()
 
-    for j in range(i + 1, len(axes)):
-        axes[j].axis("off")
+        for i, grp in enumerate(group_names):
+            if i >= len(axes):
+                break
 
-    fig.suptitle(title, fontsize=14)
-    plt.tight_layout(rect=[0, 0, 1, 0.97])
+            ax = axes[i]
+            y_array = np.vstack(
+                [y for y in group_fpr_tpr[grp] if not np.isnan(y).any()]
+            )
+            group_curve_kwgs, group_fill_kwgs = get_plot_kwargs(grp)
 
-    save_or_show_plot(fig, save_path=save_path, filename=filename)
+            _plot_single_bootstrapped_curve_ax(
+                ax=ax,
+                y_array=y_array,
+                common_grid=common_grid,
+                group=grp,
+                label_prefix="AUROC",
+                label_fontsize=label_fontsize,
+                tick_fontsize=tick_fontsize,
+                bar_every=bar_every,
+                curve_kwargs=group_curve_kwgs,
+                fill_kwargs=group_fill_kwgs,
+                line_kwargs=line_kwgs,
+                show_grid=show_grid,
+                show_reference_line=True,
+                x_label="False Positive Rate",
+                y_label="True Positive Rate",
+            )
+
+        for j in range(i + 1, len(axes)):
+            axes[j].axis("off")
+
+        fig.suptitle(title, fontsize=label_fontsize + 2)
+        plt.tight_layout(rect=[0, 0, 1, 0.97])
+
+    else:
+        fig, ax = plt.subplots(figsize=figsize, dpi=dpi)
+
+        for grp in group_names:
+            y_array = np.vstack(
+                [y for y in group_fpr_tpr[grp] if not np.isnan(y).any()]
+            )
+            if y_array.shape[0] == 0:
+                continue
+
+            group_curve_kwgs, group_fill_kwgs = get_plot_kwargs(grp)
+
+            _plot_single_bootstrapped_curve_ax(
+                ax=ax,
+                y_array=y_array,
+                common_grid=common_grid,
+                group=grp,
+                label_prefix="AUROC",
+                label_fontsize=label_fontsize,
+                tick_fontsize=tick_fontsize,
+                bar_every=bar_every,
+                curve_kwargs=group_curve_kwgs,
+                fill_kwargs=group_fill_kwgs,
+                line_kwargs=line_kwgs,
+                show_grid=show_grid,
+                show_reference_line=True,
+                x_label="False Positive Rate",
+                y_label="True Positive Rate",
+            )
+
+        ax.set_title(title, fontsize=label_fontsize + 2)
+        ax.legend(
+            loc="upper center",
+            bbox_to_anchor=(0.5, -0.25),
+            fontsize=tick_fontsize,
+            ncol=1,
+        )
+        fig.tight_layout(rect=[0, 0, 1, 0.97])
+
+        save_or_show_plot(fig, save_path, f"{filename}_overlay")
 
 
 ################################################################################
@@ -1112,32 +1538,70 @@ def eq_plot_bootstrapped_roc_curves(
 def eq_plot_bootstrapped_pr_curves(
     boot_sliced_data,
     title="Bootstrapped PR Curves by Group",
-    filename="roc_curves_by_group_grid",
+    filename="pr_curves_by_group",
     save_path=None,
     dpi=100,
-    figsize_per_plot=(6, 5),
+    figsize=(8, 6),
     common_grid=np.linspace(0, 1, 100),
-    alpha_fill=0.2,
-    color="#1f77b4",
     bar_every=10,
+    label_fontsize=12,
+    tick_fontsize=10,
+    curve_kwgs=None,
+    fill_kwgs=None,
+    line_kwgs=None,
+    subplots=False,
+    n_cols=2,
+    n_rows=None,
+    group=None,
+    show_grid=True,
+    color_by_group=True,
+    uniform_color: str = None,
 ):
     """
-    Plot bootstrapped ROC curves with shaded confidence intervals,
-    one group per subplot (grid layout).
+    Plot bootstrapped Precision-Recall (PR) curves by group with overlay,
+    subplots, or single-group view.
 
     Parameters
     ----------
-    boot_sliced_data : list of dicts
-        Output of EquiBoots.slicer() with bootstrap_flag=True.
-    common_grid : np.ndarray
-        Common FPR grid to interpolate TPRs across bootstraps.
-    figsize_per_plot : tuple
-        Size (w, h) of each subplot.
+    boot_sliced_data : list — List of dicts with 'y_true' and 'y_prob' per group
+    per bootstrap iteration.
+    title : str — Title of the plot or figure.
+    filename : str — Base filename to use when saving the plot.
+    save_path : str, optional — Directory path to save the plot; shows plot if None.
+    dpi : int — Dots per inch for figure resolution.
+    figsize : tuple — Base size for each subplot or overlay figure.
+    common_grid : np.ndarray — Grid of recall values to interpolate PR curves on.
+    bar_every : int — Controls frequency of error bars plotted on the curve.
+    label_fontsize : int — Font size for titles and axis labels.
+    tick_fontsize : int — Font size for tick marks and legend text.
+    curve_kwgs : dict, optional — Per-group line styling for the mean PR curve.
+    fill_kwgs : dict, optional — Per-group fill styling for confidence intervals.
+    line_kwgs : dict, optional — Line style for any reference lines.
+    subplots : bool — Whether to display PR curves in subplots per group.
+    n_cols : int — Number of columns when using subplots.
+    n_rows : int, optional — Number of subplot rows; inferred if None.
+    group : str, optional — If specified, plots only this group.
+    show_grid : bool — Whether to enable grid lines in each subplot.
+    color_by_group : bool — If True, assigns a distinct color per group.
+    uniform_color : str, optional — Use the same color across groups, overrides
+    palette.
+
+    Raises
+    ------
+    ValueError — If both `group` and `subplots=True` are set simultaneously.
+
+    Returns
+    -------
+    None — Displays or saves the bootstrapped PR curve visualization.
     """
-    group_pr = {}
+
+    if group is not None and subplots:
+        raise ValueError("Cannot use subplots=True when a specific group is selected.")
+
+    group_precision = {}
 
     for bootstrap_iter in boot_sliced_data:
-        for group, values in bootstrap_iter.items():
+        for grp, values in bootstrap_iter.items():
             y_true = values["y_true"]
             y_prob = values["y_prob"]
 
@@ -1149,91 +1613,158 @@ def eq_plot_bootstrapped_pr_curves(
                     bounds_error=False,
                     fill_value=(0, 1),
                 )
-                precision_interp_func = interp(common_grid)
+                precision_interp = interp(common_grid)
             except ValueError:
-                precision_interp_func = np.full_like(common_grid, np.nan)
+                precision_interp = np.full_like(common_grid, np.nan)
 
-            if group not in group_pr:
-                group_pr[group] = []
+            if grp not in group_precision:
+                group_precision[grp] = []
 
-            group_pr[group].append(precision_interp_func)
+            group_precision[grp].append(precision_interp)
 
-    group_names = sorted(group_pr.keys())
-    num_groups = len(group_names)
-    n_cols = 2
-    n_rows = math.ceil(num_groups / n_cols)
-    figsize = (figsize_per_plot[0] * n_cols, figsize_per_plot[1] * n_rows)
+    group_names = sorted(group_precision.keys())
 
-    fig, axes = plt.subplots(
-        n_rows,
-        n_cols,
-        figsize=figsize,
-        dpi=dpi,
-    )
-    axes = axes.flatten()
+    if color_by_group:
+        palette = plt.get_cmap("tab10").colors
+        color_map = {g: palette[i % len(palette)] for i, g in enumerate(group_names)}
+    else:
+        fallback_color = uniform_color or "#1f77b4"
+        color_map = {g: fallback_color for g in group_names}
 
-    for i, group in enumerate(group_names):
-        ax = axes[i]
-        precision_array = np.vstack(
-            [
-                precision
-                for precision in group_pr[group]
-                if not np.isnan(precision).any()
-            ]
+    def get_plot_kwargs(grp):
+        group_curve_kwgs = {"color": color_map[grp]}
+        if curve_kwgs and grp in curve_kwgs:
+            group_curve_kwgs.update(curve_kwgs[grp])
+
+        group_fill_kwgs = {"alpha": 0.2, "color": color_map[grp]}
+        if fill_kwgs and grp in fill_kwgs:
+            group_fill_kwgs.update(fill_kwgs[grp])
+
+        return group_curve_kwgs, group_fill_kwgs
+
+    if group:
+        if group not in group_precision:
+            print(f"[Warning] Group '{group}' not found in bootstrapped data.")
+            return
+
+        fig, ax = plt.subplots(figsize=figsize, dpi=dpi)
+        y_array = np.vstack(
+            [y for y in group_precision[group] if not np.isnan(y).any()]
         )
-        if precision_array.shape[0] == 0:
-            continue
+        group_curve_kwgs, group_fill_kwgs = get_plot_kwargs(group)
 
-        mean_precision = np.mean(precision_array, axis=0)
-        lower = np.percentile(precision_array, 2.5, axis=0)
-        upper = np.percentile(precision_array, 97.5, axis=0)
-        aucs = [np.trapz(tpr, common_grid) for tpr in precision_array]
-        mean_auc = np.mean(aucs)
-        lower_auc = np.percentile(aucs, 2.5)
-        upper_auc = np.percentile(aucs, 97.5)
-        auc_str = f"Mean AUCPR = {mean_auc:.2f} [{lower_auc:.2f}, {upper_auc:.2f}]"
-
-        ax.plot(common_grid, mean_precision, label=auc_str, color=color)
-        ax.fill_between(
-            common_grid,
-            lower,
-            upper,
-            alpha=alpha_fill,
-            color=color,
+        _plot_single_bootstrapped_curve_ax(
+            ax=ax,
+            y_array=y_array,
+            common_grid=common_grid,
+            group=group,
+            label_prefix="AUCPR",
+            label_fontsize=label_fontsize,
+            tick_fontsize=tick_fontsize,
+            bar_every=bar_every,
+            curve_kwargs=group_curve_kwgs,
+            fill_kwargs=group_fill_kwgs,
+            line_kwargs=line_kwgs,
+            show_grid=show_grid,
+            show_reference_line=False,
+            x_label="Recall",
+            y_label="Precision",
         )
 
-        for j in range(0, len(common_grid), int(np.ceil(len(common_grid) / bar_every))):
-            fpr_val = common_grid[j]
-            mean_val = mean_precision[j]
-            err_low = mean_val - lower[j]
-            err_high = upper[j] - mean_val
+        fig.suptitle(f"{title} ({group})", fontsize=label_fontsize + 2)
+        plt.tight_layout(rect=[0, 0, 1, 0.97])
+        save_or_show_plot(fig, save_path=save_path, filename=f"{filename}_{group}")
 
-            ax.errorbar(
-                fpr_val,
-                mean_val,
-                yerr=[[err_low], [err_high]],
-                fmt="o",
-                color=color,
-                markersize=3,
-                capsize=2,
-                elinewidth=1,
-                alpha=0.6,
+    elif subplots:
+        num_groups = len(group_names)
+        if n_rows is None:
+            n_rows = int(np.ceil(num_groups / n_cols))
+        elif n_rows * n_cols < num_groups:
+            print(
+                f"[Warning] Grid size {n_rows}x{n_cols} only supports {n_rows * n_cols} plots; "
+                f"showing first {n_rows * n_cols} of {num_groups} groups."
             )
 
-        ax.set_xlim(0, 1)
-        ax.set_ylim(0, 1)
-        ax.set_title(group, fontsize=12)
-        ax.set_xlabel("Recall")
-        ax.set_ylabel("Precision")
-        ax.legend(loc="lower right", fontsize=8)
+        fig_w = figsize[0] * n_cols
+        fig_h = figsize[1] * n_rows
+        fig, axes = plt.subplots(n_rows, n_cols, figsize=(fig_w, fig_h), dpi=dpi)
+        axes = axes.flatten()
 
-    for j in range(i + 1, len(axes)):
-        axes[j].axis("off")
+        for i, grp in enumerate(group_names):
+            if i >= len(axes):
+                break
 
-    fig.suptitle(title, fontsize=14)
-    plt.tight_layout(rect=[0, 0, 1, 0.97])
+            ax = axes[i]
+            y_array = np.vstack(
+                [y for y in group_precision[grp] if not np.isnan(y).any()]
+            )
+            group_curve_kwgs, group_fill_kwgs = get_plot_kwargs(grp)
 
-    save_or_show_plot(fig, save_path=save_path, filename=filename)
+            _plot_single_bootstrapped_curve_ax(
+                ax=ax,
+                y_array=y_array,
+                common_grid=common_grid,
+                group=grp,
+                label_prefix="AUCPR",
+                label_fontsize=label_fontsize,
+                tick_fontsize=tick_fontsize,
+                bar_every=bar_every,
+                curve_kwargs=group_curve_kwgs,
+                fill_kwargs=group_fill_kwgs,
+                line_kwargs=line_kwgs,
+                show_grid=show_grid,
+                show_reference_line=False,
+                x_label="Recall",
+                y_label="Precision",
+            )
+
+        for j in range(i + 1, len(axes)):
+            axes[j].axis("off")
+
+        fig.suptitle(title, fontsize=label_fontsize + 2)
+        plt.tight_layout(rect=[0, 0, 1, 0.97])
+        save_or_show_plot(fig, save_path=save_path, filename=filename)
+
+    else:
+        fig, ax = plt.subplots(figsize=figsize, dpi=dpi)
+
+        for grp in group_names:
+            y_array = np.vstack(
+                [y for y in group_precision[grp] if not np.isnan(y).any()]
+            )
+            if y_array.shape[0] == 0:
+                continue
+
+            group_curve_kwgs, group_fill_kwgs = get_plot_kwargs(grp)
+
+            _plot_single_bootstrapped_curve_ax(
+                ax=ax,
+                y_array=y_array,
+                common_grid=common_grid,
+                group=grp,
+                label_prefix="AUCPR",
+                label_fontsize=label_fontsize,
+                tick_fontsize=tick_fontsize,
+                bar_every=bar_every,
+                curve_kwargs=group_curve_kwgs,
+                fill_kwargs=group_fill_kwgs,
+                line_kwargs=line_kwgs,
+                show_grid=show_grid,
+                show_reference_line=False,
+                x_label="Recall",
+                y_label="Precision",
+            )
+
+        ax.set_title(title, fontsize=label_fontsize + 2)
+        ax.legend(
+            loc="upper center",
+            bbox_to_anchor=(0.5, -0.25),
+            fontsize=tick_fontsize,
+            ncol=1,
+        )
+        fig.tight_layout(rect=[0, 0, 1, 0.97])
+
+        save_or_show_plot(fig, save_path, f"{filename}_overlay")
 
 
 ################################################################################
@@ -1244,193 +1775,223 @@ def eq_plot_bootstrapped_pr_curves(
 def eq_plot_bootstrapped_calibration_curves(
     boot_sliced_data,
     title="Bootstrapped Calibration Curves by Group",
-    filename="calibration_curves_by_group_grid",
+    filename="calibration_curves_by_group",
     save_path=None,
     dpi=100,
+    figsize=(8, 6),
     figsize_per_plot=(6, 5),
     n_bins=10,
+    bar_every=10,
+    label_fontsize=12,
+    tick_fontsize=10,
     alpha_fill=0.2,
-    color="#1f77b4",
+    curve_kwgs=None,
+    fill_kwgs=None,
+    line_kwgs=None,
+    subplots=False,
+    n_cols=2,
+    n_rows=None,
+    group=None,
+    color_by_group=True,
+    uniform_color="#1f77b4",
     decimal_places=2,
 ):
     """
-    Plot bootstrapped calibration curves (fraction of positives vs. predicted
-    probability) with shaded confidence intervals, one group per subplot
-    (grid layout). The curves are computed using fixed bins so that they remain
-    jagged (i.e., not smoothed).
+    Plot bootstrapped calibration curves by group with support for overlay,
+    subplots, or single-group view.
 
     Parameters
     ----------
-    boot_sliced_data : list of dict
-        Each element in the list represents one bootstrap iteration.
-        Each element is a dictionary of the form:
-            {
-              "groupA": {"y_true": np.array([...]), "y_prob": np.array([...])},
-              "groupB": {"y_true": np.array([...]), "y_prob": np.array([...])},
-              ...
-            }
-    title : str
-        Plot title.
-    filename : str
-        Name of the file to save (without extension).
-    save_path : str or None
-        Directory to save the plot. If None, the plot is shown instead of saved.
-    dpi : int
-        Dots per inch (plot resolution).
-    figsize_per_plot : tuple
-        Size (width, height) for each subplot.
-    n_bins : int
-        Number of bins to use for the calibration curve.
-    alpha_fill : float
-        Alpha (transparency) for the confidence interval shading.
-    color : str
-        Color for the main curve and shading.
-    n_bars : int
-        Approximate number of points at which to plot error bars.
-    decimal_places : int
-        Decimal precision for displayed metrics (e.g., Brier scores).
+    boot_sliced_data : list — List of dicts per bootstrap iteration with 'y_true'
+    and 'y_prob' keys for each group.
+    title : str — Title for the overall plot or subplot grid.
+    filename : str — Base filename to use when saving the figure.
+    save_path : str, optional — Directory to save the plot; if None, the figure
+    is displayed.
+    dpi : int — Figure resolution in dots per inch.
+    figsize : tuple — Size of the overall figure (used in overlay or single-group modes).
+    figsize_per_plot : tuple — Size per subplot when using subplots.
+    n_bins : int — Number of bins used for calibration binning.
+    bar_every : int — Frequency of error bars shown on calibration curve points.
+    label_fontsize : int — Font size for axis labels and titles.
+    tick_fontsize : int — Font size for tick marks and legend text.
+    alpha_fill : float — Opacity for the confidence interval band.
+    curve_kwgs : dict, optional — Per-group styling for the mean calibration line.
+    fill_kwgs : dict, optional — Per-group styling for the confidence band.
+    line_kwgs : dict, optional — Per-group styling for the diagonal reference line.
+    subplots : bool — Whether to generate subplot layout by group.
+    n_cols : int — Number of columns in the subplot grid.
+    n_rows : int, optional — Number of rows in the subplot grid; inferred if None.
+    group : str, optional — If specified, plots calibration for this group only.
+    color_by_group : bool — If True, assigns distinct colors to each group.
+    uniform_color : str — Fallback color to use when color_by_group is False.
+    decimal_places : int — Number of decimals to round metrics in plot labels.
+
+    Raises
+    ------
+    ValueError — If both `group` and `subplots=True` are passed simultaneously.
 
     Returns
     -------
-    matplotlib.figure.Figure
-        The figure containing the subplots.
+    None — Displays or saves the bootstrapped calibration curve visualization.
     """
-    # Create fixed bin edges and corresponding bin centers
+
+    if group is not None and subplots:
+        raise ValueError("Cannot use subplots=True when a specific group is selected.")
+
     bins = np.linspace(0, 1, n_bins + 1)
     bin_centers = (bins[:-1] + bins[1:]) / 2
 
-    # Dictionaries to hold calibration curves and Brier scores for each group
-    group_cal = (
-        {}
-    )  # Will store an array of fraction_of_positives per bootstrap iteration
-    group_brier = {}  # Will store the Brier score per bootstrap iteration
+    group_cal, group_brier = {}, {}
 
-    # 1. Gather calibration data for each bootstrap iteration
     for bootstrap_iter in boot_sliced_data:
-        for group, values in bootstrap_iter.items():
-            y_true = values["y_true"]
-            y_prob = values["y_prob"]
+        for grp, values in bootstrap_iter.items():
+            y_true, y_prob = values["y_true"], values["y_prob"]
 
-            # Compute fraction of positives in each fixed bin
-            frac_positives = np.empty(n_bins)
-            frac_positives[:] = np.nan  # initialize as NaN
+            frac_positives = np.full(n_bins, np.nan)
             for i in range(n_bins):
-                # Use [bins[i], bins[i+1]) except for the last bin, which includes 1.
-                if i < n_bins - 1:
-                    bin_mask = (y_prob >= bins[i]) & (y_prob < bins[i + 1])
-                else:
-                    bin_mask = (y_prob >= bins[i]) & (y_prob <= bins[i + 1])
-                if np.any(bin_mask):
-                    frac_positives[i] = np.mean(y_true[bin_mask])
-                else:
-                    frac_positives[i] = np.nan
+                mask = (y_prob >= bins[i]) & (
+                    y_prob < bins[i + 1] if i < n_bins - 1 else y_prob <= bins[i + 1]
+                )
+                if np.any(mask):
+                    frac_positives[i] = np.mean(y_true[mask])
 
-            # Store the calibration curve (jagged, per fixed bins)
-            group_cal.setdefault(group, []).append(frac_positives)
+            group_cal.setdefault(grp, []).append(frac_positives)
+            group_brier.setdefault(grp, []).append(brier_score_loss(y_true, y_prob))
 
-            # Compute and store the Brier score for this iteration
-            brier = brier_score_loss(y_true, y_prob)
-            group_brier.setdefault(group, []).append(brier)
-
-    # 2. Create the subplot grid
     group_names = sorted(group_cal.keys())
-    num_groups = len(group_names)
-    n_cols = 2
-    n_rows = math.ceil(num_groups / n_cols)
-    figsize = (figsize_per_plot[0] * n_cols, figsize_per_plot[1] * n_rows)
-
-    fig, axes = plt.subplots(n_rows, n_cols, figsize=figsize, dpi=dpi)
-    if isinstance(axes, np.ndarray):
-        axes = axes.flatten()
+    if color_by_group:
+        palette = plt.get_cmap("tab10").colors
+        color_map = {g: palette[i % len(palette)] for i, g in enumerate(group_names)}
     else:
-        axes = [axes]
+        color_map = {g: uniform_color for g in group_names}
 
-    # 3. Plot each group's calibration curves
-    for i, group in enumerate(group_names):
-        ax = axes[i]
+    def get_plot_kwargs(grp):
+        group_curve_kwgs = {"color": color_map[grp]}
+        if curve_kwgs and grp in curve_kwgs:
+            group_curve_kwgs.update(curve_kwgs[grp])
+        group_fill_kwgs = {"alpha": alpha_fill, "color": color_map[grp]}
+        if fill_kwgs and grp in fill_kwgs:
+            group_fill_kwgs.update(fill_kwgs[grp])
+        group_line_kwgs = {"color": "gray", "linestyle": "--", "linewidth": 1}
+        if line_kwgs and grp in line_kwgs:
+            group_line_kwgs.update(line_kwgs[grp])
+        return group_curve_kwgs, group_fill_kwgs, group_line_kwgs
 
-        # Convert list of curves to a NumPy array: shape (num_bootstraps, n_bins)
-        cal_array = np.array(group_cal[group])
-        # Remove bootstrap iterations where all values are NaN
-        valid_rows = ~np.all(np.isnan(cal_array), axis=1)
-        cal_array = cal_array[valid_rows, :]
+    def plot_group(ax, grp):
+        cal_array = np.array(group_cal[grp])
+        valid = ~np.all(np.isnan(cal_array), axis=1)
+        cal_array = cal_array[valid]
         if cal_array.shape[0] == 0:
-            ax.set_title(group, fontsize=12)
-            ax.set_xlim(0, 1)
-            ax.set_ylim(0, 1)
+            ax.set_title(grp, fontsize=label_fontsize)
             ax.plot([0, 1], [0, 1], "--", color="gray")
-            continue
+            return
 
-        # Compute mean calibration and 95% confidence bounds across bootstraps
-        mean_cal = np.nanmean(cal_array, axis=0)
-        lower_cal = np.nanpercentile(cal_array, 2.5, axis=0)
-        upper_cal = np.nanpercentile(cal_array, 97.5, axis=0)
-
-        # Compute Brier score statistics
-        briers = np.array(group_brier[group])
-        mean_brier = np.mean(briers)
-        lower_brier = np.percentile(briers, 2.5)
-        upper_brier = np.percentile(briers, 97.5)
-        brier_str = (
-            f"Mean Brier = {mean_brier:.{decimal_places}f} "
-            f"[{lower_brier:.{decimal_places}f}, {upper_brier:.{decimal_places}f}]"
+        mean, lower, upper = (
+            np.nanmean(cal_array, axis=0),
+            np.nanpercentile(cal_array, 2.5, axis=0),
+            np.nanpercentile(cal_array, 97.5, axis=0),
         )
-
-        # Plot the mean calibration curve (using bin centers) with markers to show
-        # jagged steps
-        ax.plot(
-            bin_centers,
-            mean_cal,
-            label=brier_str,
-            color=color,
-            marker="o",
+        briers = np.array(group_brier[grp])
+        mb, lb, ub = (
+            np.mean(briers),
+            np.percentile(briers, 2.5),
+            np.percentile(briers, 97.5),
         )
+        label = f"{grp} (Mean Brier = {mb:.{decimal_places}f} "
+        f"[{lb:.{decimal_places}f}, {ub:.{decimal_places}f}])"
 
-        # Shade the confidence interval
-        ax.fill_between(
-            bin_centers, lower_cal, upper_cal, alpha=alpha_fill, color=color
-        )
+        curve_kw, fill_kw, line_kw = get_plot_kwargs(grp)
+        ax.plot(bin_centers, mean, label=label, marker="o", **curve_kw)
+        ax.fill_between(bin_centers, lower, upper, **fill_kw)
 
-        # Optionally, add error bars at a subset of points
-        selected_indices = np.linspace(0, n_bins - 1, 10, dtype=int)
-        for j in selected_indices:
-            x_val = bin_centers[j]
-            mean_val = mean_cal[j]
-            err_low = mean_val - lower_cal[j]
-            err_high = upper_cal[j] - mean_val
+        for j in np.linspace(0, n_bins - 1, bar_every, dtype=int):
             ax.errorbar(
-                x_val,
-                mean_val,
-                yerr=[[err_low], [err_high]],
+                bin_centers[j],
+                mean[j],
+                yerr=[[mean[j] - lower[j]], [upper[j] - mean[j]]],
                 fmt="o",
-                color=color,
+                color=curve_kw["color"],
                 markersize=3,
                 capsize=2,
                 elinewidth=1,
                 alpha=0.6,
-            )  # Plot the diagonal for perfect calibration
-        ax.plot([0, 1], [0, 1], "--", color="gray")
+            )
 
+        ax.plot([0, 1], [0, 1], **line_kw)
         ax.set_xlim(0, 1)
         ax.set_ylim(0, 1)
-        ax.set_title(group, fontsize=12)
-        ax.set_xlabel("Predicted Probability")
-        ax.set_ylabel("Fraction of Positives")
-        ax.legend(loc="lower right", fontsize=8)
+        ax.set_title(grp, fontsize=label_fontsize)
+        ax.set_xlabel("Predicted Probability", fontsize=label_fontsize)
+        ax.set_ylabel("Fraction of Positives", fontsize=label_fontsize)
+        ax.tick_params(axis="both", labelsize=tick_fontsize)
+        ax.legend(loc="lower right", fontsize=tick_fontsize)
         ax.grid(True)
 
-    # Turn off any unused subplots
-    for j in range(i + 1, len(axes)):
-        axes[j].axis("off")
+    if group:
+        fig, ax = plt.subplots(figsize=figsize, dpi=dpi)
+        plot_group(ax, group)
+        fig.suptitle(f"{title} ({group})", fontsize=label_fontsize + 2)
+        plt.tight_layout(rect=[0, 0, 1, 0.97])
+        save_or_show_plot(fig, save_path, f"{filename}_{group}")
 
-    # 4. Final formatting and save/show the figure
-    fig.suptitle(title, fontsize=14)
-    plt.tight_layout(rect=[0, 0, 1, 0.97])
+    elif subplots:
+        num_groups = len(group_names)
+        if n_rows is None:
+            n_rows = int(np.ceil(num_groups / n_cols))
+        elif n_rows * n_cols < num_groups:
+            print(
+                f"[Warning] Grid size {n_rows}x{n_cols} only supports "
+                f"{n_rows * n_cols} plots; showing first {n_rows * n_cols} of "
+                f"{num_groups} groups."
+            )
 
-    save_or_show_plot(fig, save_path=save_path, filename=filename)
+        fig_w = figsize_per_plot[0] * n_cols
+        fig_h = figsize_per_plot[1] * n_rows
+        fig, axes = plt.subplots(n_rows, n_cols, figsize=(fig_w, fig_h), dpi=dpi)
+        axes = axes.flatten()
+
+        for i, grp in enumerate(group_names):
+            if i >= len(axes):
+                break
+            plot_group(axes[i], grp)
+
+        for j in range(i + 1, len(axes)):
+            axes[j].axis("off")
+
+        fig.suptitle(title, fontsize=label_fontsize + 2)
+        plt.tight_layout(rect=[0, 0, 1, 0.97])
+        save_or_show_plot(fig, save_path, filename)
+
+    else:
+        fig, ax = plt.subplots(figsize=figsize, dpi=dpi)
+        for grp in group_names:
+            plot_group(ax, grp)
+
+        ax.set_title(title, fontsize=label_fontsize + 2)
+        ax.legend(
+            loc="upper center",
+            bbox_to_anchor=(0.5, -0.25),
+            fontsize=tick_fontsize,
+            ncol=1,
+        )
+        fig.tight_layout(rect=[0, 0, 1, 0.97])
+
+        save_or_show_plot(fig, save_path, f"{filename}_overlay")
 
 
+################################################################################
+# Grup Metrics Extraction and Confidence Intervals
+################################################################################
 def extract_group_metrics(race_metrics):
+    """
+    Extract TPR and FPR values by group from a list of bootstrapped metric
+    dictionaries.
+
+    Returns a dictionary of lists for each group's metrics and the set of unique
+    group names, used to support group-wise performance analysis and visualization.
+    """
+
     unique_groups = set()
     for sample in race_metrics:
         unique_groups.update(sample.keys())
@@ -1444,6 +2005,14 @@ def extract_group_metrics(race_metrics):
 
 
 def compute_confidence_intervals(metrics, conf=95):
+    """
+    Compute confidence intervals for group-level metrics across bootstrapped
+    samples.
+
+    Takes a dictionary of metric lists and returns lower and upper bounds for
+    each metric based on the specified confidence level (default is 95%).
+    """
+
     conf_intervals = {}
     lower_percentile = (100 - conf) / 2
     upper_percentile = 100 - lower_percentile
