@@ -53,9 +53,7 @@ def save_or_show_plot(
             os.path.join(save_path, f"{filename}.png"),
             bbox_inches=bbox_inches,
         )
-        plt.close(fig)
-    else:
-        plt.show()
+    plt.show()
 
 
 ################################################################################
