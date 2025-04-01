@@ -9,6 +9,7 @@ import math
 
 from sklearn.metrics import (
     r2_score,
+    mean_absolute_error,
     roc_curve,
     auc,
     precision_recall_curve,
@@ -173,21 +174,20 @@ def eq_plot_residuals_by_group(
             mask = group == grp
             _scatter_with_centroid(ax, grp, mask, show_centroids=show_centroids)
 
-            # Compute R² and class counts
             y_true_grp = y_true[mask]
             y_prob_grp = y_prob[mask]
-            residual_grp = residuals[mask]
+            residual_grp = y_true_grp - y_prob_grp
 
             r2 = r2_score(y_true_grp, y_prob_grp)
-            total = len(y_true_grp)
-            pos = np.sum(
-                y_true_grp >= y_prob_grp
-            )  # optionally: y_true_grp == 1 if binary
-            neg = total - pos
+            mae = mean_absolute_error(y_true_grp, y_prob_grp)
+            residual_mean = np.mean(residual_grp)
+            n = len(y_true_grp)
 
             label = (
-                f"{grp} | R² = {r2:.{2}f}, "
-                f"Count: {total:,}, Pos: {pos:,}, Neg: {neg:,}"
+                f"R² for {grp} = {r2:.2f}, "
+                f"MAE = {mae:.2f}, "
+                f"Residual μ = {residual_mean:.2f}, "
+                f"n = {n:,}"
             )
 
             legend_entries.append((label, color_map[grp]))
@@ -230,6 +230,61 @@ def eq_plot_residuals_by_group(
 ################################################################################
 
 
+def _plot_single_roc_ax(
+    ax,
+    data: dict,
+    group: str,
+    title=None,
+    label_fontsize: int = 12,
+    tick_fontsize: int = 10,
+    decimal_places=2,
+    show_legend=True,
+    label_mode="full",
+    curve_kwargs=None,
+    line_kwargs=None,
+):
+    """
+    Helper to extract data for `group` and plot ROC curve on the given axis.
+    """
+    y_true = data[group]["y_true"]
+    y_prob = data[group]["y_prob"]
+
+    fpr, tpr, _ = roc_curve(y_true, y_prob)
+    roc_auc = auc(fpr, tpr)
+
+    total = len(y_true)
+    positives = int(np.sum(y_true))
+    negatives = total - positives
+
+    if label_mode == "simple":
+        label = f"AUC = {roc_auc:.{decimal_places}f}"
+    else:
+        label = (
+            f"AUC for {group} = {roc_auc:.{decimal_places}f}, "
+            f"Count: {total:,}, Pos: {positives:,}, Neg: {negatives:,}"
+        )
+
+    ax.plot(fpr, tpr, label=label, **(curve_kwargs or {}))
+    ax.plot(
+        [0, 1],
+        [0, 1],
+        **(line_kwargs or {"color": "k", "linestyle": "--", "linewidth": 1}),
+    )
+    if title:
+        ax.set_title(title, fontsize=label_fontsize)
+    ax.set_xlabel("False Positive Rate", fontsize=label_fontsize)
+    ax.set_ylabel("True Positive Rate", fontsize=label_fontsize)
+    if show_legend:
+        ax.legend(fontsize=tick_fontsize)
+    ax.tick_params(axis="both", labelsize=tick_fontsize)
+
+    ax.set_xlabel("False Positive Rate", fontsize=label_fontsize)
+    ax.set_ylabel("True Positive Rate", fontsize=label_fontsize)
+    if show_legend:
+        ax.legend(fontsize=tick_fontsize)
+    ax.grid(True)
+
+
 def eq_plot_roc_auc(
     data: dict,
     save_path: str = None,
@@ -237,72 +292,135 @@ def eq_plot_roc_auc(
     title: str = "ROC Curve by Group",
     figsize: tuple = (8, 6),
     dpi: int = 100,
+    label_fontsize: int = 12,
     tick_fontsize: int = 10,
     decimal_places: int = 2,
+    subplots: bool = False,
+    n_cols: int = 2,
+    n_rows: int = None,
+    group: str = None,
+    color_by_group: bool = True,
+    curve_kwgs: dict = None,
+    line_kwgs: dict = None,
 ):
     """
-    Plots ROC AUC curves for each group in a fairness dictionary.
-
-    Parameters
-    ----------
-    data : dict
-        Dictionary with group names as keys and 'y_true' and 'y_prob' arrays as
-        values.
-    save_path : str, optional
-        Directory to save the plot. If None, the plot is returned.
-    filename : str, optional
-        Name of the output file (no extension).
-    title : str, optional
-        Plot title.
-    figsize : tuple, optional
-        Size of the plot.
-    dpi : int, optional
-        Resolution of the plot.
-    tick_fontsize : int, optional
-        Font size for legend text.
-    decimal_places : int, optional
-        Decimal precision for AUC in the legend.
-
-    Returns
-    -------
-    matplotlib.figure.Figure
-        The ROC AUC plot figure.
+    Plots ROC AUC curves for each group in a fairness dictionary, with support
+    for single group, all groups, or subplot layout. Allows custom styling for curves and discrimination line.
     """
 
-    fig, ax = plt.subplots(figsize=figsize, dpi=dpi)
+    if group is not None and subplots:
+        raise ValueError("Cannot use subplots=True when a specific group is selected.")
 
-    for group, values in sorted(data.items()):
-        y_true = values["y_true"]
-        y_prob = values["y_prob"]
+    if title == None:
+        title = ""
 
-        if len(set(y_true)) < 2:
-            continue
+    valid_data = {g: v for g, v in data.items() if len(set(v["y_true"])) > 1}
+    groups = sorted(valid_data.keys())
 
-        fpr, tpr, _ = roc_curve(y_true, y_prob)
-        roc_auc = auc(fpr, tpr)
+    # Default 45° discrimination line style
+    if line_kwgs is None:
+        line_kwgs = {"color": "k", "linestyle": "--", "linewidth": 1}
 
-        total = len(y_true)
-        positives = np.sum(y_true)
-        negatives = total - positives
+    # Default color assignment
+    default_colors = {}
+    if color_by_group:
+        palette = plt.get_cmap("tab10").colors
+        default_colors = {g: palette[i % len(palette)] for i, g in enumerate(groups)}
 
-        label = (
-            f"AUC for {group} = {roc_auc:.{decimal_places}f}, "
-            f"Count: {total:,}, Pos: {positives:,}, Neg: {negatives:,}"
+    # Merge default colors and user-defined kwargs
+    final_curve_kwgs = {}
+    for g in groups:
+        final_curve_kwgs[g] = {"color": default_colors.get(g, "gray")}
+        if curve_kwgs and g in curve_kwgs:
+            final_curve_kwgs[g].update(curve_kwgs[g])
+
+    # Plot for a single group
+    if group:
+        if group not in valid_data:
+            print(
+                f"[Warning] Group '{group}' not found or insufficient class diversity."
+            )
+            return
+
+        fig, ax = plt.subplots(figsize=figsize, dpi=dpi)
+        _plot_single_roc_ax(
+            ax=ax,
+            data=valid_data,
+            group=group,
+            title=f"{title} ({group})",
+            label_fontsize=label_fontsize,
+            tick_fontsize=tick_fontsize,
+            decimal_places=decimal_places,
+            show_legend=True,
+            label_mode="simple",
+            curve_kwargs=final_curve_kwgs[group],
+            line_kwargs=line_kwgs,
         )
-        ax.plot(fpr, tpr, label=label)
+        fig.tight_layout()
+        save_or_show_plot(fig, save_path=save_path, filename=f"{filename}_{group}")
+        return
 
-    ax.plot([0, 1], [0, 1], "k--", lw=1)
-    ax.set_xlabel("False Positive Rate")
-    ax.set_ylabel("True Positive Rate")
-    ax.set_title(title)
-    ax.legend(
-        loc="upper center",
-        bbox_to_anchor=(0.5, -0.25),
-        fontsize=tick_fontsize,
-        ncol=1,
-    )
-    ax.grid(True)
-    plt.tight_layout()
+    # Subplots
+    if subplots:
+        if n_rows is None:
+            n_rows = int(np.ceil(len(groups) / n_cols))
+        elif n_rows * n_cols < len(groups):
+            print(
+                f"[Warning] Grid size {n_rows}x{n_cols} only supports {n_rows * n_cols} plots; "
+                f"showing first {n_rows * n_cols} of {len(groups)} groups."
+            )
+
+        fig, axes = plt.subplots(nrows=n_rows, ncols=n_cols, figsize=figsize, dpi=dpi)
+        axes = np.atleast_1d(axes).flatten()
+
+        for i, g in enumerate(groups):
+            if i >= len(axes):
+                break
+            _plot_single_roc_ax(
+                ax=axes[i],
+                data=valid_data,
+                group=g,
+                title=str(g),
+                label_fontsize=label_fontsize,
+                tick_fontsize=tick_fontsize,
+                decimal_places=decimal_places,
+                show_legend=True,
+                label_mode="simple",
+                curve_kwargs=final_curve_kwgs[g],
+                line_kwargs=line_kwgs,
+            )
+
+        for j in range(i + 1, len(axes)):
+            axes[j].axis("off")
+
+        fig.suptitle(title, fontsize=tick_fontsize + 3)
+        fig.tight_layout(rect=[0, 0, 1, 0.95])
+
+    # Combined overlay
+    else:
+        fig, ax = plt.subplots(figsize=figsize, dpi=dpi)
+        for g in groups:
+            _plot_single_roc_ax(
+                ax=ax,
+                data=valid_data,
+                group=g,
+                label_fontsize=label_fontsize,
+                tick_fontsize=tick_fontsize,
+                decimal_places=decimal_places,
+                show_legend=False,
+                label_mode="full",
+                curve_kwargs=final_curve_kwgs[g],
+                line_kwargs=line_kwgs,
+            )
+
+        ax.set_title(title, fontsize=tick_fontsize + 2)
+        ax.legend(
+            loc="upper center",
+            bbox_to_anchor=(0.5, -0.25),
+            fontsize=tick_fontsize,
+            ncol=1,
+        )
+        fig.tight_layout()
 
     save_or_show_plot(fig, save_path=save_path, filename=filename)
 
@@ -312,6 +430,59 @@ def eq_plot_roc_auc(
 ################################################################################
 
 
+def _plot_single_pr_ax(
+    ax,
+    data: dict,
+    group: str,
+    title=None,
+    label_fontsize: int = 12,
+    tick_fontsize: int = 10,
+    decimal_places=2,
+    show_legend=True,
+    label_mode="full",
+    curve_kwargs=None,
+    line_kwargs=None,
+):
+    """
+    Helper to extract data for `group` and plot PR curve on the given axis.
+    """
+    y_true = data[group]["y_true"]
+    y_prob = data[group]["y_prob"]
+
+    precision, recall, _ = precision_recall_curve(y_true, y_prob)
+    avg_precision = average_precision_score(y_true, y_prob)
+
+    total = len(y_true)
+    positives = int(np.sum(y_true))
+    negatives = total - positives
+
+    if label_mode == "simple":
+        label = f"AP = {avg_precision:.{decimal_places}f}"
+    else:
+        label = (
+            f"AP for {group} = {avg_precision:.{decimal_places}f}, "
+            f"Count: {total:,}, Pos: {positives:,}, Neg: {negatives:,}"
+        )
+
+    ax.plot(recall, precision, label=label, **(curve_kwargs or {}))
+    ax.axhline(
+        y=positives / total,
+        **(line_kwargs or {"color": "k", "linestyle": "--", "linewidth": 1}),
+    )
+    if title:
+        ax.set_title(title, fontsize=label_fontsize)
+    ax.set_xlabel("Recall", fontsize=label_fontsize)
+    ax.set_ylabel("Precision", fontsize=label_fontsize)
+    if show_legend:
+        ax.legend(fontsize=tick_fontsize)
+    ax.tick_params(axis="both", labelsize=tick_fontsize)
+    ax.set_xlabel("Recall", fontsize=label_fontsize)
+    ax.set_ylabel("Precision", fontsize=label_fontsize)
+    if show_legend:
+        ax.legend(fontsize=tick_fontsize)
+    ax.grid(True)
+
+
 def eq_plot_precision_recall(
     data: dict,
     save_path: str = None,
@@ -319,70 +490,134 @@ def eq_plot_precision_recall(
     title: str = "Precision-Recall Curve by Group",
     figsize: tuple = (8, 6),
     dpi: int = 100,
+    label_fontsize: int = 12,
     tick_fontsize: int = 10,
     decimal_places: int = 2,
+    subplots: bool = False,
+    n_cols: int = 2,
+    n_rows: int = None,
+    group: str = None,
+    color_by_group: bool = True,
+    curve_kwgs: dict = None,
+    line_kwgs: dict = None,
 ):
     """
-    Plot Precision-Recall curves for each group in a fairness category.
+    Plots Precision-Recall curves for each group in a fairness dictionary.
 
-    Parameters:
-    -----------
-    data : dict
-        Dictionary of the form {group_name: {'y_true': ..., 'y_prob': ...}}
-    save_path : str or None
-        If specified, the figure is saved to this path with the given filename.
-    filename : str
-        Filename for saving the figure (without extension).
-    title : str
-        Title for the plot.
-    figsize : tuple
-        Size of the figure (width, height).
-    dpi : int
-        Dots per inch for the saved figure.
-    tick_fontsize : int
-        Font size for legend labels.
-    decimal_places : int
-        Number of decimal places to display for average precision scores.
-
-    Returns:
-    --------
-    matplotlib.figure.Figure
-        The generated figure.
+    Supports: single group, overlay, or subplot layout with full styling options.
     """
+    if group is not None and subplots:
+        raise ValueError("Cannot use subplots=True when a specific group is selected.")
 
-    fig, ax = plt.subplots(figsize=figsize, dpi=dpi)
+    valid_data = {g: v for g, v in data.items() if len(set(v["y_true"])) > 1}
+    groups = sorted(valid_data.keys())
 
-    for group, values in sorted(data.items()):
-        y_true = values["y_true"]
-        y_prob = values["y_prob"]
+    if title == None:
+        title = ""
 
-        if len(set(y_true)) < 2:
-            continue
+    if line_kwgs is None:
+        line_kwgs = {"color": "k", "linestyle": "--", "linewidth": 1}
 
-        precision, recall, _ = precision_recall_curve(y_true, y_prob)
-        avg_precision = average_precision_score(y_true, y_prob)
+    # Default color assignment
+    default_colors = {}
+    if color_by_group:
+        palette = plt.get_cmap("tab10").colors
+        default_colors = {g: palette[i % len(palette)] for i, g in enumerate(groups)}
 
-        total = len(y_true)
-        positives = int(np.sum(y_true))
-        negatives = total - positives
+    # Merge defaults with user-specified curve_kwgs
+    final_curve_kwgs = {}
+    for g in groups:
+        final_curve_kwgs[g] = {"color": default_colors.get(g, "gray")}
+        if curve_kwgs and g in curve_kwgs:
+            final_curve_kwgs[g].update(curve_kwgs[g])
 
-        label = (
-            f"AP for {group} = {avg_precision:.{decimal_places}f}, "
-            f"Count: {total:,}, Pos: {positives:,}, Neg: {negatives:,}"
+    # Single group plot
+    if group:
+        if group not in valid_data:
+            print(
+                f"[Warning] Group '{group}' not found or insufficient class diversity."
+            )
+            return
+
+        fig, ax = plt.subplots(figsize=figsize, dpi=dpi)
+        _plot_single_pr_ax(
+            ax=ax,
+            data=valid_data,
+            group=group,
+            title=f"{title} ({group})",
+            label_fontsize=label_fontsize,
+            tick_fontsize=tick_fontsize,
+            decimal_places=decimal_places,
+            show_legend=True,
+            label_mode="simple",
+            curve_kwargs=final_curve_kwgs[group],
+            line_kwargs=line_kwgs,
         )
-        ax.plot(recall, precision, label=label)
+        fig.tight_layout()
+        save_or_show_plot(fig, save_path=save_path, filename=f"{filename}_{group}")
+        return
 
-    ax.set_xlabel("Recall")
-    ax.set_ylabel("Precision")
-    ax.set_title(title)
-    ax.legend(
-        loc="upper center",
-        bbox_to_anchor=(0.5, -0.25),
-        fontsize=tick_fontsize,
-        ncol=1,
-    )
-    ax.grid(True)
-    plt.tight_layout()
+    # Subplots
+    if subplots:
+        if n_rows is None:
+            n_rows = int(np.ceil(len(groups) / n_cols))
+        elif n_rows * n_cols < len(groups):
+            print(
+                f"[Warning] Grid size {n_rows}x{n_cols} only supports {n_rows * n_cols} plots; "
+                f"showing first {n_rows * n_cols} of {len(groups)} groups."
+            )
+
+        fig, axes = plt.subplots(nrows=n_rows, ncols=n_cols, figsize=figsize, dpi=dpi)
+        axes = np.atleast_1d(axes).flatten()
+
+        for i, g in enumerate(groups):
+            if i >= len(axes):
+                break
+            _plot_single_pr_ax(
+                ax=axes[i],
+                data=valid_data,
+                group=g,
+                title=str(g),
+                label_fontsize=label_fontsize,
+                tick_fontsize=tick_fontsize,
+                decimal_places=decimal_places,
+                show_legend=True,
+                label_mode="simple",
+                curve_kwargs=final_curve_kwgs[g],
+                line_kwargs=line_kwgs,
+            )
+
+        for j in range(i + 1, len(axes)):
+            axes[j].axis("off")
+
+        fig.suptitle(title, fontsize=tick_fontsize + 3)
+        fig.tight_layout(rect=[0, 0, 1, 0.95])
+
+    # Combined overlay
+    else:
+        fig, ax = plt.subplots(figsize=figsize, dpi=dpi)
+        for g in groups:
+            _plot_single_pr_ax(
+                ax=ax,
+                data=valid_data,
+                group=g,
+                label_fontsize=label_fontsize,
+                tick_fontsize=tick_fontsize,
+                decimal_places=decimal_places,
+                show_legend=False,
+                label_mode="full",
+                curve_kwargs=final_curve_kwgs[g],
+                line_kwargs=line_kwgs,
+            )
+
+        ax.set_title(title, fontsize=tick_fontsize + 2)
+        ax.legend(
+            loc="upper center",
+            bbox_to_anchor=(0.5, -0.25),
+            fontsize=tick_fontsize,
+            ncol=1,
+        )
+        fig.tight_layout()
 
     save_or_show_plot(fig, save_path=save_path, filename=filename)
 
@@ -392,97 +627,197 @@ def eq_plot_precision_recall(
 ################################################################################
 
 
-def eq_calibration_curve_plot(
+def _plot_single_calibration_ax(
+    ax,
     data: dict,
-    n_bins: int = 10,
-    figsize: tuple = (8, 6),
-    dpi: int = 100,
-    title: str = "Calibration Curve by Group",
-    filename: str = "calibration_by_group",
-    save_path: str = None,
-    ax=None,
+    group: str,
+    n_bins: int,
+    title=None,
+    label_fontsize: int = 12,
     tick_fontsize: int = 10,
     decimal_places: int = 2,
+    show_legend=True,
+    label_mode="full",
+    curve_kwargs=None,
+    line_kwargs=None,
 ):
-    """
-    Plot calibration curves for each group in a fairness category.
+    y_true = data[group]["y_true"]
+    y_prob = data[group]["y_prob"]
 
-    Parameters:
-    -----------
-    data : dict
-        Dictionary of the form {group_name: {'y_true': ..., 'y_prob': ...}}.
-    n_bins : int
-        Number of bins to use for calibration curve.
-    figsize : tuple
-        Size of the figure.
-    dpi : int
-        Dots per inch (resolution).
-    title : str
-        Title of the plot.
-    filename : str
-        Filename to use when saving the plot (without extension).
-    save_path : str or None
-        Directory to save the plot. If None, the figure is returned instead.
-    ax : matplotlib.axes._axes.Axes or None
-        Axis to plot on. If None, a new figure and axis are created.
-    tick_fontsize : int
-        Font size for axis labels and legend.
-    decimal_places : int
-        Number of decimal places to show for Brier scores.
-    Returns:
-    --------
-    matplotlib.figure.Figure
-    """
+    fraction_of_positives, mean_predicted_value = calibration_curve(
+        y_true, y_prob, n_bins=n_bins, strategy="uniform"
+    )
 
-    fig, ax = plt.subplots(1, 1, figsize=figsize, dpi=dpi)
+    brier = brier_score_loss(y_true, y_prob)
+    total = len(y_true)
+    positives = int(np.sum(y_true))
+    negatives = total - positives
 
-    for key in sorted(data.keys()):
-        y_true = data[key]["y_true"]
-        y_prob = data[key]["y_prob"]
-
-        # Compute calibration curve and Brier score
-        fraction_of_positives, mean_predicted_value = calibration_curve(
-            y_true,
-            y_prob,
-            n_bins=n_bins,
-        )
-        brier = brier_score_loss(y_true, y_prob)
-        total = len(y_true)
-        positives = int(np.sum(y_true))
-        negatives = total - positives
-
+    if label_mode == "simple":
+        label = f"Brier = {brier:.{decimal_places}f}"
+    else:
         label = (
-            f"{key} (Brier = {brier:.{decimal_places}f}, "
+            f"{group} (Brier = {brier:.{decimal_places}f}, "
             f"Count: {total:,}, Pos: {positives:,}, Neg: {negatives:,})"
         )
 
-        ax.plot(
-            np.round(mean_predicted_value, decimal_places),
-            np.round(fraction_of_positives, decimal_places),
-            marker="o",
-            label=label,
-        )
-
-    # Perfect calibration line
     ax.plot(
-        [0, 1],
-        [0, 1],
-        linestyle="--",
-        label="Perfectly calibrated",
-        color="gray",
+        np.round(mean_predicted_value, decimal_places),
+        np.round(fraction_of_positives, decimal_places),
+        marker="o",
+        label=label,
+        **(curve_kwargs or {}),
     )
+    ax.plot([0, 1], [0, 1], **(line_kwargs or {"color": "gray", "linestyle": "--"}))
 
-    ax.set_xlabel("Mean predicted value", fontsize=tick_fontsize)
-    ax.set_ylabel("Fraction of positives", fontsize=tick_fontsize)
-    ax.set_title(title, fontsize=tick_fontsize + 2)
-    ax.legend(
-        loc="upper center",
-        bbox_to_anchor=(0.5, -0.25),
-        fontsize=tick_fontsize,
-        ncol=1,
-    )
+    if title:
+        ax.set_title(title, fontsize=label_fontsize)
+    ax.set_xlabel("Mean Predicted Value", fontsize=label_fontsize)
+    ax.set_ylabel("Fraction of Positives", fontsize=label_fontsize)
+    ax.tick_params(axis="both", labelsize=tick_fontsize)
+    if show_legend:
+        ax.legend(fontsize=tick_fontsize)
     ax.grid(True)
-    plt.tight_layout()
+
+
+def eq_calibration_curve_plot(
+    data: dict,
+    n_bins: int = 10,
+    save_path: str = None,
+    filename: str = "calibration_by_group",
+    title: str = "Calibration Curve by Group",
+    figsize: tuple = (8, 6),
+    dpi: int = 100,
+    label_fontsize: int = 12,
+    tick_fontsize: int = 10,
+    decimal_places: int = 2,
+    subplots: bool = False,
+    n_cols: int = 2,
+    n_rows: int = None,
+    group: str = None,
+    color_by_group: bool = True,
+    curve_kwgs: dict = None,
+    line_kwgs: dict = None,
+):
+    """
+    Plots calibration curves for each group in a fairness dictionary.
+
+    Parameters match ROC and PR curve plotters for consistency.
+    """
+
+    if group is not None and subplots:
+        raise ValueError("Cannot use subplots=True when a specific group is selected.")
+
+    if title == None:
+        title = ""
+
+    valid_data = {g: v for g, v in data.items() if len(set(v["y_true"])) > 1}
+    groups = sorted(valid_data.keys())
+
+    if line_kwgs is None:
+        line_kwgs = {"color": "gray", "linestyle": "--", "linewidth": 1}
+
+    # Color handling
+    default_colors = {}
+    if color_by_group:
+        palette = plt.get_cmap("tab10").colors
+        default_colors = {g: palette[i % len(palette)] for i, g in enumerate(groups)}
+
+    final_curve_kwgs = {}
+    for g in groups:
+        final_curve_kwgs[g] = {"color": default_colors.get(g, "gray")}
+        if curve_kwgs and g in curve_kwgs:
+            final_curve_kwgs[g].update(curve_kwgs[g])
+
+    # Single group mode
+    if group:
+        if group not in valid_data:
+            print(
+                f"[Warning] Group '{group}' not found or insufficient class diversity."
+            )
+            return
+        fig, ax = plt.subplots(figsize=figsize, dpi=dpi)
+        _plot_single_calibration_ax(
+            ax=ax,
+            data=valid_data,
+            group=group,
+            n_bins=n_bins,
+            title=title,
+            label_fontsize=label_fontsize,
+            tick_fontsize=tick_fontsize,
+            decimal_places=decimal_places,
+            show_legend=True,
+            label_mode="simple",
+            curve_kwargs=final_curve_kwgs[group],
+            line_kwargs=line_kwgs,
+        )
+        fig.tight_layout()
+        save_or_show_plot(fig, save_path=save_path, filename=f"{filename}_{group}")
+        return
+
+    # Subplots
+    if subplots:
+        if n_rows is None:
+            n_rows = int(np.ceil(len(groups) / n_cols))
+        elif n_rows * n_cols < len(groups):
+            print(
+                f"[Warning] Grid size {n_rows}x{n_cols} only supports {n_rows * n_cols} plots; "
+                f"showing first {n_rows * n_cols} of {len(groups)} groups."
+            )
+
+        fig, axes = plt.subplots(nrows=n_rows, ncols=n_cols, figsize=figsize, dpi=dpi)
+        axes = np.atleast_1d(axes).flatten()
+
+        for i, g in enumerate(groups):
+            if i >= len(axes):
+                break
+            _plot_single_calibration_ax(
+                ax=axes[i],
+                data=valid_data,
+                group=g,
+                n_bins=n_bins,
+                title=str(g),
+                label_fontsize=label_fontsize,
+                tick_fontsize=tick_fontsize,
+                decimal_places=decimal_places,
+                show_legend=True,
+                label_mode="simple",
+                curve_kwargs=final_curve_kwgs[g],
+                line_kwargs=line_kwgs,
+            )
+
+        for j in range(i + 1, len(axes)):
+            axes[j].axis("off")
+
+        fig.suptitle(title, fontsize=label_fontsize + 2)
+        fig.tight_layout(rect=[0, 0, 1, 0.95])
+
+    # Combined overlay
+    else:
+        fig, ax = plt.subplots(figsize=figsize, dpi=dpi)
+        for g in groups:
+            _plot_single_calibration_ax(
+                ax=ax,
+                data=valid_data,
+                group=g,
+                n_bins=n_bins,
+                label_fontsize=label_fontsize,
+                tick_fontsize=tick_fontsize,
+                decimal_places=decimal_places,
+                show_legend=False,
+                label_mode="full",
+                curve_kwargs=final_curve_kwgs[g],
+                line_kwargs=line_kwgs,
+            )
+
+        ax.set_title(title, fontsize=label_fontsize)
+        ax.legend(
+            loc="upper center",
+            bbox_to_anchor=(0.5, -0.25),
+            fontsize=tick_fontsize,
+            ncol=1,
+        )
+        fig.tight_layout()
 
     save_or_show_plot(fig, save_path=save_path, filename=filename)
 
