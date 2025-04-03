@@ -63,10 +63,10 @@ def _filter_groups(data, exclude_groups=0):
         )
         return {g: v for g, v in valid_data.items() if g not in exclude_set}
 
-    # Handle case where exclude_groups is an integer (minimum sample size)
+    # Handle case where exclude_groups is an integer (minimum sample size threshold)
     if isinstance(exclude_groups, int):
         return {
-            g: v for g, v in valid_data.items() if len(v["y_true"]) >= exclude_groups
+            g: v for g, v in valid_data.items() if len(v["y_true"]) > exclude_groups
         }
 
     raise ValueError("exclude_groups must be an int, str, list, or set")
