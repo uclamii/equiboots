@@ -36,7 +36,7 @@ def get_group_color_map(groups, palette="tab10"):
 
 def default_line_kwargs():
     """Return default line style kwargs for reference lines."""
-    return {"color": "gray", "linestyle": "--", "linewidth": 1}
+    return {"color": "black", "linestyle": "--", "linewidth": 1}
 
 
 def _validate_groups(data):
