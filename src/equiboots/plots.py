@@ -53,20 +53,23 @@ def get_layout(n_items, n_cols=None, figsize=None, strict_layout=True):
 def _filter_groups(data, exclude_groups=0):
     """Filter out groups with one class or based on exclusion criteria."""
     valid_data = {g: v for g, v in data.items() if len(set(v["y_true"])) > 1}
-    if not exclude_groups:
+    if not exclude_groups:  # If exclude_groups is 0 or None, return all valid data
         return valid_data
-    exclude_set = (
-        {exclude_groups}
-        if isinstance(exclude_groups, str)
-        else set(exclude_groups or [])
-    )
-    return {
-        g: v
-        for g, v in valid_data.items()
-        if g not in exclude_set
-        and len(v["y_true"])
-        >= (exclude_groups if isinstance(exclude_groups, int) else 0)
-    }
+
+    # Handle case where exclude_groups is a specific group name (string) or list of names
+    if isinstance(exclude_groups, (str, list, set)):
+        exclude_set = (
+            {exclude_groups} if isinstance(exclude_groups, str) else set(exclude_groups)
+        )
+        return {g: v for g, v in valid_data.items() if g not in exclude_set}
+
+    # Handle case where exclude_groups is an integer (minimum sample size)
+    if isinstance(exclude_groups, int):
+        return {
+            g: v for g, v in valid_data.items() if len(v["y_true"]) >= exclude_groups
+        }
+
+    raise ValueError("exclude_groups must be an int, str, list, or set")
 
 
 def _get_concatenated_group_data(boot_sliced_data):
