@@ -27,6 +27,16 @@ def test_filter_groups_removes_single_class():
     assert "A" not in valid and "B" in valid
 
 
+def test_filter_groups_excludes_below_threshold():
+    data = {
+        "A": {"y_true": np.array([0, 1])},  # 2 samples
+        "B": {"y_true": np.array([0, 1, 0])},  # 3 samples
+        "C": {"y_true": np.array([1])},  # 1 sample
+    }
+    valid = plots._filter_groups(data, exclude_groups=2)
+    assert "A" not in valid and "B" in valid and "C" not in valid
+
+
 def test_get_layout_default():
     n_rows, n_cols, figsize = plots.get_layout(10)
     assert n_rows > 0 and n_cols > 0
