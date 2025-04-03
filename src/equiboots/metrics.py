@@ -237,6 +237,7 @@ def regression_metrics(y_true: np.ndarray, y_pred: np.ndarray) -> Dict[str, floa
         "R^2 Score": r2_score(y_true, y_pred),
         "Explained Variance": explained_variance_score(y_true, y_pred),
         "Mean Squared Log Error": mean_squared_log_error(y_true, y_pred),
+        "Residual Mean": np.mean(y_true - y_pred),
     }
 
     return metrics
