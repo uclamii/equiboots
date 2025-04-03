@@ -1,5 +1,3 @@
-# Consolidated Group Plotting Utilities
-from scipy.interpolate import interp1d
 import numpy as np
 import matplotlib.pyplot as plt
 import os
@@ -10,6 +8,7 @@ from sklearn.metrics import (
     brier_score_loss,
 )
 from sklearn.calibration import calibration_curve
+from scipy.interpolate import interp1d
 from matplotlib.lines import Line2D
 import seaborn as sns
 
@@ -262,7 +261,7 @@ def _plot_group_curve_ax(
         score = brier_score_loss(y_true, y_prob)
         x_label, y_label = "Mean Predicted Value", "Fraction of Positives"
         ref_line = ([0, 1], [0, 1])
-        prefix = "Brier"
+        prefix = "Brier score"
     else:
         raise ValueError("Unsupported curve_type")
 
@@ -499,6 +498,7 @@ def _plot_bootstrapped_curve_ax(
     line_kwargs=None,
     show_grid=True,
     bar_every=10,
+    brier_scores=None,
 ):
     """
     Plot mean curve with confidence band and error bars from bootstrapped
@@ -517,11 +517,23 @@ def _plot_bootstrapped_curve_ax(
     lower_auc = np.percentile(aucs, 2.5) if aucs else float("nan")
     upper_auc = np.percentile(aucs, 97.5) if aucs else float("nan")
 
-    label = (
-        f"{group} ({label_prefix} = {mean_auc:.2f} [{lower_auc:.2f}, {upper_auc:.2f}])"
-        if label_prefix != "CAL"
-        else group
-    )
+    if label_prefix == "CAL" and brier_scores:
+        scores = brier_scores.get(group, [])
+        if scores:
+            mean_brier = np.mean(scores)
+            lower_brier = np.percentile(scores, 2.5)
+            upper_brier = np.percentile(scores, 97.5)
+            label = (
+                f"{group} (Mean Brier = {mean_brier:.3f} "
+                f"[{lower_brier:.3f}, {upper_brier:.3f}])"
+            )
+        else:
+            label = f"{group} (No valid Brier scores)"
+    else:
+        label = (
+            f"{group} ({label_prefix} = {mean_auc:.2f} "
+            f"[{lower_auc:.2f}, {upper_auc:.2f}])"
+        )
 
     curve_kwargs = curve_kwargs or {}
     fill_kwargs = fill_kwargs or {
@@ -595,6 +607,17 @@ def eq_plot_bootstrapped_group_curves(
         boot_sliced_data, common_grid, curve_type=curve_type, n_bins=n_bins
     )
 
+    brier_scores = None
+    if curve_type == "calibration":
+        brier_scores = {
+            group: [
+                brier_score_loss(sample[group]["y_true"], sample[group]["y_prob"])
+                for sample in boot_sliced_data
+                if group in sample and len(set(sample[group]["y_true"])) > 1
+            ]
+            for group in interp_data
+        }
+
     group_names = sorted(interp_data.keys())
 
     color_map = (
@@ -635,6 +658,7 @@ def eq_plot_bootstrapped_group_curves(
             line_kwgs,
             True,
             bar_every,
+            brier_scores=brier_scores,
         )
         fig.suptitle(f"{title} ({group})")
         fig.tight_layout(rect=[0, 0, 1, 0.97])
@@ -669,6 +693,7 @@ def eq_plot_bootstrapped_group_curves(
                 line_kwgs,
                 True,
                 bar_every,
+                brier_scores=brier_scores,
             )
         for j in range(i + 1, len(axes)):
             axes[j].axis("off")
@@ -697,6 +722,7 @@ def eq_plot_bootstrapped_group_curves(
             line_kwgs,
             True,
             bar_every,
+            brier_scores=brier_scores,
         )
     ax.set_title(title)
     ax.legend(loc="upper center", bbox_to_anchor=(0.5, -0.25), ncol=1)
