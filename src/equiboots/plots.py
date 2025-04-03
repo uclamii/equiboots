@@ -636,12 +636,6 @@ def eq_disparity_metrics_plot(
     if not isinstance(dispa, list):
         raise TypeError("dispa should be a list")
 
-    def disparity_plot(
-        ax, data, group, color, overlay_mode=False
-    ):  # Added overlay_mode parameter
-        # This function isn't used in the current implementation, but adding for consistency
-        pass
-
     all_keys = sorted({key for row in dispa for key in row.keys()})
     attributes = (
         [k for k in all_keys if k in categories] if categories != "all" else all_keys
