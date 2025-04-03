@@ -67,6 +67,39 @@ def get_layout(n_items, n_cols=None, figsize=None, strict_layout=True):
     return n_rows, n_cols, (fig_width, fig_height)
 
 
+def _filter_groups(data, exclude_groups):
+    if exclude_groups is None:
+        exclude_groups = 0
+
+    if isinstance(exclude_groups, (str, list, set)):
+        exclude_list = (
+            {exclude_groups} if isinstance(exclude_groups, str) else set(exclude_groups)
+        )
+        return {
+            g: v for g, v in _validate_groups(data).items() if g not in exclude_list
+        }
+    else:
+        return {
+            g: v
+            for g, v in _validate_groups(data).items()
+            if len(v["y_true"]) >= exclude_groups
+        }
+
+
+def _get_concatenated_group_data(boot_sliced_data):
+    return {
+        g: {
+            "y_true": np.concatenate(
+                [bs[g]["y_true"] for bs in boot_sliced_data if g in bs]
+            ),
+            "y_prob": np.concatenate(
+                [bs[g]["y_prob"] for bs in boot_sliced_data if g in bs]
+            ),
+        }
+        for g in set(g for bs in boot_sliced_data for g in bs)
+    }
+
+
 ################################################################################
 # Residual Plot by Group
 ################################################################################
@@ -127,6 +160,7 @@ def eq_plot_residuals_by_group(
     color_by_group=True,
     alpha=0.6,
     show_centroids=False,
+    exclude_groups=0,
 ):
     """
     Plot residuals grouped by subgroup.
@@ -149,7 +183,8 @@ def eq_plot_residuals_by_group(
     if group is not None and subplots:
         raise ValueError("Cannot use subplots=True when a specific group is selected.")
 
-    groups = sorted(data.keys())
+    valid_data = _filter_groups(data, exclude_groups)
+    groups = sorted(valid_data.keys())
     color_map = (
         get_group_color_map(groups)
         if color_by_group
@@ -310,6 +345,7 @@ def eq_plot_group_curves(
     curve_kwgs=None,
     line_kwgs=None,
     n_bins=10,
+    exclude_groups=0,
 ):
     """
     Plot ROC, PR, or calibration curves by group with optional subplots.
@@ -335,7 +371,7 @@ def eq_plot_group_curves(
     if group is not None and subplots:
         raise ValueError("Cannot use subplots=True when a specific group is selected.")
 
-    valid_data = _validate_groups(data)
+    valid_data = _filter_groups(data, exclude_groups)
     groups = sorted(valid_data.keys())
 
     color_map = (
@@ -602,10 +638,15 @@ def eq_plot_bootstrapped_group_curves(
     line_kwgs=None,
     bar_every=10,
     n_bins=10,
+    exclude_groups=0,
 ):
     interp_data, grid_x = interpolate_bootstrapped_curves(
         boot_sliced_data, common_grid, curve_type=curve_type, n_bins=n_bins
     )
+
+    group_data_for_filtering = _get_concatenated_group_data(boot_sliced_data)
+    filtered_groups = _filter_groups(group_data_for_filtering, exclude_groups)
+    interp_data = {g: interp_data[g] for g in filtered_groups}
 
     brier_scores = None
     if curve_type == "calibration":
