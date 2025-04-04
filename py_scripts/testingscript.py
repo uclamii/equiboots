@@ -69,6 +69,7 @@ def eq_general_test(task):
         boot_sample_size=100,
         balanced=False,  # False is stratified, True is balanced
         stratify_by_outcome=True,
+        group_min_size=70,
     )
 
     # Set seeds

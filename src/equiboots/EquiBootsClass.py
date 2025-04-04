@@ -27,6 +27,7 @@ class EquiBoots:
         boot_sample_size: int = 100,
         balanced: bool = True,  # sample balanced or stratified
         stratify_by_outcome: bool = False,  # sample stratified by outcome
+        group_min_size: int = 10,
     ) -> None:
 
         self.fairness_vars = fairness_vars
@@ -45,6 +46,8 @@ class EquiBoots:
         self.boot_sample_size = boot_sample_size
         self.balanced = balanced
         self.stratify_by_outcome = stratify_by_outcome
+        self.group_min_size = group_min_size
+        self.groups_below_min_size = {var:[] for var in fairness_vars}
 
     def set_reference_groups(self, reference_groups):
         ### zip the reference groups
@@ -112,9 +115,19 @@ class EquiBoots:
                 self.groups[var]["categories"] = self.fairness_df[var].unique()
                 self.groups[var]["indices"] = {}
                 for cat in self.groups[var]["categories"]:
-                    self.groups[var]["indices"][cat] = self.fairness_df[
+                    group = self.fairness_df[
                         self.fairness_df[var] == cat
                     ].index
+                    # Check if the group size is less than the minimum size
+                    if len(group) < self.group_min_size:
+                        Warning(
+                            f"Group '{cat}' for variable '{var}' has less than "
+                            f"{self.group_min_size} samples. "
+                            f"Skipping catategory of this group.")
+                        self.groups_below_min_size[var].append(cat)
+                        continue
+                    # Store the indices of the group
+                    self.groups[var]["indices"][cat] = group
             print("Groups created")
             return
 
@@ -177,6 +190,17 @@ class EquiBoots:
                                 )
 
                             group = self.fairness_df[slicing_condition].index
+
+                            # Check if the group size is less than the minimum size
+                            if len(group) < self.group_min_size:
+                                Warning(
+                                    f"Group '{cat}' for variable '{var}' and outcome '{outcome}' has less than "
+                                    f"{self.group_min_size} samples. "
+                                    f"Skipping category of this group."
+                                )
+                                self.groups_below_min_size[var].append(cat)
+                                continue
+
                             # Sample from the group and concatenate
                             sampled_group = np.concatenate(
                                 (
@@ -194,6 +218,13 @@ class EquiBoots:
                     else:
                         # Regular sampling
                         group = self.fairness_df[self.fairness_df[var] == cat].index
+                        if len(group) < self.group_min_size:
+                            Warning(
+                                f"Group '{cat}' for variable '{var}' has less than "
+                                f"{self.group_min_size} samples. "
+                                f"Skipping catategory of this group.")
+                            self.groups_below_min_size[var].append(cat)
+                            continue
                         sampled_group = self.sample_group(
                             group,
                             n_categories,
@@ -202,7 +233,12 @@ class EquiBoots:
                             seeds,
                             self.balanced,
                         )
-
+                        
+                    if sampled_group.size == 0:
+                        Warning(
+                            f"Group '{cat}' for variable '{var}' has no samples. "
+                            f"Skipping category of this group.")
+                        continue
                     groups[var]["indices"][cat] = sampled_group
             bootstrapped_samples.append(groups)
 
@@ -281,6 +317,13 @@ class EquiBoots:
         data = {}
         categories = groups[slicing_var]["categories"]
         for cat in categories:
+            if cat in self.groups_below_min_size[slicing_var]:
+                Warning(
+                    f"Group '{cat}' for variable '{slicing_var}' has less than "
+                    f"{self.group_min_size} samples. "
+                    f"Skipping catategory of this group.")
+                continue
+
             if self.task in [
                 "binary_classification",
                 "multi_label_classification",
