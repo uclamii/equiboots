@@ -104,7 +104,16 @@ def plot_with_layout(
     exclude_groups=0,
     show_grid=True,
 ):
-    """Generic plotting wrapper for single-group, subplots, or overlay modes."""
+    """
+    Master plotting wrapper that handles 3 layout modes:
+    1. Single group plot (if group is passed)
+    2. Subplots mode: one axis per group
+    3. Overlay mode: all groups on one axis
+
+    plot_func : callable
+        Function of signature (ax, data, group_name, color, **kwargs)
+        Must handle a `overlay_mode` kwarg to distinguish plot logic.
+    """
     valid_data = _filter_groups(data, exclude_groups)
     groups = sorted(valid_data.keys())
     color_map = (
@@ -141,11 +150,11 @@ def plot_with_layout(
             plot_func(
                 axes[i], valid_data, g, color_map[g], **plot_kwargs, overlay_mode=False
             )
-        for j in range(i + 1, len(axes)):
+        for j in range(i + 1, len(axes)):  # Hide unused subplots
             axes[j].axis("off")
         fig.suptitle(title)
         plt.tight_layout(rect=[0, 0, 1, 0.95])
-    else:
+    else:  # ---- Mode 3: overlay
         fig, ax = plt.subplots(figsize=figsize, dpi=dpi)
         for g in groups:
             plot_func(ax, valid_data, g, color_map[g], **plot_kwargs, overlay_mode=True)
@@ -268,7 +277,17 @@ def _plot_group_curve_ax(
     single_group=False,
     show_grid=True,
 ):
-    """Plot ROC, PR, or calibration curve for a single group."""
+    """
+    Plot a single ROC, PR, or calibration curve for a group.
+
+    label_mode : str
+        - 'full': includes group name, count, pos/neg breakdown, metric
+        - 'simple': just shows AUC/Brier
+    is_subplot : bool
+        Indicates whether this axis is part of a subplot grid
+    single_group : bool
+        If this is a dedicated single-group plot
+    """
     y_true = data[group]["y_true"]
     y_prob = data[group]["y_prob"]
     total = len(y_true)
@@ -358,7 +377,29 @@ def eq_plot_group_curves(
     exclude_groups=0,
     show_grid=True,
 ):
-    """Plot ROC, PR, or calibration curves by group."""
+    """
+    Plot ROC, PR, or calibration curves by group.
+
+    data : dict - Mapping of group -> {'y_true': ..., 'y_prob': ...}
+    curve_type : str - One of {'roc', 'pr', 'calibration'}
+    n_bins : int - Number of bins for calibration curve
+    decimal_places : int - Decimal precision for AUC or Brier score
+    curve_kwgs : dict - Per-group matplotlib kwargs for curves
+    line_kwgs : dict - Reference line style kwargs
+    title : str - Plot title
+    filename : str - Output filename (no extension)
+    save_path : str or None - Directory to save plots if given
+    figsize : tuple - Size of figure (w, h)
+    dpi : int - Dots per inch (plot resolution)
+    subplots : bool - Plot each group in a subplot
+    n_cols : int - Number of subplot columns
+    n_rows : int or None - Number of subplot rows
+    group : str or None - If provided, plot only this group
+    color_by_group : bool - Use different color per group
+    exclude_groups : int|str|list|set - Exclude groups by name or sample size
+    show_grid : bool - Toggle background grid on/off
+    """
+
     if group and subplots:
         raise ValueError("Cannot use subplots=True when a specific group is selected.")
 
@@ -409,9 +450,21 @@ def eq_plot_group_curves(
 
 
 def interpolate_bootstrapped_curves(
-    boot_sliced_data, grid_x, curve_type="roc", n_bins=10
+    boot_sliced_data,
+    grid_x,
+    curve_type="roc",
+    n_bins=10,
 ):
-    """Interpolate bootstrapped curves over a common x-axis grid."""
+    """
+    Interpolate bootstrapped curves over a common x-axis grid.
+
+    boot_sliced_data : list of dict; each item represents a bootstrap iteration
+                       with group-wise 'y_true' and 'y_prob' arrays.
+    grid_x : np.ndarray; shared x-axis grid over which all curves will be interpolated.
+    curve_type : str; type of curve to interpolate. One of {'roc', 'pr', 'calibration'}.
+    n_bins : int; number of bins to use for calibration curves (ignored for 'roc' and 'pr').
+    """
+
     result = {}
     if curve_type == "calibration":
         bins = np.linspace(0, 1, n_bins + 1)
@@ -423,17 +476,20 @@ def interpolate_bootstrapped_curves(
             try:
                 if curve_type == "roc":
                     x_vals, y_vals, _ = roc_curve(y_true, y_prob)
+                    # Interpolate TPR over the common FPR grid
                     interp_func = interp1d(
                         x_vals, y_vals, bounds_error=False, fill_value=(0, 1)
                     )
                     y_interp = interp_func(grid_x)
                 elif curve_type == "pr":
                     y_vals, x_vals, _ = precision_recall_curve(y_true, y_prob)
+                    # Interpolate Precision over common Recall grid
                     interp_func = interp1d(
                         x_vals, y_vals, bounds_error=False, fill_value=(0, 1)
                     )
                     y_interp = interp_func(grid_x)
                 elif curve_type == "calibration":
+                    # Manually compute average observed outcome per bin
                     y_interp = np.full(n_bins, np.nan)
                     for i in range(n_bins):
                         mask = (y_prob >= bins[i]) & (
@@ -445,7 +501,8 @@ def interpolate_bootstrapped_curves(
                             y_interp[i] = np.mean(y_true[mask])
             except Exception:
                 y_interp = np.full_like(
-                    grid_x if curve_type != "calibration" else np.arange(n_bins), np.nan
+                    grid_x if curve_type != "calibration" else np.arange(n_bins),
+                    np.nan,
                 )
             result.setdefault(group, []).append(y_interp)
     return result, grid_x
@@ -464,9 +521,13 @@ def _plot_bootstrapped_curve_ax(
     bar_every=10,
     brier_scores=None,
 ):
-    """Plot mean curve with confidence band and error bars."""
+    """Plot mean curve with confidence band and error bars for a bootstrapped group."""
+
+    # Aggregate across bootstrap iterations
     mean_y = np.nanmean(y_array, axis=0)
     lower, upper = np.nanpercentile(y_array, [2.5, 97.5], axis=0)
+
+    # Calculate AUC summary stats if not calibration
     aucs = (
         [np.trapz(y, grid_x) for y in y_array if not np.isnan(y).all()]
         if label_prefix != "CAL"
@@ -477,6 +538,7 @@ def _plot_bootstrapped_curve_ax(
         np.percentile(aucs, [2.5, 97.5]) if aucs else (float("nan"), float("nan"))
     )
 
+    # Construct legend label depending on curve type
     if label_prefix == "CAL" and brier_scores:
         scores = brier_scores.get(group, [])
         mean_brier = np.mean(scores) if scores else float("nan")
@@ -489,6 +551,7 @@ def _plot_bootstrapped_curve_ax(
     else:
         label = f"{group} ({label_prefix} = {mean_auc:.2f} [{lower_auc:.2f}, {upper_auc:.2f}])"
 
+    # Set default plotting styles
     curve_kwargs = curve_kwargs or {"color": "#1f77b4"}
     fill_kwargs = fill_kwargs or {
         "alpha": 0.2,
@@ -496,8 +559,11 @@ def _plot_bootstrapped_curve_ax(
     }
     line_kwargs = line_kwargs or DEFAULT_LINE_KWARGS
 
+    # Plot the average curve and its confidence band
     ax.plot(grid_x, mean_y, label=label, **curve_kwargs)
     ax.fill_between(grid_x, lower, upper, **fill_kwargs)
+
+    # Add vertical error bars at regular intervals along the curve
     for j in range(0, len(grid_x), int(np.ceil(len(grid_x) / bar_every))):
         x_val, mean_val = grid_x[j], mean_y[j]
         ax.errorbar(
@@ -512,6 +578,7 @@ def _plot_bootstrapped_curve_ax(
             alpha=0.6,
         )
 
+    # Add reference diagonal (for AUROC and CAL)
     if label_prefix in ["AUROC", "CAL"]:
         ax.plot([0, 1], [0, 1], **line_kwargs)
     ax.set_xlim(0, 1)
@@ -550,7 +617,29 @@ def eq_plot_bootstrapped_group_curves(
     exclude_groups=0,
     show_grid=True,
 ):
-    """Plot bootstrapped curves by group."""
+    """
+    Plot bootstrapped curves by group.
+
+    boot_sliced_data : list - List of bootstrap iterations,
+                       each as a dict of group -> {'y_true', 'y_prob'}
+    curve_type : str - One of {'roc', 'pr', 'calibration'}
+    common_grid : np.ndarray - Shared x-axis grid to interpolate curves over
+    bar_every : int - Show error bars every N points along the curve
+    n_bins : int - Number of bins used for calibration curves
+    title : str - Title for the plot
+    filename : str - Output filename prefix (no extension)
+    save_path : str or None - If given, save plot to this directory
+    figsize : tuple - Size of the figure (width, height)
+    dpi : int - Plot resolution (dots per inch)
+    subplots : bool - Whether to plot each group in its own subplot
+    n_cols : int - Number of subplot columns (ignored if subplots=False)
+    n_rows : int or None - Number of subplot rows (auto if None)
+    group : str or None - If provided, plot only for this group
+    color_by_group : bool - Use different color per group
+    exclude_groups : int|str|list|set - Exclude groups by name or sample size
+    show_grid : bool - Whether to show gridlines on axes
+    """
+
     interp_data, grid_x = interpolate_bootstrapped_curves(
         boot_sliced_data, common_grid, curve_type, n_bins
     )
@@ -635,7 +724,26 @@ def eq_disparity_metrics_plot(
     show_grid=True,
     **plot_kwargs,
 ):
-    """Plot disparity metrics as violin or box plots."""
+    """
+    Plot disparity metrics as violin or box plots.
+
+    dispa : list - List of dictionaries containing group-level disparity metrics
+    metric_cols : list - List of metric keys (e.g., ['precision_diff', 'tpr_gap']) to plot
+    name : str - Prefix for subplot titles
+    plot_kind : str - Type of seaborn plot to use ('violinplot', 'boxplot', etc.)
+    categories : list|str - List of group attributes to include, or 'all' to include all
+    include_legend : bool - Whether to show the attribute legend at top
+    cmap : str - Matplotlib colormap name for attribute colors
+    color_by_group : bool - If True, color groups individually; otherwise use single color
+    save_path : str or None - If provided, saves plot to this path
+    filename : str - Filename to use (no extension needed)
+    max_cols : int or None - Max number of columns in subplot grid (auto if None)
+    strict_layout : bool - Use stricter width/height logic for tighter grid
+    figsize : tuple or None - Manual override for figure size
+    show_grid : bool - Whether to show axis gridlines
+    **plot_kwargs : dict - Additional keyword arguments for the seaborn plot function
+
+    """
     if not isinstance(dispa, list):
         raise TypeError("dispa should be a list")
 
