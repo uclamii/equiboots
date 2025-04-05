@@ -27,14 +27,14 @@ def test_filter_groups_removes_single_class():
     assert "A" not in valid and "B" in valid
 
 
-def test_filter_groups_excludes_below_threshold():
+def test_filter_groups_excludes_above_threshold():
     data = {
         "A": {"y_true": np.array([0, 1])},  # 2 samples
         "B": {"y_true": np.array([0, 1, 0])},  # 3 samples
-        "C": {"y_true": np.array([1])},  # 1 sample
+        "C": {"y_true": np.array([1])},  # 1 sample, single class (excluded)
     }
     valid = plots._filter_groups(data, exclude_groups=2)
-    assert "A" not in valid and "B" in valid and "C" not in valid
+    assert "A" in valid and "B" not in valid and "C" not in valid
 
 
 def test_get_layout_default():
@@ -112,7 +112,8 @@ def test_eq_plot_group_curves_invalid_group(monkeypatch):
         "A": {"y_true": np.array([1, 1, 1]), "y_prob": np.array([0.9, 0.8, 0.95])},
     }
     monkeypatch.setattr(plt, "show", lambda: None)
-    plots.eq_plot_group_curves(data, curve_type="roc")
+    with pytest.raises(Exception, match="No members in group below"):
+        plots.eq_plot_group_curves(data, curve_type="roc")
 
 
 def test_interpolate_bootstrapped_curves_invalid(monkeypatch):
