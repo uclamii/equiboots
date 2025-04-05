@@ -66,7 +66,7 @@ def _filter_groups(data, exclude_groups=0):
     # Handle case where exclude_groups is an integer (minimum sample size threshold)
     if isinstance(exclude_groups, int):
         return {
-            g: v for g, v in valid_data.items() if len(v["y_true"]) > exclude_groups
+            g: v for g, v in valid_data.items() if len(v["y_true"]) <= exclude_groups
         }
 
     raise ValueError("exclude_groups must be an int, str, list, or set")
@@ -114,8 +114,10 @@ def plot_with_layout(
         Function of signature (ax, data, group_name, color, **kwargs)
         Must handle a `overlay_mode` kwarg to distinguish plot logic.
     """
-    valid_data = _filter_groups(data, exclude_groups)
+    valid_data = data
     groups = sorted(valid_data.keys())
+    if len(groups) == 0:
+        raise Exception(f"No members in group below {exclude_groups}.")
     color_map = (
         get_group_color_map(groups)
         if color_by_group
@@ -161,6 +163,9 @@ def plot_with_layout(
         ax.set_title(title)
         ax.legend(**DEFAULT_LEGEND_KWARGS)
         fig.tight_layout(rect=[0, 0, 1, 0.97])
+
+    if show_grid:
+        plt.grid(linestyle=":")
 
     save_or_show_plot(fig, save_path, filename)
 
@@ -226,9 +231,8 @@ def eq_plot_residuals_by_group(
     if group and subplots:
         raise ValueError("Cannot use subplots=True when a specific group is selected.")
 
-    def residual_plot(
-        ax, data, group, color, overlay_mode=False
-    ):  # Added overlay_mode parameter
+    def residual_plot(ax, data, group, color, overlay_mode=False):
+        ax.clear() if not overlay_mode else None
         y_true = data[group].get("y_true", data[group].get("y_actual"))
         y_pred = data[group].get("y_prob", data[group].get("y_pred"))
         label = get_regression_label(y_true, y_pred, group)
@@ -365,7 +369,7 @@ def eq_plot_group_curves(
     curve_kwgs=None,
     line_kwgs=None,
     title="Curve by Group",
-    filename="group_curve",
+    filename="group",
     save_path=None,
     figsize=(8, 6),
     dpi=100,
@@ -399,9 +403,9 @@ def eq_plot_group_curves(
     exclude_groups : int|str|list|set - Exclude groups by name or sample size
     show_grid : bool - Toggle background grid on/off
     """
-
     if group and subplots:
         raise ValueError("Cannot use subplots=True when a specific group is selected.")
+    valid_data = _filter_groups(data, exclude_groups)
 
     def curve_plot(ax, data, group_iter, color, overlay_mode=False):
         # In overlay mode (subplots=False, group=None), use "full" label mode
@@ -426,7 +430,7 @@ def eq_plot_group_curves(
         )
 
     plot_with_layout(
-        data,
+        valid_data,
         curve_plot,
         {},
         title=title,
@@ -663,9 +667,8 @@ def eq_plot_bootstrapped_group_curves(
         else None
     )
 
-    def boot_plot(
-        ax, data, group, color, overlay_mode=False
-    ):  # Added overlay_mode parameter
+    def boot_plot(ax, interp_data, group, color, overlay_mode=False):
+        ax.clear() if not overlay_mode else None
         valid_curves = [y for y in interp_data[group] if not np.isnan(y).all()]
         if not valid_curves:
             print(f"[Warning] Group '{group}' has no valid interpolated curves.")
@@ -684,7 +687,7 @@ def eq_plot_bootstrapped_group_curves(
         )
 
     plot_with_layout(
-        group_data,
+        interp_data,
         boot_plot,
         {},
         title=title,
