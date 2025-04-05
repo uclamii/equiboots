@@ -17,7 +17,7 @@ def test_docstring_exists():
 def test_imports_available():
     # Smoke test to ensure submodules are accessible
     assert hasattr(equiboots, "binary_classification_metrics")
-    assert hasattr(equiboots, "eq_plot_roc_auc")
+    assert hasattr(equiboots, "eq_plot_group_curves")
     assert hasattr(equiboots, "equiboots_logo")
     assert hasattr(equiboots, "EquiBoots")
 
