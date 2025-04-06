@@ -8,7 +8,7 @@ version = "0.0.0a3"
 description = "A Python library for fairness-aware model evaluation, bias auditing, and performance visualization, supporting classification and regression models with robust analytics across demographic groups."
 readme = { file = "README.md", content-type = "text/markdown" }
 authors = [
-    { name = "UCLA CTSI ML Team: Leonid Shpaner, Arthur Funnell, Panayiotis Petousis", email = "pp89@ucla.edu" }
+    { name = "UCLA CTSI ML Team: Leonid Shpaner, Arthur Funnell, Panayiotis Petousis, Al Rahrooh", email = "pp89@ucla.edu" }
 ]
 
 requires-python = ">=3.7.4"
