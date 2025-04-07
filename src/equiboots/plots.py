@@ -25,6 +25,23 @@ DEFAULT_LEGEND_KWARGS = {
     "ncol": 1,
 }
 
+VALID_PLOT_KWARGS = {
+    "color",
+    "linestyle",
+    "linewidth",
+    "marker",
+    "markersize",
+    "alpha",
+    "markeredgecolor",
+    "markeredgewidth",
+    "markerfacecolor",
+    "dash_capstyle",
+    "dash_joinstyle",
+    "solid_capstyle",
+    "solid_joinstyle",
+    "zorder",
+}
+
 
 def save_or_show_plot(fig, save_path=None, filename="plot"):
     """Save plot to file if path is provided, otherwise display it."""
@@ -44,6 +61,12 @@ def get_layout(n_items, n_cols=None, figsize=None, strict_layout=True):
     """Compute layout grid and figure size based on number of items."""
     n_cols = n_cols or (6 if strict_layout else int(np.ceil(np.sqrt(n_items))))
     n_rows = int(np.ceil(n_items / n_cols))
+    # Check if the grid is sufficient to hold all items
+    if n_rows * n_cols < n_items:
+        raise ValueError(
+            f"Subplot grid is too small: {n_rows} rows * {n_cols} cols = {n_rows * n_cols} slots, "
+            f"but {n_items} items need to be plotted. Increase `n_cols` or allow more rows."
+        )
     fig_width, fig_height = figsize or (
         (24, 4 * n_rows) if strict_layout else (5 * n_cols, 5 * n_rows)
     )
@@ -85,6 +108,71 @@ def _get_concatenated_group_data(boot_sliced_data):
         }
         for g in set(g for bs in boot_sliced_data for g in bs)
     }
+
+
+def _validate_plot_data(data, is_bootstrap=False):
+    """
+    Validate plot data for missing y_true/y_prob (or y_pred) and NaN values.
+    """
+    # Convert single dict to a list of one dict for unified processing
+    data_iter = data if is_bootstrap else [data]
+    context = " in bootstrap sample" if is_bootstrap else ""
+
+    for d in data_iter:
+        for g, values in d.items():
+            # Check for missing keys
+            y_true = values.get("y_true", values.get("y_actual"))
+            y_prob = values.get("y_prob", values.get("y_pred"))
+            if y_true is None:
+                raise ValueError(f"y_true missing for group '{g}'{context}")
+            if y_prob is None:
+                raise ValueError(f"y_prob missing for group '{g}'{context}")
+            # Check for NaN values
+            if np.any(np.isnan(y_true)):
+                raise ValueError(f"NaN values found in y_true for group '{g}'{context}")
+            if np.any(np.isnan(y_prob)):
+                raise ValueError(f"NaN values found in y_prob for group '{g}'{context}")
+
+
+def _validate_plot_kwargs(plot_kwargs, valid_groups=None, kwarg_name="plot_kwargs"):
+    """Validate keyword arguments for use in Matplotlib's plot function."""
+    if plot_kwargs is None:
+        return
+
+    if not isinstance(plot_kwargs, dict):
+        raise ValueError(f"{kwarg_name} must be a dictionary, got {type(plot_kwargs)}")
+
+    # If valid_groups is provided, plot_kwargs maps groups to kwargs (curve_kwgs case)
+    if valid_groups is not None:
+        # Check for invalid group names
+        invalid_groups = set(plot_kwargs.keys()) - set(valid_groups)
+        if invalid_groups:
+            raise ValueError(
+                f"{kwarg_name} contains invalid group names: {invalid_groups}"
+            )
+
+        # Validate each group's kwargs
+        for group, kwargs in plot_kwargs.items():
+            if not isinstance(kwargs, dict):
+                raise ValueError(
+                    f"{kwarg_name} for group '{group}' must be a dictionary, got {type(kwargs)}"
+                )
+            # Check for invalid kwargs
+            invalid_kwargs = set(kwargs.keys()) - VALID_PLOT_KWARGS
+            if invalid_kwargs:
+                raise ValueError(
+                    f"{kwarg_name} for group '{group}' contains invalid plot arguments: {invalid_kwargs}. "
+                    f"Valid arguments are: {VALID_PLOT_KWARGS}"
+                )
+    # If `valid_groups` is `Non`e, `plot_kwargs` is a single dict of kwargs (`line_kwgs` case)
+    else:
+        # Check for invalid kwargs
+        invalid_kwargs = set(plot_kwargs.keys()) - VALID_PLOT_KWARGS
+        if invalid_kwargs:
+            raise ValueError(
+                f"{kwarg_name} contains invalid plot arguments: {invalid_kwargs}. "
+                f"Valid arguments are: {VALID_PLOT_KWARGS}"
+            )
 
 
 def plot_with_layout(
@@ -228,6 +316,9 @@ def eq_plot_residuals_by_group(
     show_grid=True,
 ):
     """Plot residuals grouped by subgroup."""
+    # Check for NaN values in y_true and y_pred (or y_prob)
+    _validate_plot_data(data, is_bootstrap=False)
+
     if group and subplots:
         raise ValueError("Cannot use subplots=True when a specific group is selected.")
 
@@ -403,6 +494,14 @@ def eq_plot_group_curves(
     exclude_groups : int|str|list|set - Exclude groups by name or sample size
     show_grid : bool - Toggle background grid on/off
     """
+
+    # Validate plot data (check for missing y_true/y_prob and NaN values)
+    _validate_plot_data(data, is_bootstrap=False)
+
+    # Validate curve_kwgs and line_kwgs before proceeding
+    _validate_plot_kwargs(curve_kwgs, data.keys(), kwarg_name="curve_kwgs")
+    _validate_plot_kwargs(line_kwgs, valid_groups=None, kwarg_name="line_kwgs")
+
     if group and subplots:
         raise ValueError("Cannot use subplots=True when a specific group is selected.")
     valid_data = _filter_groups(data, exclude_groups)
@@ -608,6 +707,7 @@ def eq_plot_bootstrapped_group_curves(
     common_grid=np.linspace(0, 1, 100),
     bar_every=10,
     n_bins=10,
+    line_kwgs=None,
     title="Bootstrapped Curve by Group",
     filename="bootstrapped_curve",
     save_path=None,
@@ -630,6 +730,7 @@ def eq_plot_bootstrapped_group_curves(
     common_grid : np.ndarray - Shared x-axis grid to interpolate curves over
     bar_every : int - Show error bars every N points along the curve
     n_bins : int - Number of bins used for calibration curves
+    line_kwgs : dict - Reference line style kwargs
     title : str - Title for the plot
     filename : str - Output filename prefix (no extension)
     save_path : str or None - If given, save plot to this directory
@@ -643,6 +744,12 @@ def eq_plot_bootstrapped_group_curves(
     exclude_groups : int|str|list|set - Exclude groups by name or sample size
     show_grid : bool - Whether to show gridlines on axes
     """
+
+    # Validate plot data (check for missing y_true/y_prob and NaN values)
+    _validate_plot_data(boot_sliced_data, is_bootstrap=True)
+
+    # Validate line_kwgs before proceeding
+    _validate_plot_kwargs(line_kwgs, valid_groups=None, kwarg_name="line_kwgs")
 
     interp_data, grid_x = interpolate_bootstrapped_curves(
         boot_sliced_data, common_grid, curve_type, n_bins
