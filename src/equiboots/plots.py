@@ -13,6 +13,7 @@ from matplotlib.lines import Line2D
 import seaborn as sns
 
 from .metrics import regression_metrics
+from typing import Dict, List, Optional, Union, Tuple, Set, Callable
 
 ################################################################################
 # Shared Utilities
@@ -43,7 +44,9 @@ VALID_PLOT_KWARGS = {
 }
 
 
-def save_or_show_plot(fig, save_path=None, filename="plot"):
+def save_or_show_plot(
+    fig: plt.Figure, save_path: Optional[str] = None, filename: str = "plot"
+) -> None:
     """Save plot to file if path is provided, otherwise display it."""
     if save_path:
         os.makedirs(save_path, exist_ok=True)
@@ -51,13 +54,18 @@ def save_or_show_plot(fig, save_path=None, filename="plot"):
     plt.show()
 
 
-def get_group_color_map(groups, palette="tab10"):
+def get_group_color_map(groups: List[str], palette: str = "tab10") -> Dict[str, str]:
     """Generate a mapping from group names to colors."""
     colors = plt.get_cmap(palette).colors
     return {g: colors[i % len(colors)] for i, g in enumerate(groups)}
 
 
-def get_layout(n_items, n_cols=None, figsize=None, strict_layout=True):
+def get_layout(
+    n_items: int,
+    n_cols: Optional[int] = None,
+    figsize: Optional[Tuple[float, float]] = None,
+    strict_layout: bool = True,
+) -> Tuple[int, int, Tuple[float, float]]:
     """Compute layout grid and figure size based on number of items."""
     n_cols = n_cols or (6 if strict_layout else int(np.ceil(np.sqrt(n_items))))
     n_rows = int(np.ceil(n_items / n_cols))
@@ -73,7 +81,10 @@ def get_layout(n_items, n_cols=None, figsize=None, strict_layout=True):
     return n_rows, n_cols, (fig_width, fig_height)
 
 
-def _filter_groups(data, exclude_groups=0):
+def _filter_groups(
+    data: Dict[str, Dict[str, np.ndarray]],
+    exclude_groups: Union[int, str, List[str], Set[str]] = 0,
+) -> Dict[str, Dict[str, np.ndarray]]:
     """Filter out groups with one class or based on exclusion criteria."""
     valid_data = {g: v for g, v in data.items() if len(set(v["y_true"])) > 1}
     if not exclude_groups:  # If exclude_groups is 0 or None, return all valid data
@@ -95,7 +106,9 @@ def _filter_groups(data, exclude_groups=0):
     raise ValueError("exclude_groups must be an int, str, list, or set")
 
 
-def _get_concatenated_group_data(boot_sliced_data):
+def _get_concatenated_group_data(
+    boot_sliced_data: List[Dict[str, Dict[str, np.ndarray]]],
+) -> Dict[str, Dict[str, np.ndarray]]:
     """Concatenate bootstrapped data across samples."""
     return {
         g: {
@@ -110,7 +123,13 @@ def _get_concatenated_group_data(boot_sliced_data):
     }
 
 
-def _validate_plot_data(data, is_bootstrap=False):
+def _validate_plot_data(
+    data: Union[
+        Dict[str, Dict[str, np.ndarray]],
+        List[Dict[str, Dict[str, np.ndarray]]],
+    ],
+    is_bootstrap: bool = False,
+) -> None:
     """
     Validate plot data for missing y_true/y_prob (or y_pred) and NaN values.
     """
@@ -134,7 +153,11 @@ def _validate_plot_data(data, is_bootstrap=False):
                 raise ValueError(f"NaN values found in y_prob for group '{g}'{context}")
 
 
-def _validate_plot_kwargs(plot_kwargs, valid_groups=None, kwarg_name="plot_kwargs"):
+def _validate_plot_kwargs(
+    plot_kwargs: Optional[Dict[str, Union[Dict[str, str], Dict[str, float]]]],
+    valid_groups: Optional[List[str]] = None,
+    kwarg_name: str = "plot_kwargs",
+) -> None:
     """Validate keyword arguments for use in Matplotlib's plot function."""
     if plot_kwargs is None:
         return
@@ -176,22 +199,24 @@ def _validate_plot_kwargs(plot_kwargs, valid_groups=None, kwarg_name="plot_kwarg
 
 
 def plot_with_layout(
-    data,
-    plot_func,
-    plot_kwargs,
-    title="Plot",
-    filename="plot",
-    save_path=None,
-    figsize=(8, 6),
-    dpi=100,
-    subplots=False,
-    n_cols=2,
-    n_rows=None,
-    group=None,
-    color_by_group=True,
-    exclude_groups=0,
-    show_grid=True,
-):
+    data: Union[
+        Dict[str, Dict[str, np.ndarray]], List[Dict[str, Dict[str, np.ndarray]]]
+    ],
+    plot_func: Callable,
+    plot_kwargs: Dict,
+    title: str = "Plot",
+    filename: str = "plot",
+    save_path: Optional[str] = None,
+    figsize: Tuple[float, float] = (8, 6),
+    dpi: int = 100,
+    subplots: bool = False,
+    n_cols: int = 2,
+    n_rows: Optional[int] = None,
+    group: Optional[str] = None,
+    color_by_group: bool = True,
+    exclude_groups: Union[int, str, List[str], Set[str]] = 0,
+    show_grid: bool = True,
+) -> None:
     """
     Master plotting wrapper that handles 3 layout modes:
     1. Single group plot (if group is passed)
@@ -264,8 +289,15 @@ def plot_with_layout(
 
 
 def _plot_residuals_ax(
-    ax, y_true, y_pred, label, color, alpha=0.6, show_centroid=True, show_grid=True
-):
+    ax: plt.Axes,
+    y_true: np.ndarray,
+    y_pred: np.ndarray,
+    label: str,
+    color: str,
+    alpha: float = 0.6,
+    show_centroid: bool = True,
+    show_grid: bool = True,
+) -> None:
     """Plot residuals for one group."""
     residuals = y_true - y_pred
     ax.scatter(y_pred, residuals, alpha=alpha, label=label, color=color)
@@ -287,7 +319,7 @@ def _plot_residuals_ax(
     ax.grid(show_grid)
 
 
-def get_regression_label(y_true, y_pred, group):
+def get_regression_label(y_true: np.ndarray, y_pred: np.ndarray, group: str) -> str:
     """Generate label with regression metrics."""
     metrics = regression_metrics(y_true, y_pred)
     return (
@@ -299,22 +331,22 @@ def get_regression_label(y_true, y_pred, group):
 
 
 def eq_plot_residuals_by_group(
-    data,
-    alpha=0.6,
-    show_centroids=False,
-    title="Residuals by Group",
-    filename="residuals_by_group",
-    save_path=None,
-    figsize=(8, 6),
-    dpi=100,
-    subplots=False,
-    n_cols=2,
-    n_rows=None,
-    group=None,
-    color_by_group=True,
-    exclude_groups=0,
-    show_grid=True,
-):
+    data: Dict[str, Dict[str, np.ndarray]],
+    alpha: float = 0.6,
+    show_centroids: bool = False,
+    title: str = "Residuals by Group",
+    filename: str = "residuals_by_group",
+    save_path: Optional[str] = None,
+    figsize: Tuple[float, float] = (8, 6),
+    dpi: int = 100,
+    subplots: bool = False,
+    n_cols: int = 2,
+    n_rows: Optional[int] = None,
+    group: Optional[str] = None,
+    color_by_group: bool = True,
+    exclude_groups: Union[int, str, List[str], Set[str]] = 0,
+    show_grid: bool = True,
+) -> None:
     """Plot residuals grouped by subgroup."""
     # Check for NaN values in y_true and y_pred (or y_prob)
     _validate_plot_data(data, is_bootstrap=False)
@@ -356,22 +388,22 @@ def eq_plot_residuals_by_group(
 
 
 def _plot_group_curve_ax(
-    ax,
-    data,
-    group,
-    color,
-    curve_type="roc",
-    n_bins=10,
-    decimal_places=2,
-    label_mode="full",
-    curve_kwargs=None,
-    line_kwargs=None,
-    show_legend=True,
-    title=None,
-    is_subplot=False,
-    single_group=False,
-    show_grid=True,
-):
+    ax: plt.Axes,
+    data: Dict[str, Dict[str, np.ndarray]],
+    group: str,
+    color: str,
+    curve_type: str = "roc",
+    n_bins: int = 10,
+    decimal_places: int = 2,
+    label_mode: str = "full",
+    curve_kwargs: Optional[Dict[str, Union[str, float]]] = None,
+    line_kwargs: Optional[Dict[str, Union[str, float]]] = None,
+    show_legend: bool = True,
+    title: Optional[str] = None,
+    is_subplot: bool = False,
+    single_group: bool = False,
+    show_grid: bool = True,
+) -> None:
     """
     Plot a single ROC, PR, or calibration curve for a group.
 
@@ -453,25 +485,25 @@ def _plot_group_curve_ax(
 
 
 def eq_plot_group_curves(
-    data,
-    curve_type="roc",
-    n_bins=10,
-    decimal_places=2,
-    curve_kwgs=None,
-    line_kwgs=None,
-    title="Curve by Group",
-    filename="group",
-    save_path=None,
-    figsize=(8, 6),
-    dpi=100,
-    subplots=False,
-    n_cols=2,
-    n_rows=None,
-    group=None,
-    color_by_group=True,
-    exclude_groups=0,
-    show_grid=True,
-):
+    data: Dict[str, Dict[str, np.ndarray]],
+    curve_type: str = "roc",
+    n_bins: int = 10,
+    decimal_places: int = 2,
+    curve_kwgs: Optional[Dict[str, Dict[str, Union[str, float]]]] = None,
+    line_kwgs: Optional[Dict[str, Union[str, float]]] = None,
+    title: str = "Curve by Group",
+    filename: str = "group",
+    save_path: Optional[str] = None,
+    figsize: Tuple[float, float] = (8, 6),
+    dpi: int = 100,
+    subplots: bool = False,
+    n_cols: int = 2,
+    n_rows: Optional[int] = None,
+    group: Optional[str] = None,
+    color_by_group: bool = True,
+    exclude_groups: Union[int, str, List[str], Set[str]] = 0,
+    show_grid: bool = True,
+) -> None:
     """
     Plot ROC, PR, or calibration curves by group.
 
@@ -553,11 +585,11 @@ def eq_plot_group_curves(
 
 
 def interpolate_bootstrapped_curves(
-    boot_sliced_data,
-    grid_x,
-    curve_type="roc",
-    n_bins=10,
-):
+    boot_sliced_data: List[Dict[str, Dict[str, np.ndarray]]],
+    grid_x: np.ndarray,
+    curve_type: str = "roc",
+    n_bins: int = 10,
+) -> Tuple[Dict[str, List[np.ndarray]], np.ndarray]:
     """
     Interpolate bootstrapped curves over a common x-axis grid.
 
@@ -612,18 +644,18 @@ def interpolate_bootstrapped_curves(
 
 
 def _plot_bootstrapped_curve_ax(
-    ax,
-    y_array,
-    grid_x,
-    group,
-    label_prefix="AUROC",
-    curve_kwargs=None,
-    fill_kwargs=None,
-    line_kwargs=None,
-    show_grid=True,  # Already has show_grid parameter
-    bar_every=10,
-    brier_scores=None,
-):
+    ax: plt.Axes,
+    y_array: np.ndarray,
+    grid_x: np.ndarray,
+    group: str,
+    label_prefix: str = "AUROC",
+    curve_kwargs: Optional[Dict[str, Union[str, float]]] = None,
+    fill_kwargs: Optional[Dict[str, Union[str, float]]] = None,
+    line_kwargs: Optional[Dict[str, Union[str, float]]] = None,
+    show_grid: bool = True,
+    bar_every: int = 10,
+    brier_scores: Optional[Dict[str, List[float]]] = None,
+) -> None:
     """Plot mean curve with confidence band and error bars for a bootstrapped group."""
 
     # Aggregate across bootstrap iterations
@@ -702,25 +734,25 @@ def _plot_bootstrapped_curve_ax(
 
 
 def eq_plot_bootstrapped_group_curves(
-    boot_sliced_data,
-    curve_type="roc",
-    common_grid=np.linspace(0, 1, 100),
-    bar_every=10,
-    n_bins=10,
-    line_kwgs=None,
-    title="Bootstrapped Curve by Group",
-    filename="bootstrapped_curve",
-    save_path=None,
-    figsize=(8, 6),
-    dpi=100,
-    subplots=False,
-    n_cols=2,
-    n_rows=None,
-    group=None,
-    color_by_group=True,
-    exclude_groups=0,
-    show_grid=True,
-):
+    boot_sliced_data: List[Dict[str, Dict[str, np.ndarray]]],
+    curve_type: str = "roc",
+    common_grid: np.ndarray = np.linspace(0, 1, 100),
+    bar_every: int = 10,
+    n_bins: int = 10,
+    line_kwgs: Optional[Dict[str, Union[str, float]]] = None,
+    title: str = "Bootstrapped Curve by Group",
+    filename: str = "bootstrapped_curve",
+    save_path: Optional[str] = None,
+    figsize: Tuple[float, float] = (8, 6),
+    dpi: int = 100,
+    subplots: bool = False,
+    n_cols: int = 2,
+    n_rows: Optional[int] = None,
+    group: Optional[str] = None,
+    color_by_group: bool = True,
+    exclude_groups: Union[int, str, List[str], Set[str]] = 0,
+    show_grid: bool = True,
+) -> None:
     """
     Plot bootstrapped curves by group.
 
@@ -818,22 +850,22 @@ def eq_plot_bootstrapped_group_curves(
 
 
 def eq_disparity_metrics_plot(
-    dispa,
-    metric_cols,
-    name,
-    plot_kind="violinplot",
-    categories="all",
-    include_legend=True,
-    cmap="tab20c",
-    color_by_group=True,
-    save_path=None,
-    filename="Disparity_Metrics",
-    max_cols=None,
-    strict_layout=True,
-    figsize=None,
-    show_grid=True,
-    **plot_kwargs,
-):
+    dispa: List[Dict[str, Dict[str, float]]],
+    metric_cols: List[str],
+    name: str,
+    plot_kind: str = "violinplot",
+    categories: Union[str, List[str]] = "all",
+    include_legend: bool = True,
+    cmap: str = "tab20c",
+    color_by_group: bool = True,
+    save_path: Optional[str] = None,
+    filename: str = "Disparity_Metrics",
+    max_cols: Optional[int] = None,
+    strict_layout: bool = True,
+    figsize: Optional[Tuple[float, float]] = None,
+    show_grid: bool = True,
+    **plot_kwargs: Dict[str, Union[str, float]],
+) -> None:
     """
     Plot disparity metrics as violin or box plots.
 
