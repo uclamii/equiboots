@@ -1,12 +1,3 @@
-import matplotlib.pyplot as plt
-from sklearn.metrics import (
-    roc_curve,
-    auc,
-    precision_recall_curve,
-    average_precision_score,
-    brier_score_loss,
-)
-from sklearn.calibration import calibration_curve
 import numpy as np
 import pandas as pd
 import equiboots as eqb
@@ -59,4 +50,14 @@ if __name__ == "__main__":
     melted = pd.DataFrame(dispa).melt()
     df = melted["value"].apply(pd.Series).assign(attribute_value=melted["variable"])
 
-    eqb.eq_plot_roc_auc_bootstrap(race_metrics)
+    eqb.eq_plot_bootstrapped_group_curves(
+        boot_sliced_data=data,
+        curve_type="roc",
+        title="Bootstrapped ROC Curve by Race",
+        filename="boot_roc_race",
+        # bar_every=100,
+        dpi=100,
+        n_bins=10,
+        figsize=(6, 6),
+        color_by_group=True,
+    )
