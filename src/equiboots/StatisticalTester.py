@@ -24,9 +24,8 @@ class StatisticalTester:
         "mann_whitney": "Mann-Whitney U test (non-parametric)",
         "t_test": "Welch's t-test (parametric)",
         "ks_test": "Kolmogorov-Smirnov test",
-        "bootstrap_test": "Bootstrap-based permutation test",
-        "wilcoxon": "Wilcoxon signed-rank test",
-        "permutation": "Custom permutation test"
+        "permutation": "Permutation test (non-parametric)",
+        "wilcoxon": "Wilcoxon signed-rank test"
     }
     
     ADJUSTMENT_METHODS = {
@@ -42,68 +41,106 @@ class StatisticalTester:
             "mann_whitney": self._mann_whitney_test,
             "t_test": self._t_test,
             "ks_test": self._ks_test,
-            "bootstrap_test": self._bootstrap_test,
-            "wilcoxon": self._wilcoxon_test,
-            "permutation": self._permutation_test
+            "permutation": self._bootstrap_test,
+            "wilcoxon": self._wilcoxon_test
         }
 
     def _mann_whitney_test(self, ref_data: Union[float, List[float]], comp_data: Union[float, List[float]], config: Dict[str, Any]) -> StatTestResult:
-        """Performs Mann-Whitney U test for non-parametric comparison."""
+        """Performs Mann-Whitney U test using pingouin for non-parametric comparison.
+        
+        Args:
+            ref_data: List of values from reference group
+            comp_data: List of values from comparison group
+            config: Configuration dictionary containing test parameters
+            
+        Returns:
+            StatTestResult object containing test results
+        """
         if isinstance(ref_data, (int, float)):
             ref_data = [ref_data]
         if isinstance(comp_data, (int, float)):
             comp_data = [comp_data]
             
-        statistic, p_value = stats.mannwhitneyu(
-            ref_data,
-            comp_data,
+        # Convert to numpy arrays
+        ref_array = np.array(ref_data)
+        comp_array = np.array(comp_data)
+        
+        # Use pingouin's implementation
+        result = pg.mwu(
+            ref_array,
+            comp_array,
             alternative=config.get("alternative", "two-sided")
         )
         
-        effect_size = self._calculate_effect_size(ref_data, comp_data)
-        
         return StatTestResult(
-            statistic=statistic,
-            p_value=p_value,
-            is_significant=p_value < config.get("alpha", 0.05),
+            statistic=result['U-val'].iloc[0],
+            p_value=result['p-val'].iloc[0],
+            is_significant=result['p-val'].iloc[0] < config.get("alpha", 0.05),
             test_name="Mann-Whitney U",
-            effect_size=effect_size
+            effect_size=result['RBC'].iloc[0]  # Rank-biserial correlation as effect size
         )
 
     def _t_test(self, ref_data: Union[float, List[float]], comp_data: Union[float, List[float]], config: Dict[str, Any]) -> StatTestResult:
-        """Performs Welch's t-test for parametric comparison."""
+        """Performs Welch's t-test using pingouin for parametric comparison.
+        
+        Args:
+            ref_data: List of values from reference group
+            comp_data: List of values from comparison group
+            config: Configuration dictionary containing test parameters
+            
+        Returns:
+            StatTestResult object containing test results
+        """
         if isinstance(ref_data, (int, float)):
             ref_data = [ref_data]
         if isinstance(comp_data, (int, float)):
             comp_data = [comp_data]
             
-        statistic, p_value = stats.ttest_ind(
-            ref_data,
-            comp_data,
-            equal_var=False,
+        # Convert to numpy arrays
+        ref_array = np.array(ref_data)
+        comp_array = np.array(comp_data)
+        
+        # Use pingouin's implementation
+        result = pg.ttest(
+            ref_array,
+            comp_array,
+            paired=False,
             alternative=config.get("alternative", "two-sided")
         )
         
-        effect_size = self._calculate_effect_size(ref_data, comp_data)
-        
         return StatTestResult(
-            statistic=statistic,
-            p_value=p_value,
-            is_significant=p_value < config.get("alpha", 0.05),
+            statistic=result['T'].iloc[0],
+            p_value=result['p-val'].iloc[0],
+            is_significant=result['p-val'].iloc[0] < config.get("alpha", 0.05),
             test_name="Welch's t-test",
-            effect_size=effect_size
+            effect_size=result['cohen-d'].iloc[0],
+            confidence_interval=(result['CI95%'].iloc[0][0], result['CI95%'].iloc[0][1])
         )
 
     def _ks_test(self, ref_data: Union[float, List[float]], comp_data: Union[float, List[float]], config: Dict[str, Any]) -> StatTestResult:
-        """Performs Kolmogorov-Smirnov test for distribution comparison."""
+        """Performs Kolmogorov-Smirnov test using scipy for distribution comparison.
+        
+        Args:
+            ref_data: List of values from reference group
+            comp_data: List of values from comparison group
+            config: Configuration dictionary containing test parameters
+            
+        Returns:
+            StatTestResult object containing test results
+        """
         if isinstance(ref_data, (int, float)):
             ref_data = [ref_data]
         if isinstance(comp_data, (int, float)):
             comp_data = [comp_data]
             
-        statistic, p_value = stats.ks_2samp(ref_data, comp_data)
+        # Convert to numpy arrays
+        ref_array = np.array(ref_data)
+        comp_array = np.array(comp_data)
         
-        effect_size = self._calculate_effect_size(ref_data, comp_data)
+        # Use scipy's implementation
+        statistic, p_value = stats.ks_2samp(ref_array, comp_array)
+        
+        effect_size = self._calculate_effect_size(ref_array, comp_array)
         
         return StatTestResult(
             statistic=statistic,
@@ -379,90 +416,80 @@ class StatisticalTester:
         return organized_data
 
     def _bootstrap_test(self, ref_distribution: List[float], comp_distribution: List[float], config: Dict[str, Any]) -> StatTestResult:
-        """Performs bootstrap test with confidence intervals."""
-        mean_diff = np.mean(comp_distribution) - np.mean(ref_distribution)
+        """Performs permutation test with confidence intervals.
         
-        combined = np.concatenate([ref_distribution, comp_distribution])
-        n_ref = len(ref_distribution)
-        n_iterations = config["bootstrap_iterations"]
+        Args:
+            ref_distribution: List of values from reference group
+            comp_distribution: List of values from comparison group
+            config: Configuration dictionary containing test parameters
+            
+        Returns:
+            StatTestResult object containing test results
+        """
+        # Convert to numpy arrays
+        ref_array = np.array(ref_distribution)
+        comp_array = np.array(comp_distribution)
         
-        diff_distribution = []
-        for _ in range(n_iterations):
-            np.random.shuffle(combined)
-            perm_ref = combined[:n_ref]
-            perm_comp = combined[n_ref:]
-            diff_distribution.append(np.mean(perm_comp) - np.mean(perm_ref))
+        # Define the test statistic (mean difference)
+        def statistic(x, y):
+            return np.mean(y) - np.mean(x)
         
-        p_value = np.mean(np.abs(diff_distribution) >= np.abs(mean_diff))
+        # Perform permutation test
+        result = stats.permutation_test(
+            (ref_array, comp_array),
+            statistic,
+            n_resamples=config.get("bootstrap_iterations", 1000),
+            alternative=config.get("alternative", "two-sided"),
+            random_state=42  # For reproducibility
+        )
         
-        ci_level = config["confidence_level"]
-        ci_lower = np.percentile(diff_distribution, (1 - ci_level) * 100 / 2)
-        ci_upper = np.percentile(diff_distribution, (1 + ci_level) * 100 / 2)
+        # Calculate confidence intervals using bootstrap
+        ci_level = config.get("confidence_level", 0.95)
+        ci_lower = np.percentile(result.null_distribution, (1 - ci_level) * 100 / 2)
+        ci_upper = np.percentile(result.null_distribution, (1 + ci_level) * 100 / 2)
         
         effect_size = self._calculate_effect_size(ref_distribution, comp_distribution)
         
         return StatTestResult(
-            statistic=mean_diff,
-            p_value=p_value,
-            is_significant=p_value < config["alpha"],
-            test_name="Bootstrap Test",
+            statistic=result.statistic,
+            p_value=result.pvalue,
+            is_significant=result.pvalue < config.get("alpha", 0.05),
+            test_name="Permutation Test",
             effect_size=effect_size,
             confidence_interval=(ci_lower, ci_upper)
         )
 
     def _wilcoxon_test(self, ref_data: Union[float, List[float]], comp_data: Union[float, List[float]], config: Dict[str, Any]) -> StatTestResult:
-        """Performs Wilcoxon signed-rank test for paired samples."""
+        """Performs Wilcoxon signed-rank test using pingouin for paired samples.
+        
+        Args:
+            ref_data: List of values from reference group
+            comp_data: List of values from comparison group
+            config: Configuration dictionary containing test parameters
+            
+        Returns:
+            StatTestResult object containing test results
+        """
         if isinstance(ref_data, (int, float)):
             ref_data = [ref_data]
         if isinstance(comp_data, (int, float)):
             comp_data = [comp_data]
             
-        statistic, p_value = stats.wilcoxon(
-            ref_data,
-            comp_data,
+        # Convert to numpy arrays
+        ref_array = np.array(ref_data)
+        comp_array = np.array(comp_data)
+        
+        # Use pingouin's implementation
+        result = pg.wilcoxon(
+            ref_array,
+            comp_array,
             alternative=config.get("alternative", "two-sided")
         )
         
-        effect_size = self._calculate_effect_size(ref_data, comp_data)
-        
         return StatTestResult(
-            statistic=statistic,
-            p_value=p_value,
-            is_significant=p_value < config["alpha"],
+            statistic=result['W-val'].iloc[0],
+            p_value=result['p-val'].iloc[0],
+            is_significant=result['p-val'].iloc[0] < config.get("alpha", 0.05),
             test_name="Wilcoxon Signed-Rank Test",
-            effect_size=effect_size
-        )
-
-    def _permutation_test(self, ref_data: Union[float, List[float]], comp_data: Union[float, List[float]], config: Dict[str, Any]) -> StatTestResult:
-        """Performs custom permutation test with user-defined test statistic."""
-        test_stat_func = config.get("test_statistic", lambda x, y: np.mean(x) - np.mean(y))
-        
-        if isinstance(ref_data, (int, float)):
-            ref_data = [ref_data]
-        if isinstance(comp_data, (int, float)):
-            comp_data = [comp_data]
-        
-        observed_stat = test_stat_func(ref_data, comp_data)
-        
-        combined = np.concatenate([ref_data, comp_data])
-        n_ref = len(ref_data)
-        n_iterations = config["bootstrap_iterations"]
-        
-        perm_stats = []
-        for _ in range(n_iterations):
-            np.random.shuffle(combined)
-            perm_ref = combined[:n_ref]
-            perm_comp = combined[n_ref:]
-            perm_stats.append(test_stat_func(perm_ref, perm_comp))
-        
-        p_value = np.mean(np.abs(perm_stats) >= np.abs(observed_stat))
-        
-        effect_size = self._calculate_effect_size(ref_data, comp_data)
-        
-        return StatTestResult(
-            statistic=observed_stat,
-            p_value=p_value,
-            is_significant=p_value < config["alpha"],
-            test_name="Custom Permutation Test",
-            effect_size=effect_size
+            effect_size=result['RBC'].iloc[0]  # Rank-biserial correlation as effect size
         ) 

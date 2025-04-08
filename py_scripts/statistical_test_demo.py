@@ -12,14 +12,6 @@ def create_test_configs() -> Dict[str, Dict[str, Any]]:
     return {
         "default": None,  # Use default settings
         
-        "bootstrap": {
-            "test_type": "bootstrap_test",
-            "alpha": 0.01,
-            "adjust_method": "fdr_bh",
-            "bootstrap_iterations": 2000,
-            "confidence_level": 0.99
-        },
-        
         "parametric": {
             "test_type": "t_test",
             "alpha": 0.05,
@@ -34,12 +26,26 @@ def create_test_configs() -> Dict[str, Dict[str, Any]]:
             "alternative": "two-sided"
         },
         
-        "custom_statistic": {
-            "test_type": "permutation",
-            "test_statistic": lambda x, y: np.median(x) - np.median(y),
-            "bootstrap_iterations": 1000,
+        "distribution": {
+            "test_type": "ks_test",
             "alpha": 0.05,
-            "adjust_method": "none"
+            "adjust_method": "fdr_bh",
+            "alternative": "two-sided"
+        },
+        
+        "permutation": {
+            "test_type": "permutation",
+            "alpha": 0.05,
+            "adjust_method": "none",
+            "bootstrap_iterations": 1000,
+            "confidence_level": 0.95
+        },
+        
+        "paired": {
+            "test_type": "wilcoxon",
+            "alpha": 0.05,
+            "adjust_method": "bonferroni",
+            "alternative": "two-sided"
         }
     }
 
@@ -134,7 +140,7 @@ def test_statistical_significance(task: str = "binary_classification", n_samples
         num_bootstraps=100,
         boot_sample_size=200,
         balanced=True,
-        stratify_by_outcome=True if task != "regression" else False  # Don't stratify for regression
+        stratify_by_outcome=True if task != "regression" else False
     )
 
     # Set fixed seeds for reproducibility
@@ -205,19 +211,25 @@ def plot_metrics_with_significance(
                 significance = ""
                 effect_size = None
                 p_value = None
+                ci_lower = None
+                ci_upper = None
                 if group in stat_results and metric in stat_results[group]:
                     result = stat_results[group][metric]
                     if result.is_significant:
                         significance = "*"
                     effect_size = result.effect_size
                     p_value = result.p_value
+                    if result.confidence_interval:
+                        ci_lower, ci_upper = result.confidence_interval
                 plot_data.append({
                     "Group": group,
                     "Metric": metric,
                     "Value": value,
                     "Significance": significance,
                     "Effect Size": effect_size,
-                    "P-value": p_value
+                    "P-value": p_value,
+                    "CI Lower": ci_lower,
+                    "CI Upper": ci_upper
                 })
     
     df = pd.DataFrame(plot_data)
@@ -247,10 +259,13 @@ def plot_metrics_with_significance(
             
             # Add effect size and p-value
             if row["Effect Size"] is not None:
+                effect_size_text = f'd={row["Effect Size"]:.2f}\np={row["P-value"]:.3f}'
+                if row["CI Lower"] is not None and row["CI Upper"] is not None:
+                    effect_size_text += f'\nCI: ({row["CI Lower"]:.2f}, {row["CI Upper"]:.2f})'
                 g.text(
                     x_pos,
                     y_pos,
-                    f'd={row["Effect Size"]:.2f}\np={row["P-value"]:.3f}',
+                    effect_size_text,
                     ha='center',
                     va='top',
                     fontsize=8
@@ -382,7 +397,7 @@ def test_all_group_comparisons(task: str = "binary_classification", n_samples: i
         },
         
         "liberal": {
-            "test_type": "bootstrap_test",
+            "test_type": "permutation",
             "alpha": 0.05,
             "adjust_method": "fdr_bh",  # Less conservative adjustment
             "bootstrap_iterations": 1000,
