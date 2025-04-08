@@ -17,6 +17,10 @@ class StatTestResult:
     effect_size: Optional[float] = None
     confidence_interval: Optional[Tuple[float, float]] = None
 
+    def __post_init__(self):
+        # Ensure is_significant is a Python bool
+        self.is_significant = bool(self.is_significant)
+
 class StatisticalTester:
     """Performs statistical significance testing on metrics with support for various tests and data types."""
     
@@ -410,8 +414,9 @@ class StatisticalTester:
                 for metric, value in bootstrap_sample[group].items():
                     if isinstance(value, (int, float, np.ndarray)):
                         if isinstance(value, (int, float)):
-                            value = np.array([value])
-                        organized_data[group][metric].extend(value)
+                            organized_data[group][metric].append(float(value))
+                        else:
+                            organized_data[group][metric].extend(value)
         
         return organized_data
 

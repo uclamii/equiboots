@@ -495,9 +495,9 @@ def test_all_group_comparisons_with_p_value_adjustment():
 
 def test_equiboots_all_group_comparisons():
     """Test all-group comparisons through EquiBoots class."""
-    # Create synthetic data
+    # Create synthetic data with positive values
     n_samples = 100
-    y_true = np.random.normal(0, 1, n_samples)
+    y_true = np.abs(np.random.normal(5, 1, n_samples))  # Ensure positive values
     y_pred = y_true + np.random.normal(0, 0.1, n_samples)
     y_prob = None
     
@@ -576,21 +576,20 @@ def test_equiboots_all_group_comparisons():
         )
         
         # Check that results are returned for all groups
-        groups = ["white", "black", "asian", "hispanic"]
+        groups = ["black", "asian", "hispanic"]  # Exclude reference group
         assert set(results.keys()) == set(groups)
         
         # Check that each group has results for all metrics
         for group in groups:
-            if group != "white":  # Skip reference group
-                assert isinstance(results[group], dict)
-                for metric, result in results[group].items():
-                    assert isinstance(result, StatTestResult)
-                    assert isinstance(result.statistic, float)
-                    assert isinstance(result.p_value, float)
-                    assert isinstance(result.is_significant, bool)
-                    assert isinstance(result.test_name, str)
-                    assert isinstance(result.effect_size, float)
-                    if result.confidence_interval:
-                        assert isinstance(result.confidence_interval, tuple)
-                        assert len(result.confidence_interval) == 2
-                        assert all(isinstance(x, float) for x in result.confidence_interval) 
+            assert isinstance(results[group], dict)
+            for metric, result in results[group].items():
+                assert isinstance(result, StatTestResult)
+                assert isinstance(result.statistic, float)
+                assert isinstance(result.p_value, float)
+                assert isinstance(result.is_significant, bool)
+                assert isinstance(result.test_name, str)
+                assert isinstance(result.effect_size, float)
+                if result.confidence_interval:
+                    assert isinstance(result.confidence_interval, tuple)
+                    assert len(result.confidence_interval) == 2
+                    assert all(isinstance(x, float) for x in result.confidence_interval) 
