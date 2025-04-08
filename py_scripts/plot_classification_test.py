@@ -34,19 +34,13 @@ if __name__ == "__main__":
     eqb.eq_plot_group_curves(
         sliced_data,
         curve_type="pr",
-        # filename="bla",
         title="ROC AUC by Race Group",
         n_bins=10,
-        # group="black",
-        # exclude_groups=["black", "asian"],
     )
 
     eqb.eq_plot_group_curves(
         sliced_data,
         curve_type="roc",
-        # filename="bla",
         title="ROC AUC by Race Group",
         n_bins=10,
-        # group="black",
-        # exclude_groups=["black", "asian"],
     )
