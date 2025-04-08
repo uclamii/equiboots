@@ -4,6 +4,8 @@ from scipy import stats
 from statsmodels.stats.multitest import multipletests
 from typing import Dict, List, Tuple, Optional, Union, Any
 from dataclasses import dataclass
+import pingouin as pg
+
 
 @dataclass
 class StatTestResult:
@@ -112,9 +114,22 @@ class StatisticalTester:
         )
 
     def _calculate_effect_size(self, ref_data: List[float], comp_data: List[float]) -> float:
-        """Calculates Cohen's d effect size using scipy.stats."""
-        from scipy.stats import cohen_d
-        return cohen_d(comp_data, ref_data)
+        """Calculates Cohen's d effect size using pingouin.
+        
+        Args:
+            ref_data: List of values from reference group
+            comp_data: List of values from comparison group
+            
+        Returns:
+            float: Cohen's d effect size
+        """
+        # Convert lists to numpy arrays
+        ref_array = np.array(ref_data)
+        comp_array = np.array(comp_data)
+        
+        # Calculate Cohen's d using pingouin
+        effect_size = pg.compute_effsize(ref_array, comp_array, eftype='cohen')
+        return effect_size
 
     def _adjust_p_values(self, results: Dict[str, Dict[str, StatTestResult]], method: str, alpha: float) -> Dict[str, Dict[str, StatTestResult]]:
         """Adjusts p-values for multiple comparisons using specified method."""
@@ -364,33 +379,26 @@ class StatisticalTester:
         return organized_data
 
     def _bootstrap_test(self, ref_distribution: List[float], comp_distribution: List[float], config: Dict[str, Any]) -> StatTestResult:
-        """Performs bootstrap test using scipy.stats.bootstrap."""
-        from scipy.stats import bootstrap
+        """Performs bootstrap test with confidence intervals."""
+        mean_diff = np.mean(comp_distribution) - np.mean(ref_distribution)
         
-        def statistic(x, y):
-            return np.mean(y) - np.mean(x)
-            
-        # Convert to numpy arrays
-        ref_data = np.array(ref_distribution)
-        comp_data = np.array(comp_distribution)
+        combined = np.concatenate([ref_distribution, comp_distribution])
+        n_ref = len(ref_distribution)
+        n_iterations = config["bootstrap_iterations"]
         
-        # Perform bootstrap
-        bootstrap_result = bootstrap(
-            data=(ref_data, comp_data),
-            statistic=statistic,
-            n_resamples=config["bootstrap_iterations"],
-            confidence_level=config["confidence_level"],
-            method='percentile'
-        )
+        diff_distribution = []
+        for _ in range(n_iterations):
+            np.random.shuffle(combined)
+            perm_ref = combined[:n_ref]
+            perm_comp = combined[n_ref:]
+            diff_distribution.append(np.mean(perm_comp) - np.mean(perm_ref))
         
-        # Calculate p-value
-        mean_diff = statistic(ref_data, comp_data)
-        p_value = np.mean(np.abs(bootstrap_result.bootstrap_distribution) >= np.abs(mean_diff))
+        p_value = np.mean(np.abs(diff_distribution) >= np.abs(mean_diff))
         
-        # Get confidence interval
-        ci_lower, ci_upper = bootstrap_result.confidence_interval
+        ci_level = config["confidence_level"]
+        ci_lower = np.percentile(diff_distribution, (1 - ci_level) * 100 / 2)
+        ci_upper = np.percentile(diff_distribution, (1 + ci_level) * 100 / 2)
         
-        # Calculate effect size
         effect_size = self._calculate_effect_size(ref_distribution, comp_distribution)
         
         return StatTestResult(
