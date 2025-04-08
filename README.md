@@ -101,31 +101,33 @@ The `StatisticalTester` class provides a comprehensive suite of statistical test
    - Non-parametric test for comparing two independent samples
    - Suitable for ordinal or continuous data
    - Robust to non-normal distributions
+   - Effect size: Rank-biserial correlation
 
 2. **Welch's t-test**
    - Parametric test for comparing two independent samples
    - Handles unequal variances
    - Assumes approximately normal distributions
+   - Effect size: Cohen's d
+   - Confidence intervals: Parametric
 
 3. **Kolmogorov-Smirnov Test**
    - Non-parametric test for comparing distributions
    - Tests for differences in shape and location
    - Suitable for continuous data
+   - Effect size: Maximum distance between CDFs
 
-4. **Bootstrap Test**
-   - Resampling-based test for any test statistic
-   - Provides confidence intervals
+4. **Permutation Test**
+   - Non-parametric test using resampling
    - Makes minimal assumptions about data distribution
+   - Provides confidence intervals from null distribution
+   - Effect size: Mean difference
+   - Confidence intervals: Bootstrap-based
 
 5. **Wilcoxon Signed-Rank Test**
    - Non-parametric test for paired samples
    - Suitable for ordinal or continuous data
    - Handles non-normal distributions
-
-6. **Permutation Test**
-   - Customizable test for any test statistic
-   - Makes minimal assumptions
-   - Flexible for various comparison scenarios
+   - Effect size: Rank-biserial correlation
 
 ## Multiple Comparison Adjustments
 
@@ -164,7 +166,12 @@ metrics_data = {
 results = tester.analyze_metrics(
     metrics_data,
     reference_group='group1',
-    test_config={"alpha": 0.05}
+    test_config={
+        "test_type": "permutation",
+        "alpha": 0.05,
+        "bootstrap_iterations": 1000,
+        "confidence_level": 0.95
+    }
 )
 ```
 
@@ -191,12 +198,12 @@ The statistical tests accept a configuration dictionary with the following optio
 
 ```python
 config = {
+    "test_type": "permutation",       # Type of test to perform
     "alpha": 0.05,                    # Significance level
     "alternative": "two-sided",       # Alternative hypothesis
     "bootstrap_iterations": 1000,     # Number of bootstrap samples
     "confidence_level": 0.95,         # Confidence level for intervals
     "adjust_method": "none",          # Multiple comparison adjustment
-    "test_statistic": None           # Custom test statistic function
 }
 ```
 
@@ -204,13 +211,14 @@ config = {
 
 - Cohen's d for parametric tests
 - Rank-biserial correlation for non-parametric tests
-- Custom effect size calculations for specialized tests
+- Maximum distance between CDFs for KS test
+- Mean difference for permutation test
 
 ## Confidence Intervals
 
-- Bootstrap-based confidence intervals
-- Parametric confidence intervals where appropriate
-- Custom interval calculations for specialized tests
+- Bootstrap-based confidence intervals for permutation tests
+- Parametric confidence intervals for t-tests
+- Null distribution-based intervals for permutation tests
 
 ## Best Practices
 
@@ -218,6 +226,7 @@ config = {
    - Use parametric tests for normally distributed data
    - Use non-parametric tests for skewed or ordinal data
    - Consider sample size when choosing tests
+   - Use permutation tests for robust comparisons
 
 2. **Multiple Comparisons**
    - Use appropriate adjustment methods based on the number of comparisons
