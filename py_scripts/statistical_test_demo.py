@@ -12,39 +12,19 @@ def create_test_configs() -> Dict[str, Dict[str, Any]]:
     return {
         "default": None,  # Use default settings
         
-        "parametric": {
-            "test_type": "t_test",
+        "liberal": {
+            "test_type": "permutation",  # More sensitive test
             "alpha": 0.05,
-            "adjust_method": "bonferroni",
-            "alternative": "two-sided"
-        },
-        
-        "non_parametric": {
-            "test_type": "mann_whitney",
-            "alpha": 0.05,
-            "adjust_method": "holm",
-            "alternative": "two-sided"
-        },
-        
-        "distribution": {
-            "test_type": "ks_test",
-            "alpha": 0.05,
-            "adjust_method": "fdr_bh",
-            "alternative": "two-sided"
-        },
-        
-        "permutation": {
-            "test_type": "permutation",
-            "alpha": 0.05,
-            "adjust_method": "none",
+            "adjust_method": "none",  # No adjustment
             "bootstrap_iterations": 1000,
-            "confidence_level": 0.95
+            "confidence_level": 0.95,
+            "alternative": "two-sided"
         },
         
-        "paired": {
-            "test_type": "wilcoxon",
-            "alpha": 0.05,
-            "adjust_method": "bonferroni",
+        "non_liberal": {
+            "test_type": "mann_whitney",  # More conservative test
+            "alpha": 0.01,  # More conservative alpha
+            "adjust_method": "bonferroni",  # Most conservative adjustment
             "alternative": "two-sided"
         }
     }
@@ -382,26 +362,20 @@ def test_all_group_comparisons(task: str = "binary_classification", n_samples: i
     test_configs = {
         "default": None,  # Use default settings
         
-        "conservative": {
-            "test_type": "mann_whitney",
+        "liberal": {
+            "test_type": "permutation",  # More sensitive test
+            "alpha": 0.05,
+            "adjust_method": "none",  # No adjustment
+            "bootstrap_iterations": 1000,
+            "confidence_level": 0.95,
+            "alternative": "two-sided"
+        },
+        
+        "non_liberal": {
+            "test_type": "mann_whitney",  # More conservative test
             "alpha": 0.01,  # More conservative alpha
             "adjust_method": "bonferroni",  # Most conservative adjustment
             "alternative": "two-sided"
-        },
-        
-        "balanced": {
-            "test_type": "t_test",
-            "alpha": 0.05,
-            "adjust_method": "holm",  # Balanced adjustment
-            "alternative": "two-sided"
-        },
-        
-        "liberal": {
-            "test_type": "permutation",
-            "alpha": 0.05,
-            "adjust_method": "fdr_bh",  # Less conservative adjustment
-            "bootstrap_iterations": 1000,
-            "confidence_level": 0.95
         }
     }
     
