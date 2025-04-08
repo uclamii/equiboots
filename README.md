@@ -30,6 +30,7 @@ The following dependencies will be automatically installed with `equiboots`:
 `tqdm==4.66.4`  
 `ucimlrepo==0.0.7`  
 `statsmodels>=0.13.0`  
+`pingouin>=0.5.3`  
 
 ## 💾 Installation
 
