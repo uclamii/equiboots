@@ -41,7 +41,7 @@ class StatisticalTester:
             "mann_whitney": self._mann_whitney_test,
             "t_test": self._t_test,
             "ks_test": self._ks_test,
-            "permutation": self._bootstrap_test,
+            "permutation": self._permutation_test,
             "wilcoxon": self._wilcoxon_test
         }
 
@@ -385,7 +385,7 @@ class StatisticalTester:
                 
             results[group] = {}
             for metric_name in group_distributions.keys():
-                test_result = self._bootstrap_test(
+                test_result = self._permutation_test(
                     ref_distributions[metric_name],
                     group_distributions[metric_name],
                     config
@@ -415,7 +415,7 @@ class StatisticalTester:
         
         return organized_data
 
-    def _bootstrap_test(self, ref_distribution: List[float], comp_distribution: List[float], config: Dict[str, Any]) -> StatTestResult:
+    def _permutation_test(self, ref_distribution: List[float], comp_distribution: List[float], config: Dict[str, Any]) -> StatTestResult:
         """Performs permutation test with confidence intervals.
         
         Args:
