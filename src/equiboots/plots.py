@@ -45,17 +45,27 @@ VALID_PLOT_KWARGS = {
 
 
 def save_or_show_plot(
-    fig: plt.Figure, save_path: Optional[str] = None, filename: str = "plot"
+    fig: plt.Figure,
+    save_path: Optional[str] = None,
+    filename: str = "plot",
 ) -> None:
     """Save plot to file if path is provided, otherwise display it."""
+
     if save_path:
         os.makedirs(save_path, exist_ok=True)
-        fig.savefig(os.path.join(save_path, f"{filename}.png"), bbox_inches="tight")
+        fig.savefig(
+            os.path.join(save_path, f"{filename}.png"),
+            bbox_inches="tight",
+        )
     plt.show()
 
 
-def get_group_color_map(groups: List[str], palette: str = "tab10") -> Dict[str, str]:
+def get_group_color_map(
+    groups: List[str],
+    palette: str = "tab10",
+) -> Dict[str, str]:
     """Generate a mapping from group names to colors."""
+
     colors = plt.get_cmap(palette).colors
     return {g: colors[i % len(colors)] for i, g in enumerate(groups)}
 
@@ -67,13 +77,15 @@ def get_layout(
     strict_layout: bool = True,
 ) -> Tuple[int, int, Tuple[float, float]]:
     """Compute layout grid and figure size based on number of items."""
+
     n_cols = n_cols or (6 if strict_layout else int(np.ceil(np.sqrt(n_items))))
     n_rows = int(np.ceil(n_items / n_cols))
     # Check if the grid is sufficient to hold all items
     if n_rows * n_cols < n_items:
         raise ValueError(
-            f"Subplot grid is too small: {n_rows} rows * {n_cols} cols = {n_rows * n_cols} slots, "
-            f"but {n_items} items need to be plotted. Increase `n_cols` or allow more rows."
+            f"Subplot grid is too small: {n_rows} rows * {n_cols} cols = "
+            f"{n_rows * n_cols} slots, but {n_items} items need to be plotted. "
+            f"Increase `n_cols` or allow more rows."
         )
     fig_width, fig_height = figsize or (
         (24, 4 * n_rows) if strict_layout else (5 * n_cols, 5 * n_rows)
@@ -86,11 +98,12 @@ def _filter_groups(
     exclude_groups: Union[int, str, List[str], Set[str]] = 0,
 ) -> Dict[str, Dict[str, np.ndarray]]:
     """Filter out groups with one class or based on exclusion criteria."""
+
     valid_data = {g: v for g, v in data.items() if len(set(v["y_true"])) > 1}
     if not exclude_groups:  # If exclude_groups is 0 or None, return all valid data
         return valid_data
 
-    # Handle case where exclude_groups is a specific group name (string) or list of names
+    # Handle case where exclude_groups is specific group name (str) or list of names
     if isinstance(exclude_groups, (str, list, set)):
         exclude_set = (
             {exclude_groups} if isinstance(exclude_groups, str) else set(exclude_groups)
@@ -133,6 +146,7 @@ def _validate_plot_data(
     """
     Validate plot data for missing y_true/y_prob (or y_pred) and NaN values.
     """
+
     # Convert single dict to a list of one dict for unified processing
     data_iter = data if is_bootstrap else [data]
     context = " in bootstrap sample" if is_bootstrap else ""
@@ -159,6 +173,7 @@ def _validate_plot_kwargs(
     kwarg_name: str = "plot_kwargs",
 ) -> None:
     """Validate keyword arguments for use in Matplotlib's plot function."""
+
     if plot_kwargs is None:
         return
 
@@ -178,16 +193,18 @@ def _validate_plot_kwargs(
         for group, kwargs in plot_kwargs.items():
             if not isinstance(kwargs, dict):
                 raise ValueError(
-                    f"{kwarg_name} for group '{group}' must be a dictionary, got {type(kwargs)}"
+                    f"{kwarg_name} for group '{group}' must be a dictionary, "
+                    f"got {type(kwargs)}"
                 )
             # Check for invalid kwargs
             invalid_kwargs = set(kwargs.keys()) - VALID_PLOT_KWARGS
             if invalid_kwargs:
                 raise ValueError(
-                    f"{kwarg_name} for group '{group}' contains invalid plot arguments: {invalid_kwargs}. "
+                    f"{kwarg_name} for group '{group}' contains invalid plot "
+                    f"arguments: {invalid_kwargs}. "
                     f"Valid arguments are: {VALID_PLOT_KWARGS}"
                 )
-    # If `valid_groups` is `Non`e, `plot_kwargs` is a single dict of kwargs (`line_kwgs` case)
+    # If `valid_groups` is `None`, `plot_kwargs` is a single dict of kwargs
     else:
         # Check for invalid kwargs
         invalid_kwargs = set(plot_kwargs.keys()) - VALID_PLOT_KWARGS
@@ -227,6 +244,7 @@ def plot_with_layout(
         Function of signature (ax, data, group_name, color, **kwargs)
         Must handle a `overlay_mode` kwarg to distinguish plot logic.
     """
+
     valid_data = data
     groups = sorted(valid_data.keys())
     if len(groups) == 0:
@@ -243,7 +261,12 @@ def plot_with_layout(
             return
         fig, ax = plt.subplots(figsize=figsize, dpi=dpi)
         plot_func(
-            ax, valid_data, group, color_map[group], **plot_kwargs, overlay_mode=False
+            ax,
+            valid_data,
+            group,
+            color_map[group],
+            **plot_kwargs,
+            overlay_mode=False,
         )
         ax.set_title(f"{title} ({group})")
         fig.tight_layout()
@@ -263,7 +286,12 @@ def plot_with_layout(
             if i >= len(axes):
                 break
             plot_func(
-                axes[i], valid_data, g, color_map[g], **plot_kwargs, overlay_mode=False
+                axes[i],
+                valid_data,
+                g,
+                color_map[g],
+                **plot_kwargs,
+                overlay_mode=False,
             )
         for j in range(i + 1, len(axes)):  # Hide unused subplots
             axes[j].axis("off")
@@ -272,7 +300,14 @@ def plot_with_layout(
     else:  # ---- Mode 3: overlay
         fig, ax = plt.subplots(figsize=figsize, dpi=dpi)
         for g in groups:
-            plot_func(ax, valid_data, g, color_map[g], **plot_kwargs, overlay_mode=True)
+            plot_func(
+                ax,
+                valid_data,
+                g,
+                color_map[g],
+                **plot_kwargs,
+                overlay_mode=True,
+            )
         ax.set_title(title)
         ax.legend(**DEFAULT_LEGEND_KWARGS)
         fig.tight_layout(rect=[0, 0, 1, 0.97])
@@ -299,6 +334,7 @@ def _plot_residuals_ax(
     show_grid: bool = True,
 ) -> None:
     """Plot residuals for one group."""
+
     residuals = y_true - y_pred
     ax.scatter(y_pred, residuals, alpha=alpha, label=label, color=color)
     ax.axhline(0, **DEFAULT_LINE_KWARGS)
@@ -319,8 +355,13 @@ def _plot_residuals_ax(
     ax.grid(show_grid)
 
 
-def get_regression_label(y_true: np.ndarray, y_pred: np.ndarray, group: str) -> str:
+def get_regression_label(
+    y_true: np.ndarray,
+    y_pred: np.ndarray,
+    group: str,
+) -> str:
     """Generate label with regression metrics."""
+
     metrics = regression_metrics(y_true, y_pred)
     return (
         f"R² for {group} = {metrics['R^2 Score']:.2f}, "
@@ -348,6 +389,7 @@ def eq_plot_residuals_by_group(
     show_grid: bool = True,
 ) -> None:
     """Plot residuals grouped by subgroup."""
+
     # Check for NaN values in y_true and y_pred (or y_prob)
     _validate_plot_data(data, is_bootstrap=False)
 
@@ -360,7 +402,14 @@ def eq_plot_residuals_by_group(
         y_pred = data[group].get("y_prob", data[group].get("y_pred"))
         label = get_regression_label(y_true, y_pred, group)
         _plot_residuals_ax(
-            ax, y_true, y_pred, label, color, alpha, show_centroids, show_grid=show_grid
+            ax,
+            y_true,
+            y_pred,
+            label,
+            color,
+            alpha,
+            show_centroids,
+            show_grid=show_grid,
         )
 
     plot_with_layout(
@@ -415,6 +464,7 @@ def _plot_group_curve_ax(
     single_group : bool
         If this is a dedicated single-group plot
     """
+
     y_true = data[group]["y_true"]
     y_prob = data[group]["y_prob"]
     total = len(y_true)
@@ -613,14 +663,20 @@ def interpolate_bootstrapped_curves(
                     x_vals, y_vals, _ = roc_curve(y_true, y_prob)
                     # Interpolate TPR over the common FPR grid
                     interp_func = interp1d(
-                        x_vals, y_vals, bounds_error=False, fill_value=(0, 1)
+                        x_vals,
+                        y_vals,
+                        bounds_error=False,
+                        fill_value=(0, 1),
                     )
                     y_interp = interp_func(grid_x)
                 elif curve_type == "pr":
                     y_vals, x_vals, _ = precision_recall_curve(y_true, y_prob)
                     # Interpolate Precision over common Recall grid
                     interp_func = interp1d(
-                        x_vals, y_vals, bounds_error=False, fill_value=(0, 1)
+                        x_vals,
+                        y_vals,
+                        bounds_error=False,
+                        fill_value=(0, 1),
                     )
                     y_interp = interp_func(grid_x)
                 elif curve_type == "calibration":
@@ -682,9 +738,11 @@ def _plot_bootstrapped_curve_ax(
             if scores
             else (float("nan"), float("nan"))
         )
-        label = f"{group} (Mean Brier = {mean_brier:.3f} [{lower_brier:.3f}, {upper_brier:.3f}])"
+        label = f"{group} (Mean Brier = {mean_brier:.3f} [{lower_brier:.3f}, "
+        f"{upper_brier:.3f}])"
     else:
-        label = f"{group} ({label_prefix} = {mean_auc:.2f} [{lower_auc:.2f}, {upper_auc:.2f}])"
+        label = f"{group} ({label_prefix} = {mean_auc:.2f} [{lower_auc:.2f}, "
+        f"{upper_auc:.2f}])"
 
     # Set default plotting styles
     curve_kwargs = curve_kwargs or {"color": "#1f77b4"}
@@ -886,6 +944,7 @@ def eq_disparity_metrics_plot(
     **plot_kwargs : dict - Additional keyword arguments for the seaborn plot function
 
     """
+
     if not isinstance(dispa, list):
         raise TypeError("dispa should be a list")
 
@@ -937,7 +996,11 @@ def eq_disparity_metrics_plot(
         for tick_label in ax.get_xticklabels():
             tick_label.set_color(legend_colors.get(tick_label.get_text(), "black"))
         ax.hlines(
-            [0, 1, 2], -1, len(attributes) + 1, ls=":", colors=["red", "black", "red"]
+            [0, 1, 2],
+            -1,
+            len(attributes) + 1,
+            ls=":",
+            colors=["red", "black", "red"],
         )
         ax.set_xlim(-1, len(attributes))
         ax.set_ylim(-2, 4)
