@@ -39,19 +39,10 @@ if __name__ == "__main__":
 
     eqb.eq_plot_residuals_by_group(
         data=sliced_data_2,
-        # y_true=y_true,
-        # y_prob=y_pred,
-        # group="black",
         title="Residuals by Race",
         filename="residuals_by_race",
-        # subplots=True,
-        # group="black",
         color_by_group=True,
-        # n_cols=1,
-        # n_rows=2,
         figsize=(8, 6),
-        # group="black",
         show_centroids=True,
-        # exclude_groups="white",
         show_grid=False,
     )
