@@ -1,12 +1,3 @@
-import matplotlib.pyplot as plt
-from sklearn.metrics import (
-    roc_curve,
-    auc,
-    precision_recall_curve,
-    average_precision_score,
-    brier_score_loss,
-)
-from sklearn.calibration import calibration_curve
 import numpy as np
 import pandas as pd
 import equiboots as eqb
