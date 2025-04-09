@@ -1025,3 +1025,187 @@ def eq_disparity_metrics_plot(
 
     plt.tight_layout(w_pad=2, h_pad=2, rect=[0.01, 0.01, 1.01, 1])
     save_or_show_plot(fig, save_path, filename)
+
+
+################################################################################
+
+
+def eq_disparity_metrics_violin_pass_fail_plot(
+    metrics_data: List[Dict[str, Dict[str, float]]],
+    metric_cols: List[str],
+    name: str,
+    categories: Union[str, List[str]] = "all",
+    include_legend: bool = True,
+    pass_range: Tuple[float, float] = (0.0, 2.0),  # Range for "PASS"
+    save_path: Optional[str] = None,
+    filename: str = "Disparity_Metrics_Violin_Pass_Fail",
+    max_cols: Optional[int] = None,
+    strict_layout: bool = True,
+    figsize: Optional[Tuple[float, float]] = None,
+    show_grid: bool = True,
+    force_point_estimate: bool = False,  # Force point estimate mode if True
+    **plot_kwargs: Dict[str, Union[str, float]],
+) -> None:
+    """
+    Plot metrics as violin plots (for distributions) or scatter points (for point estimates)
+    with pass/fail indicators, with each subplot representing a metric, groups on the x-axis,
+    and metric values on the y-axis.
+
+    A group passes if its entire distribution (for violin plots) or point estimate (for scatter plots)
+    is within the pass_range.
+
+    metrics_data : list - List of dictionaries containing group-level metrics
+    metric_cols : list - List of metric keys (e.g., ['precision_diff', 'tpr_gap']) to plot
+    name : str - Prefix for subplot titles
+    categories : list|str - List of group attributes to include, or 'all' to include all
+    include_legend : bool - Whether to show the pass/fail legend at top
+    pass_range : tuple - Range (min, max) for a group to be considered "PASS"
+    save_path : str or None - If provided, saves plot to this path
+    filename : str - Filename to use (no extension needed)
+    max_cols : int or None - Max number of columns in subplot grid (auto if None)
+    strict_layout : bool - Use stricter width/height logic for tighter grid
+    figsize : tuple or None - Manual override for figure size
+    show_grid : bool - Whether to show axis gridlines
+    force_point_estimate : bool - If True, treat the data as point estimates by taking the mean
+    **plot_kwargs : dict - Additional keyword arguments for the seaborn violinplot function
+    """
+    if not isinstance(metrics_data, list):
+        raise TypeError("metrics_data should be a list")
+
+    # Determine the groups (attributes) to plot
+    all_keys = sorted({key for row in metrics_data for key in row.keys()})
+    attributes = (
+        [k for k in all_keys if k in categories] if categories != "all" else all_keys
+    )
+
+    # Set up the subplot grid: one subplot per metric
+    max_cols = max_cols or len(metric_cols)  # Default to one column per metric
+    n_rows, n_cols, _ = get_layout(len(metric_cols), max_cols, None, strict_layout)
+    # Use a compact figsize: 4 units wide per column, 4 units high per row
+    figsize = figsize or (4 * n_cols, 4 * n_rows)
+    fig, axs = plt.subplots(n_rows, n_cols, figsize=figsize, squeeze=False)
+
+    # Plot with pass/fail coloring, one subplot per metric
+    for i, col in enumerate(metric_cols):
+        row_idx = i // n_cols
+        col_idx = i % n_cols
+        ax = axs[row_idx, col_idx]
+        x_vals, y_vals, group_labels = [], [], []
+        pass_fail_status = {}  # Track pass/fail status for each group
+
+        # Collect values for each group for the current metric
+        for attr in attributes:
+            group_vals = [
+                row[attr][col]
+                for row in metrics_data
+                if attr in row and col in row[attr]
+            ]
+            if not group_vals:
+                continue
+
+            # Check if this is point estimate data (one value per group) or distribution data (multiple values)
+            is_point_estimate = force_point_estimate
+            if not force_point_estimate:
+                if len(group_vals) > 1:
+                    is_point_estimate = False
+                else:
+                    is_point_estimate = True
+
+            if is_point_estimate:
+                # For point estimates, take the mean of the values (if multiple) or use the single value
+                mean_val = sum(group_vals) / len(group_vals)
+                x_vals.append(attr)
+                y_vals.append(mean_val)
+                # Pass/fail based on the mean value
+                if pass_range[0] <= mean_val <= pass_range[1]:
+                    pass_fail_status[attr] = "PASS"
+                else:
+                    pass_fail_status[attr] = "FAIL"
+            else:
+                # For distributions, collect all values for the group
+                for val in group_vals:
+                    x_vals.append(attr)
+                    y_vals.append(val)
+                    group_labels.append(attr)
+                # Pass/fail based on the entire distribution
+                min_val, max_val = min(group_vals), max(group_vals)
+                if pass_range[0] <= min_val and max_val <= pass_range[1]:
+                    pass_fail_status[attr] = "PASS"
+                else:
+                    pass_fail_status[attr] = "FAIL"
+
+        # Create a color palette based on pass/fail status, mapping groups to colors
+        palette = {
+            attr: "green" if pass_fail_status.get(attr, "FAIL") == "PASS" else "red"
+            for attr in attributes
+        }
+
+        # Plot based on whether it's point estimate or distribution data
+        if is_point_estimate:
+            # Plot scatter points for point estimates
+            for j, (x_val, y_val) in enumerate(zip(x_vals, y_vals)):
+                ax.scatter(
+                    j,  # Position on x-axis based on group index
+                    y_val,
+                    color=palette[x_val],
+                    s=100,
+                    marker="o",  # Use circles for simplicity
+                    edgecolors="black",
+                    linewidth=1,
+                    label=x_val if j == 0 else None,  # Avoid duplicate labels in legend
+                )
+        else:
+            # Plot violin plots for distributions
+            sns.violinplot(
+                ax=ax,
+                x=x_vals,
+                y=y_vals,
+                hue=x_vals,  # Use group labels for hue
+                palette=palette,  # Map groups to colors
+                legend=False,
+                **plot_kwargs,
+            )
+
+        # Customize the subplot
+        ax.set_title(f"{name}_{col}")
+        ax.set_xlabel("")
+        ax.set_ylabel("Values")
+        ax.set_xticks(range(len(attributes)))
+        ax.set_xticklabels(attributes, rotation=0, fontweight="bold")
+        # Color the x-tick labels to match the pass/fail status
+        for tick_label in ax.get_xticklabels():
+            attr = tick_label.get_text()
+            tick_label.set_color(palette.get(attr, "black"))
+        # Fixed reference lines at 0, 1, and 2 for both modes
+        ax.hlines(
+            [0, 1, 2],
+            -1,
+            len(attributes),
+            ls=":",
+            colors=["red", "black", "red"],
+        )
+        ax.set_xlim(-1, len(attributes))
+        ax.set_ylim(-2, 4)
+        ax.grid(show_grid)
+
+    # Hide unused subplots
+    for j in range(i + 1, n_rows * n_cols):
+        axs[j // n_cols, j % n_cols].axis("off")
+
+    # Add pass/fail legend if requested
+    if include_legend:
+        legend_handles = [
+            Line2D([0], [0], color="green", lw=4, label="PASS"),
+            Line2D([0], [0], color="red", lw=4, label="FAIL"),
+        ]
+        fig.legend(
+            handles=legend_handles,
+            loc="upper center",
+            bbox_to_anchor=(0.5, 1.05),
+            ncol=2,
+            fontsize="large",
+            frameon=False,
+        )
+
+    plt.tight_layout(rect=[0, 0, 1, 0.95])
+    save_or_show_plot(fig, save_path, filename)
