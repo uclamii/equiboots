@@ -986,58 +986,37 @@ def eq_disparity_metrics_plot(
             raise ValueError(
                 f"Unsupported plot_kind: '{plot_kind}'. Must be a seaborn plot type."
             )
-        if show_pass_fail:
-            plot_func(
-                ax=ax,
-                y=x_vals,
-                x=y_vals,
-                hue=x_vals,
-                palette=group_colors,
-                legend=False,
-                **plot_kwargs,
-            )
-        else:
-            plot_func(
-                ax=ax,
-                x=x_vals,
-                y=y_vals,
-                hue=x_vals,
-                palette=base_colors,
-                legend=False,
-                **plot_kwargs,
-            )
+        plot_func(
+            ax=ax,
+            x=x_vals,
+            y=y_vals,
+            hue=x_vals,
+            palette=group_colors,
+            legend=False,
+            **plot_kwargs,
+        )
 
         ax.set_title(f"{name}_{col}")
 
-        if show_pass_fail:
-            ax.set_ylabel("")
-            ax.set_yticks(range(len(attributes)))
-            ax.set_yticklabels(attributes, fontweight="bold")
-            for tick_label in ax.get_yticklabels():
-                attr = tick_label.get_text()
-                tick_label.set_color(
-                    "green" if group_status.get(attr) == "Pass" else "red"
-                )
-            ax.axvline(x=lower, linestyle=":", color="red")
-            ax.axvline(x=1.0, linestyle=":", color="black")
-            ax.axvline(x=upper, linestyle=":", color="red")
-            ax.set_xlim(-2, 4)
-        else:
-            ax.set_xlabel("")
-            ax.set_xticks(range(len(attributes)))
-            ax.set_xticklabels(attributes, rotation=0, fontweight="bold")
-            for tick_label in ax.get_xticklabels():
-                attr = tick_label.get_text()
-                tick_label.set_color(legend_colors.get(attr, "black"))
-            ax.hlines(
-                [lower, 1.0, upper],
-                xmin=-1,
-                xmax=len(attributes),
-                ls=":",
-                colors=["red", "black", "red"],
+        ax.set_xlabel("")
+        ax.set_xticks(range(len(attributes)))
+        ax.set_xticklabels(attributes, rotation=0, fontweight="bold")
+        for tick_label in ax.get_xticklabels():
+            attr = tick_label.get_text()
+            tick_label.set_color(
+                ("green" if group_status.get(attr) == "Pass" else "red")
+                if show_pass_fail
+                else legend_colors.get(attr, "black")
             )
-            ax.set_xlim(-1, len(attributes))
 
+        ax.hlines(
+            [lower, 1.0, upper],
+            xmin=-1,
+            xmax=len(attributes),
+            ls=":",
+            colors=["red", "black", "red"],
+        )
+        ax.set_xlim(-1, len(attributes))
         ax.set_ylim(-2, 4)
         ax.grid(show_grid)
 
@@ -1067,3 +1046,6 @@ def eq_disparity_metrics_plot(
 
     plt.tight_layout(w_pad=2, h_pad=2, rect=[0.01, 0.01, 1.01, 1])
     save_or_show_plot(fig, save_path, filename)
+
+
+#################################################################################
