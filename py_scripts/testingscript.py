@@ -67,10 +67,16 @@ def eq_general_test(task):
         bootstrap_flag=True,
         num_bootstraps=10,
         boot_sample_size=100,
-        balanced=False,  # False is stratified, True is balanced
-        stratify_by_outcome=True,
-        group_min_size=70,
+        balanced=True,  # False is stratified, True is balanced
+        stratify_by_outcome=False,
+        group_min_size=1750,
     )
+
+    # Set group_min_size based on task for debugging purposes
+    # regression: group_min_size = 240
+    # binary_classification: group_min_size = 120
+    # multi_class_classification: group_min_size = 70
+    # multi_label_classification: group_min_size = 1750
 
     # Set seeds
     eq.set_fix_seeds([42, 123, 222, 999])
@@ -83,16 +89,15 @@ def eq_general_test(task):
 
     data = eq.slicer("race")
 
-    print(data[0]["black"]["y_true"].shape)
-    print(data[0]["white"]["y_true"].shape)
-    print(data[0]["asian"]["y_true"].shape)
-    print(data[0]["hispanic"]["y_true"].shape)
+    for key in data[0].keys():
+        print("key", key)
+        print(data[0][key]["y_true"].shape)
+        print(np.unique(data[0][key]["y_true"], axis=0, return_counts=True))
 
-    print(np.unique(data[0]["black"]["y_true"], axis=0, return_counts=True))
-    print(np.unique(data[0]["white"]["y_true"], axis=0, return_counts=True))
-    print(np.unique(data[0]["asian"]["y_true"], axis=0, return_counts=True))
-    print(np.unique(data[0]["hispanic"]["y_true"], axis=0, return_counts=True))
+    print("Categories below minimum size", eq.groups_below_min_size)
 
+    # Get metrics
+    # Note: The metrics are calculated for each group in the groupings_vars
     race_metrics = eq.get_metrics(data)
 
     print("race_metrics", race_metrics)
@@ -115,5 +120,5 @@ def eq_general_test(task):
 
 
 if __name__ == "__main__":
-    task = "multi_class_classification"
+    task = "multi_label_classification"
     eq_general_test(task)

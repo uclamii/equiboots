@@ -258,3 +258,37 @@ def test_sample_group_unbalanced():
     group = fairness_df[fairness_df["race"] == "white"].index
     result = eq.sample_group(group, 1, 0, 50, [42], balanced=False)
     assert len(result) > 0
+
+
+def test_check_group_size_below_min(equiboots_fixture):
+    eq = equiboots_fixture
+    eq.group_min_size = 10  # Set minimum group size
+    group = pd.Index([1, 2, 3])  # Group with fewer than 10 samples
+    cat = "black"
+    var = "race"
+
+    result = eq.check_group_size(group, cat, var)
+    assert not result
+    assert cat in eq.groups_below_min_size[var]
+
+
+def test_check_group_size_above_min(equiboots_fixture):
+    eq = equiboots_fixture
+    eq.group_min_size = 2  # Set minimum group size
+    group = pd.Index([1, 2, 3])  # Group with more than 2 samples
+    cat = "black"
+    var = "race"
+
+    result = eq.check_group_size(group, cat, var)
+    assert result
+    assert cat not in eq.groups_below_min_size[var]
+
+
+def test_check_group_empty(equiboots_fixture):
+    eq = equiboots_fixture
+    sampled_group = np.array([])  # Empty sampled group
+    cat = "black"
+    var = "race"
+
+    result = eq.check_group_empty(sampled_group, cat, var)
+    assert result is False  # Ensure no exception is raised
