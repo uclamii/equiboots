@@ -88,7 +88,6 @@ def eq_general_test(task):
     print(data[0]["asian"]["y_true"].shape)
     print(data[0]["hispanic"]["y_true"].shape)
 
-
     print(np.unique(data[0]["black"]["y_true"], axis=0, return_counts=True))
     print(np.unique(data[0]["white"]["y_true"], axis=0, return_counts=True))
     print(np.unique(data[0]["asian"]["y_true"], axis=0, return_counts=True))
@@ -110,6 +109,7 @@ def eq_general_test(task):
         )
     )
 
+    print(df.head())
     print("dispa", dispa)
     print("len(dispa)", len(dispa))
 
