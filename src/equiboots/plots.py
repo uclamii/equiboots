@@ -906,12 +906,6 @@ def eq_plot_bootstrapped_group_curves(
 # Disparity Metrics (Violin or Box Plots)
 ################################################################################
 
-import matplotlib.pyplot as plt
-import seaborn as sns
-from matplotlib.lines import Line2D
-from typing import List, Dict, Union, Optional, Tuple
-import numpy as np
-
 
 def eq_disparity_metrics_plot(
     dispa: List[Dict[str, Dict[str, float]]],
@@ -929,12 +923,11 @@ def eq_disparity_metrics_plot(
     figsize: Optional[Tuple[float, float]] = None,
     show_grid: bool = True,
     disparity_thresholds: Tuple[float, float] = (0.0, 2.0),
-    show_pass_fail: bool = True,
-    point_estimates: bool = False,
+    show_pass_fail: bool = False,
     **plot_kwargs: Dict[str, Union[str, float]],
 ) -> None:
     """
-    Plot disparity metrics as violin or box plots, with optional pass/fail coloring and point estimates.
+    Plot disparity metrics as violin or box plots, with optional pass/fail coloring.
     """
     if not isinstance(dispa, list):
         raise TypeError("dispa should be a list")
@@ -988,46 +981,31 @@ def eq_disparity_metrics_plot(
             else base_colors
         )
 
-        if point_estimates:
-            for attr in attributes:
-                vals = group_pass_fail.get(attr, [])
-                if not vals:
-                    continue
-                mean_val = np.mean(vals)
-                dot_color = "green" if group_status[attr] == "Pass" else "red"
-                ax.scatter(
-                    x=mean_val if show_pass_fail else attr,
-                    y=attr if show_pass_fail else mean_val,
-                    color=dot_color,
-                    edgecolor="black",
-                    zorder=5,
-                )
+        plot_func = getattr(sns, plot_kind, None)
+        if not plot_func:
+            raise ValueError(
+                f"Unsupported plot_kind: '{plot_kind}'. Must be a seaborn plot type."
+            )
+        if show_pass_fail:
+            plot_func(
+                ax=ax,
+                y=x_vals,
+                x=y_vals,
+                hue=x_vals,
+                palette=group_colors,
+                legend=False,
+                **plot_kwargs,
+            )
         else:
-            plot_func = getattr(sns, plot_kind, None)
-            if not plot_func:
-                raise ValueError(
-                    f"Unsupported plot_kind: '{plot_kind}'. Must be a seaborn plot type."
-                )
-            if show_pass_fail:
-                plot_func(
-                    ax=ax,
-                    y=x_vals,
-                    x=y_vals,
-                    hue=x_vals,
-                    palette=group_colors,
-                    legend=False,
-                    **plot_kwargs,
-                )
-            else:
-                plot_func(
-                    ax=ax,
-                    x=x_vals,
-                    y=y_vals,
-                    hue=x_vals,
-                    palette=group_colors,
-                    legend=False,
-                    **plot_kwargs,
-                )
+            plot_func(
+                ax=ax,
+                x=x_vals,
+                y=y_vals,
+                hue=x_vals,
+                palette=base_colors,
+                legend=False,
+                **plot_kwargs,
+            )
 
         ax.set_title(f"{name}_{col}")
 
@@ -1050,9 +1028,7 @@ def eq_disparity_metrics_plot(
             ax.set_xticklabels(attributes, rotation=0, fontweight="bold")
             for tick_label in ax.get_xticklabels():
                 attr = tick_label.get_text()
-                tick_label.set_color(
-                    "green" if group_status.get(attr) == "Pass" else "red"
-                )
+                tick_label.set_color(legend_colors.get(attr, "black"))
             ax.hlines(
                 [lower, 1.0, upper],
                 xmin=-1,
