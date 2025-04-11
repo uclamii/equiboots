@@ -1,6 +1,7 @@
 import pandas as pd
 import numpy as np
 from tqdm import tqdm
+import warnings
 from sklearn.utils import resample
 from .metrics import (
     multi_class_classification_metrics,
@@ -47,7 +48,7 @@ class EquiBoots:
         self.balanced = balanced
         self.stratify_by_outcome = stratify_by_outcome
         self.group_min_size = group_min_size
-        self.groups_below_min_size = {var:set() for var in fairness_vars}
+        self.groups_below_min_size = {var: set() for var in fairness_vars}
 
     def set_reference_groups(self, reference_groups):
         ### zip the reference groups
@@ -86,28 +87,29 @@ class EquiBoots:
             raise ValueError("fairness_vars cannot be None, please provide a list")
         if not isinstance(fairness_vars, list):
             raise ValueError("fairness_vars must be a list")
-        
+
     def check_group_size(self, group: pd.Index, cat: str, var: str) -> bool:
         """
         Check if a group meets the minimum size requirement.
         """
         if len(group) < self.group_min_size:
-            Warning(
+            warnings.warn(
                 f"Group '{cat}' for variable '{var}' has less than "
                 f"{self.group_min_size} samples. Skipping category of this group."
             )
             self.groups_below_min_size[var].add(cat)
             return False
         return True
-    
+
     def check_group_empty(self, sampled_group: np.array, cat: str, var: str) -> bool:
         """
         Check if sampled group is empty.
         """
         if sampled_group.size == 0:
-            Warning(
+            warnings.warn(
                 f"Sampled Group '{cat}' for variable '{var}' has no samples. "
-                f"Skipping category of this group.")
+                f"Skipping category of this group."
+            )
             return False
         return True
 
@@ -139,9 +141,7 @@ class EquiBoots:
                 self.groups[var]["categories"] = self.fairness_df[var].unique()
                 self.groups[var]["indices"] = {}
                 for cat in self.groups[var]["categories"]:
-                    group = self.fairness_df[
-                        self.fairness_df[var] == cat
-                    ].index
+                    group = self.fairness_df[self.fairness_df[var] == cat].index
                     # Check if the group size is less than the minimum size
                     if not self.check_group_size(group, cat, var):
                         continue
@@ -243,11 +243,10 @@ class EquiBoots:
                             self.balanced,
                         )
 
-                    
                     # Check if the sampled group is empty
                     if not self.check_group_empty(sampled_group, cat, var):
-                        continue   
-                    # Store the sampled group indices 
+                        continue
+                    # Store the sampled group indices
                     groups[var]["indices"][cat] = sampled_group
             bootstrapped_samples.append(groups)
 
@@ -327,10 +326,11 @@ class EquiBoots:
         categories = groups[slicing_var]["categories"]
         for cat in categories:
             if cat in self.groups_below_min_size[slicing_var]:
-                Warning(
+                warnings.warn(
                     f"Group '{cat}' for variable '{slicing_var}' has less than "
                     f"{self.group_min_size} samples. "
-                    f"Skipping catategory of this group.")
+                    f"Skipping catategory of this group."
+                )
                 continue
 
             if self.task in [
