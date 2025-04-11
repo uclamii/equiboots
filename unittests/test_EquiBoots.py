@@ -2,6 +2,7 @@ import pandas as pd
 import numpy as np
 import inspect
 import pytest
+import warnings
 from src.equiboots import EquiBoots
 
 
@@ -259,7 +260,6 @@ def test_sample_group_unbalanced():
     result = eq.sample_group(group, 1, 0, 50, [42], balanced=False)
     assert len(result) > 0
 
-
 def test_check_group_size_below_min(equiboots_fixture):
     eq = equiboots_fixture
     eq.group_min_size = 10  # Set minimum group size
@@ -292,3 +292,94 @@ def test_check_group_empty(equiboots_fixture):
 
     result = eq.check_group_empty(sampled_group, cat, var)
     assert result is False  # Ensure no exception is raised
+=======
+def test_calculate_disparities_warns_on_zero_ref_value():
+    eq = EquiBoots(
+        y_true=np.array([1, 0]),
+        y_prob=np.array([0.9, 0.1]),
+        y_pred=np.array([1, 0]),
+        fairness_df=pd.DataFrame({"race": ["white", "black"]}),
+        fairness_vars=["race"],
+        reference_groups=["white"],
+        task="binary_classification",
+    )
+
+    # Create a fake metric dict with a zero reference value
+    metric_dict = {
+        "white": {"accuracy": 0.0},  # reference group with zero value
+        "black": {"accuracy": 0.8},
+    }
+
+    with warnings.catch_warnings(record=True) as w:
+        warnings.simplefilter("always")  # catch all warnings
+        disparities = eq.calculate_groups_disparities(metric_dict, "race")
+
+        # Make sure the warning was triggered
+        assert any("Reference metric value is zero" in str(warn.message) for warn in w)
+        assert disparities["black"]["accuracy_ratio"] == -1
+
+
+def test_default_reference_group_selection():
+    df = pd.DataFrame({"race": ["black"] * 60 + ["white"] * 40})
+    eq = EquiBoots(
+        y_true=np.random.randint(0, 2, 100),
+        y_prob=np.random.rand(100),
+        y_pred=(np.random.rand(100) > 0.5).astype(int),
+        fairness_df=df,
+        fairness_vars=["race"],
+        task="binary_classification",
+    )
+    assert eq.reference_groups["race"] == "black"
+
+
+def test_groups_slicer_regression():
+    y_true = np.random.rand(100)
+    y_pred = np.random.rand(100)
+    df = pd.DataFrame({"race": ["white"] * 100})
+    eq = EquiBoots(
+        y_true=y_true,
+        y_prob=y_pred,  # not used for regression
+        y_pred=y_pred,
+        fairness_df=df,
+        fairness_vars=["race"],
+        task="regression",
+    )
+    eq.grouper(groupings_vars=["race"])
+    sliced = eq.slicer("race")
+    assert isinstance(sliced, dict)
+    assert "white" in sliced
+    assert "y_true" in sliced["white"]
+
+
+def test_get_groups_metrics_multiclass():
+    y_true = np.random.choice([0, 1, 2], 100)
+    y_pred = np.random.choice([0, 1, 2], 100)
+    y_prob = np.random.dirichlet(np.ones(3), size=100)  # rows will sum to 1.0
+    df = pd.DataFrame({"race": ["white"] * 100})
+
+    eq = EquiBoots(
+        y_true=y_true,
+        y_prob=y_prob,
+        y_pred=y_pred,
+        fairness_df=df,
+        fairness_vars=["race"],
+        reference_groups=["white"],
+        task="multi_class_classification",
+    )
+    eq.grouper(["race"])
+    sliced = eq.slicer("race")
+    metrics = eq.get_metrics(sliced)
+    assert "white" in metrics
+
+
+def test_set_fix_seeds_invalid_type_raises():
+    eq = EquiBoots(
+        y_true=np.array([1, 0]),
+        y_prob=np.array([0.5, 0.5]),
+        y_pred=np.array([1, 0]),
+        fairness_df=pd.DataFrame({"race": ["white", "black"]}),
+        fairness_vars=["race"],
+        task="binary_classification",
+    )
+    with pytest.raises(ValueError):
+        eq.set_fix_seeds([1, "bad_seed", 3])
