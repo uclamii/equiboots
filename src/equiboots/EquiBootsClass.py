@@ -437,7 +437,7 @@ class EquiBoots:
                     disparities[category][f"{metric_name}_ratio"] = ratio
                 else:
                     disparities[category][f"{metric_name}_ratio"] = -1
-                    raise Warning(
+                    warnings.warn(
                         "Reference metric value is zero returning negative value"
                     )
 
