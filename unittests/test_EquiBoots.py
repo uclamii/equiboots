@@ -260,6 +260,7 @@ def test_sample_group_unbalanced():
     result = eq.sample_group(group, 1, 0, 50, [42], balanced=False)
     assert len(result) > 0
 
+
 def test_check_group_size_below_min(equiboots_fixture):
     eq = equiboots_fixture
     eq.group_min_size = 10  # Set minimum group size
@@ -292,7 +293,8 @@ def test_check_group_empty(equiboots_fixture):
 
     result = eq.check_group_empty(sampled_group, cat, var)
     assert result is False  # Ensure no exception is raised
-=======
+
+
 def test_calculate_disparities_warns_on_zero_ref_value():
     eq = EquiBoots(
         y_true=np.array([1, 0]),
@@ -383,3 +385,103 @@ def test_set_fix_seeds_invalid_type_raises():
     )
     with pytest.raises(ValueError):
         eq.set_fix_seeds([1, "bad_seed", 3])
+
+
+def test_stratify_invalid_task():
+    eb = EquiBoots(
+        y_true=np.array([0, 1]),
+        y_prob=np.array([0.5, 0.6]),
+        y_pred=np.array([0, 1]),
+        fairness_df=pd.DataFrame({"race": ["A", "B"]}),
+        fairness_vars=["race"],
+        task="regression",
+    )
+    with pytest.raises(ValueError):
+        eb.check_classification_task("regression")
+
+
+def test_check_fairness_vars_none():
+    with pytest.raises(ValueError):
+        EquiBoots(
+            y_true=np.array([0, 1]),
+            y_prob=np.array([0.5, 0.6]),
+            y_pred=np.array([0, 1]),
+            fairness_df=pd.DataFrame({"race": ["A", "B"]}),
+            fairness_vars=None,
+        )
+
+
+def test_check_fairness_vars_not_list():
+    with pytest.raises(ValueError):
+        EquiBoots(
+            y_true=np.array([0, 1]),
+            y_prob=np.array([0.5, 0.6]),
+            y_pred=np.array([0, 1]),
+            fairness_df=pd.DataFrame({"race": ["A", "B"]}),
+            fairness_vars="race",
+        )
+
+
+def test_reference_group_zero_warning():
+    eb = EquiBoots(
+        y_true=np.array([0, 1]),
+        y_prob=np.array([0.5, 0.6]),
+        y_pred=np.array([0, 1]),
+        fairness_df=pd.DataFrame({"race": ["A", "B"]}),
+        fairness_vars=["race"],
+    )
+    metrics_dict = {
+        "A": {"acc": 0.0},
+        "B": {"acc": 0.9},
+    }
+    eb.reference_groups = {"race": "A"}
+    disparities = eb.calculate_groups_disparities(metrics_dict, var_name="race")
+    assert disparities["B"]["acc_ratio"] == -1
+
+
+def set_fix_seeds(self, seeds: list) -> None:
+    if not all(isinstance(seed, int) for seed in seeds):
+        raise ValueError("All seeds must be integers.")
+    self.seeds = seeds
+
+
+def test_set_fix_seeds_validation():
+    eb = EquiBoots(
+        y_true=np.array([0, 1]),
+        y_prob=np.array([0.5, 0.6]),
+        y_pred=np.array([0, 1]),
+        fairness_df=pd.DataFrame({"race": ["A", "B"]}),
+        fairness_vars=["race"],
+    )
+    with pytest.raises(ValueError):
+        eb.set_fix_seeds([1, "not_int"])
+
+
+def test_check_classification_task_raises():
+    eb = EquiBoots(
+        y_true=np.array([0, 1]),
+        y_prob=np.array([0.5, 0.6]),
+        y_pred=np.array([0, 1]),
+        fairness_df=pd.DataFrame({"race": ["A", "B"]}),
+        fairness_vars=["race"],
+        task="regression",
+    )
+    with pytest.raises(ValueError):
+        eb.check_classification_task("regression")
+
+
+def test_groups_slicer_skips_small_group(equiboots_fixture):
+    eq = equiboots_fixture
+    eq.groups = {
+        "race": {
+            "categories": ["small", "large"],
+            "indices": {
+                "small": np.array([1, 2]),
+                "large": np.arange(10, 60),
+            },
+        }
+    }
+    eq.groups_below_min_size = {"race": {"small"}}
+    result = eq.groups_slicer(eq.groups, "race")
+    assert "small" not in result
+    assert "large" in result

@@ -50,6 +50,29 @@ if __name__ == "__main__":
     melted = pd.DataFrame(dispa).melt()
     df = melted["value"].apply(pd.Series).assign(attribute_value=melted["variable"])
 
+    eqb.eq_disparity_metrics_plot(
+        dispa,
+        metric_cols=[
+            "Accuracy_ratio",
+            "Precision_ratio",
+            "Predicted Prevalence_ratio",
+            "FP Rate_ratio",
+            "TN Rate_ratio",
+            "Recall_ratio",
+        ],
+        name="race",
+        categories="all",
+        figsize=(24, 4),
+        plot_kind="violinplot",
+        color_by_group=True,
+        show_grid=False,
+        strict_layout=True,
+        save_path="./images",
+        show_pass_fail=True,
+        # y_lim=(-2, 4),
+        # disparity_thresholds=[0.9, 1.2],
+    )
+
     eqb.eq_plot_bootstrapped_group_curves(
         boot_sliced_data=data,
         curve_type="roc",
