@@ -711,9 +711,9 @@ def _plot_bootstrapped_curve_ax(
     show_grid: bool = True,
     bar_every: int = 10,
     brier_scores: Optional[Dict[str, List[float]]] = None,
+    y_lim: Optional[Tuple[float, float]] = None,  # New parameter
 ) -> None:
     """Plot mean curve with confidence band and error bars for a bootstrapped group."""
-
     # Aggregate across bootstrap iterations
     mean_y = np.nanmean(y_array, axis=0)
     lower, upper = np.nanpercentile(y_array, [2.5, 97.5], axis=0)
@@ -738,11 +738,9 @@ def _plot_bootstrapped_curve_ax(
             if scores
             else (float("nan"), float("nan"))
         )
-        label = f"{group} (Mean Brier = {mean_brier:.3f} [{lower_brier:.3f}, "
-        f"{upper_brier:.3f}])"
+        label = f"{group} (Mean Brier = {mean_brier:.3f} [{lower_brier:.3f}, {upper_brier:.3f}],)"
     else:
-        label = f"{group} ({label_prefix} = {mean_auc:.2f} [{lower_auc:.2f}, "
-        f"{upper_auc:.2f}])"
+        label = f"{group} ({label_prefix} = {mean_auc:.2f} [{lower_auc:.2f}, {upper_auc:.2f}],)"
 
     # Set default plotting styles
     curve_kwargs = curve_kwargs or {"color": "#1f77b4"}
@@ -775,7 +773,15 @@ def _plot_bootstrapped_curve_ax(
     if label_prefix in ["AUROC", "CAL"]:
         ax.plot([0, 1], [0, 1], **line_kwargs)
     ax.set_xlim(0, 1)
-    ax.set_ylim(0, 1)
+
+    # Set y-axis limits dynamically based on confidence intervals if not provided
+    if y_lim is None:
+        y_min = min(np.min(lower), 0.0)  # Ensure at least 0.0
+        y_max = max(np.max(upper), 1.0)  # Ensure at least 1.0
+        padding = 0.05 * (y_max - y_min)  # Add 5% padding
+        y_lim = (y_min - padding, y_max + padding)
+    ax.set_ylim(y_lim)
+
     ax.set_title(group)
     ax.set_xlabel(
         "False Positive Rate"
