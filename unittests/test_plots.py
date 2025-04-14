@@ -399,7 +399,7 @@ def test_eq_plot_group_curves_invalid_curve_type():
 def test_plot_group_curve_ax_all_labels(monkeypatch):
     # Covers AUC and Brier score logic
     monkeypatch.setattr(plt, "show", lambda: None)
-    fig, ax = plt.subplots()
+    _, ax = plt.subplots()
     data = {"A": {"y_true": np.array([0, 1]), "y_prob": np.array([0.3, 0.9])}}
     plots._plot_group_curve_ax(
         ax,
@@ -473,7 +473,7 @@ def test_filter_groups_include_all():
 
 def test_plot_group_curve_ax_with_title(monkeypatch):
     monkeypatch.setattr(plt, "show", lambda: None)
-    fig, ax = plt.subplots()
+    _, ax = plt.subplots()
     data = {"A": {"y_true": np.array([0, 1]), "y_prob": np.array([0.2, 0.8])}}
     plots._plot_group_curve_ax(
         ax, data, "A", color="blue", curve_type="roc", title="Test Title"
@@ -483,7 +483,7 @@ def test_plot_group_curve_ax_with_title(monkeypatch):
 
 def test_plot_group_curve_ax_tick_params(monkeypatch):
     monkeypatch.setattr(plt, "show", lambda: None)
-    fig, ax = plt.subplots()
+    _, ax = plt.subplots()
     data = {"A": {"y_true": np.array([0, 1]), "y_prob": np.array([0.2, 0.8])}}
     plots._plot_group_curve_ax(ax, data, "A", color="green", curve_type="roc")
     ticks = ax.xaxis.get_tick_params()
@@ -496,9 +496,15 @@ def test_plot_with_layout_default_legend(monkeypatch):
         "A": {"y_true": np.array([0, 1]), "y_prob": np.array([0.2, 0.8])},
         "B": {"y_true": np.array([1, 0]), "y_prob": np.array([0.8, 0.2])},
     }
+
+    def safe_plot(ax, d, g, c, **kw):
+        # Remove any keys that aren't valid for ax.plot
+        kw.pop("overlay_mode", None)
+        ax.plot(d[g]["y_prob"], d[g]["y_true"], color=c, label=g, **kw)
+
     plots.plot_with_layout(
         data,
-        lambda ax, d, g, c, **kw: ax.plot([0, 1], [0, 1], label=g),
+        safe_plot,
         {},
         title="Demo",
         subplots=False,
@@ -515,7 +521,7 @@ def test_validate_plot_kwargs_invalid_plot_arg():
         plots._validate_plot_kwargs({"color": "blue", "invalid_kwarg": 123})
 
 
-def test_interpolate_bootstrapped_curves_empty(monkeypatch):
+def test_interpolate_bootstrapped_curves_empty():
     boot_sliced_data = [
         {"A": {"y_true": np.array([0, 1]), "y_prob": np.array([0.1, 0.9])}}
     ]
@@ -527,7 +533,7 @@ def test_interpolate_bootstrapped_curves_empty(monkeypatch):
     assert isinstance(out["A"], list)
 
 
-def test_validate_plot_data_bootstrap(monkeypatch):
+def test_validate_plot_data_bootstrap():
     data = [
         {"A": {"y_true": np.array([0, 1]), "y_prob": np.array([0.5, 0.6])}},
         {"A": {"y_true": np.array([1, 0]), "y_prob": np.array([0.6, 0.4])}},
@@ -536,7 +542,7 @@ def test_validate_plot_data_bootstrap(monkeypatch):
     plots._validate_plot_data(data, is_bootstrap=True)
 
 
-def test_validate_plot_kwargs_group_level_invalid(monkeypatch):
+def test_validate_plot_kwargs_group_level_invalid():
     with pytest.raises(ValueError, match="contains invalid plot arguments"):
         plots._validate_plot_kwargs({"A": {"invalid_kwarg": 123}}, valid_groups=["A"])
 
@@ -552,39 +558,38 @@ def test_overlay_mode_triggers_clear(monkeypatch):
     class MockAx:
         def __init__(self):
             self.cleared = False
+            self.logged = []
 
         def clear(self):
             self.cleared = True
 
         def plot(self, *args, **kwargs):
-            pass
+            self.logged.append(("plot", args, kwargs))
 
         def set_title(self, *args):
-            pass
+            self.logged.append(("title", args))
 
-        def set_xlabel(self, *args):
-            pass
+        def set_xlabel(self, *args, **kwargs):
+            self.logged.append(("xlabel", args, kwargs))
 
-        def set_ylabel(self, *args):
-            pass
+        def set_ylabel(self, *args, **kwargs):
+            self.logged.append(("ylabel", args, kwargs))
 
         def legend(self, *args, **kwargs):
-            pass
+            self.logged.append(("legend", args, kwargs))
 
-        def grid(self, *args):
-            pass
+        def grid(self, *args, **kwargs):
+            self.logged.append(("grid", args, kwargs))
 
         def tick_params(self, *args, **kwargs):
-            pass
+            self.logged.append(("tick_params", args, kwargs))
 
         def axis(self, *args, **kwargs):
-            pass
+            self.logged.append(("axis", args, kwargs))
 
     fig = MockFig()
     ax = MockAx()
-    monkeypatch.setattr(
-        plt, "subplots", lambda *a, **k: (fig, np.array([ax]))
-    )  # <-- fixed here
+    monkeypatch.setattr(plt, "subplots", lambda *a, **k: (fig, np.array([ax])))
     monkeypatch.setattr(plt, "show", lambda: None)
 
     data = {
@@ -592,7 +597,10 @@ def test_overlay_mode_triggers_clear(monkeypatch):
         "B": {"y_true": np.array([1, 0]), "y_prob": np.array([0.6, 0.4])},
     }
 
-    def dummy_func(ax, data, group, color, overlay_mode=False, **kwargs):
+    def dummy_func(ax, data, group, color, overlay_mode=False, *args, **kwargs):
+        y_true = data[group]["y_true"]
+        y_prob = data[group]["y_prob"]
+        ax.plot(y_prob, y_true, color=color, *args, **kwargs)
         if not overlay_mode:
             ax.clear()
 
