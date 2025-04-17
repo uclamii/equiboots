@@ -318,6 +318,20 @@ def plot_with_layout(
     save_or_show_plot(fig, save_path, filename)
 
 
+def add_disparity_threshold_lines(
+    ax: plt.Axes, lower: float, upper: float, xmax: float
+) -> None:
+    """Add disparity threshold lines to the plot."""
+    ax.hlines(
+        [lower, 1.0, upper],
+        xmin=-0.5,
+        xmax=xmax + 0.5,
+        ls=":",
+        colors=["red", "black", "red"],
+    )
+    ax.set_xlim(-0.5, xmax + 0.5)
+
+
 ################################################################################
 # Residual Plot by Group
 ################################################################################
@@ -711,9 +725,9 @@ def _plot_bootstrapped_curve_ax(
     show_grid: bool = True,
     bar_every: int = 10,
     brier_scores: Optional[Dict[str, List[float]]] = None,
+    y_lim: Optional[Tuple[float, float]] = None,  # New parameter
 ) -> None:
     """Plot mean curve with confidence band and error bars for a bootstrapped group."""
-
     # Aggregate across bootstrap iterations
     mean_y = np.nanmean(y_array, axis=0)
     lower, upper = np.nanpercentile(y_array, [2.5, 97.5], axis=0)
@@ -738,11 +752,9 @@ def _plot_bootstrapped_curve_ax(
             if scores
             else (float("nan"), float("nan"))
         )
-        label = f"{group} (Mean Brier = {mean_brier:.3f} [{lower_brier:.3f}, "
-        f"{upper_brier:.3f}])"
+        label = f"{group} (Mean Brier = {mean_brier:.3f} [{lower_brier:.3f}, {upper_brier:.3f}],)"
     else:
-        label = f"{group} ({label_prefix} = {mean_auc:.2f} [{lower_auc:.2f}, "
-        f"{upper_auc:.2f}])"
+        label = f"{group} ({label_prefix} = {mean_auc:.2f} [{lower_auc:.2f}, {upper_auc:.2f}],)"
 
     # Set default plotting styles
     curve_kwargs = curve_kwargs or {"color": "#1f77b4"}
@@ -775,7 +787,15 @@ def _plot_bootstrapped_curve_ax(
     if label_prefix in ["AUROC", "CAL"]:
         ax.plot([0, 1], [0, 1], **line_kwargs)
     ax.set_xlim(0, 1)
-    ax.set_ylim(0, 1)
+
+    # Set y-axis limits dynamically based on confidence intervals if not provided
+    if y_lim is None:
+        y_min = min(np.min(lower), 0.0)  # Ensure at least 0.0
+        y_max = max(np.max(upper), 1.0)  # Ensure at least 1.0
+        padding = 0.05 * (y_max - y_min)  # Add 5% padding
+        y_lim = (y_min - padding, y_max + padding)
+    ax.set_ylim(y_lim)
+
     ax.set_title(group)
     ax.set_xlabel(
         "False Positive Rate"
@@ -903,7 +923,7 @@ def eq_plot_bootstrapped_group_curves(
 
 
 ################################################################################
-# Disparity Metrics (Violin or Box Plots)
+# Disparity Metrics (Violin/Box/Seaborn Plots)
 ################################################################################
 
 
@@ -922,29 +942,15 @@ def eq_disparity_metrics_plot(
     strict_layout: bool = True,
     figsize: Optional[Tuple[float, float]] = None,
     show_grid: bool = True,
+    disparity_thresholds: Tuple[float, float] = (0.0, 2.0),
+    show_pass_fail: bool = False,
+    y_lim: Optional[Tuple[float, float]] = None,
     **plot_kwargs: Dict[str, Union[str, float]],
 ) -> None:
     """
-    Plot disparity metrics as violin or box plots.
-
-    dispa : list - List of dictionaries containing group-level disparity metrics
-    metric_cols : list - List of metric keys (e.g., ['precision_diff', 'tpr_gap']) to plot
-    name : str - Prefix for subplot titles
-    plot_kind : str - Type of seaborn plot to use ('violinplot', 'boxplot', etc.)
-    categories : list|str - List of group attributes to include, or 'all' to include all
-    include_legend : bool - Whether to show the attribute legend at top
-    cmap : str - Matplotlib colormap name for attribute colors
-    color_by_group : bool - If True, color groups individually; otherwise use single color
-    save_path : str or None - If provided, saves plot to this path
-    filename : str - Filename to use (no extension needed)
-    max_cols : int or None - Max number of columns in subplot grid (auto if None)
-    strict_layout : bool - Use stricter width/height logic for tighter grid
-    figsize : tuple or None - Manual override for figure size
-    show_grid : bool - Whether to show axis gridlines
-    **plot_kwargs : dict - Additional keyword arguments for the seaborn plot function
-
+    Plot disparity metrics as violin, box/other seaborn plots, with
+    optional pass/fail coloring.
     """
-
     if not isinstance(dispa, list):
         raise TypeError("dispa should be a list")
 
@@ -952,34 +958,59 @@ def eq_disparity_metrics_plot(
     attributes = (
         [k for k in all_keys if k in categories] if categories != "all" else all_keys
     )
+
     color_map = plt.get_cmap(cmap)
     colors = [color_map(i / len(attributes)) for i in range(len(attributes))]
-    group_colors = {
+    base_colors = {
         attr: (colors[i] if color_by_group else "#1f77b4")
         for i, attr in enumerate(attributes)
     }
     legend_colors = {attr: colors[i] for i, attr in enumerate(attributes)}
 
-    n_rows, n_cols, figsize = get_layout(
+    n_rows, n_cols, auto_figsize = get_layout(
         len(metric_cols), max_cols, figsize, strict_layout
     )
+    if figsize is None:
+        figsize = auto_figsize
     fig, axs = plt.subplots(n_rows, n_cols, figsize=figsize, squeeze=False)
+
+    if y_lim is None:  # Set default y_lim if not specified
+        y_lim = (-2, 4)  # Always default to (-2, 4) if not specified
 
     for i, col in enumerate(metric_cols):
         ax = axs[i // n_cols, i % n_cols]
         x_vals, y_vals = [], []
+        group_pass_fail = {}
+
         for row in dispa:
             for attr in attributes:
                 if attr in row:
+                    val = row[attr][col]
                     x_vals.append(attr)
-                    y_vals.append(row[attr][col])
+                    y_vals.append(val)
+                    group_pass_fail.setdefault(attr, []).append(val)
+
+        lower, upper = disparity_thresholds
+
+        group_status = {
+            attr: "Pass" if all(lower <= v <= upper for v in vals) else "Fail"
+            for attr, vals in group_pass_fail.items()
+        }
+
+        group_colors = (
+            {
+                attr: ("green" if group_status.get(attr) == "Pass" else "red")
+                for attr in attributes
+            }
+            if show_pass_fail
+            else base_colors
+        )
 
         plot_func = getattr(sns, plot_kind, None)
         if not plot_func:
             raise ValueError(
                 f"Unsupported plot_kind: '{plot_kind}'. Must be a seaborn plot type."
             )
-
         plot_func(
             ax=ax,
             x=x_vals,
@@ -989,39 +1020,195 @@ def eq_disparity_metrics_plot(
             legend=False,
             **plot_kwargs,
         )
+
         ax.set_title(f"{name}_{col}")
+
         ax.set_xlabel("")
         ax.set_xticks(range(len(attributes)))
         ax.set_xticklabels(attributes, rotation=0, fontweight="bold")
         for tick_label in ax.get_xticklabels():
-            tick_label.set_color(legend_colors.get(tick_label.get_text(), "black"))
-        ax.hlines(
-            [0, 1, 2],
-            -1,
-            len(attributes) + 1,
-            ls=":",
-            colors=["red", "black", "red"],
-        )
-        ax.set_xlim(-1, len(attributes))
-        ax.set_ylim(-2, 4)
+            attr = tick_label.get_text()
+            tick_label.set_color(
+                ("green" if group_status.get(attr) == "Pass" else "red")
+                if show_pass_fail
+                else legend_colors.get(attr, "black")
+            )
+        add_disparity_threshold_lines(ax, lower, upper, len(attributes))
+        ax.set_ylim(y_lim)
         ax.grid(show_grid)
 
     for j in range(i + 1, n_rows * n_cols):
         axs[j // n_cols, j % n_cols].axis("off")
 
     if include_legend:
-        legend_handles = [
-            Line2D([0], [0], color=legend_colors[attr], lw=4, label=attr)
-            for attr in attributes
-        ]
+        if show_pass_fail:
+            legend_handles = [
+                Line2D([0], [0], color="green", lw=4, label="Pass"),
+                Line2D([0], [0], color="red", lw=4, label="Fail"),
+            ]
+        else:
+            legend_handles = [
+                Line2D([0], [0], color=legend_colors[attr], lw=4, label=attr)
+                for attr in attributes
+            ]
+
         fig.legend(
             handles=legend_handles,
             loc="upper center",
             bbox_to_anchor=(0.5, 1.15),
-            ncol=len(attributes),
+            ncol=len(legend_handles),
             fontsize="large",
             frameon=False,
         )
 
     plt.tight_layout(w_pad=2, h_pad=2, rect=[0.01, 0.01, 1.01, 1])
+    save_or_show_plot(fig, save_path, filename)
+
+
+#################################################################################
+
+
+def eq_disparity_metrics_point_plot(
+    dispa: List[Dict[str, Dict[str, float]]],
+    metric_cols: List[str],
+    category_names: List[str],
+    include_legend: bool = True,
+    cmap: str = "tab20c",
+    save_path: Optional[str] = None,
+    filename: str = "Point_Disparity_Metrics",
+    strict_layout: bool = True,
+    figsize: Optional[Tuple[float, float]] = None,
+    show_grid: bool = True,
+    disparity_thresholds: Tuple[float, float] = (0.0, 2.0),
+    show_pass_fail: bool = False,
+    y_lim: Optional[Tuple[float, float]] = None,
+    raw_metrics: bool = False,
+    **plot_kwargs: Dict[str, Union[str, float]],
+) -> None:
+    """
+    Plot point estimates of disparity metrics in a single plot, with each column
+    representing a sensitive attribute category (e.g., race, sex) containing all
+    its groups, and each row a metric. Converts raw metrics to disparity ratios
+    using the last group in each category as the reference.
+    """
+    # Set up colors
+    color_map = plt.get_cmap(cmap)
+    all_groups = sorted({group for groups in dispa for group in groups})
+    colors = [color_map(i / len(all_groups)) for i in range(len(all_groups))]
+    base_colors = {group: colors[i] for i, group in enumerate(all_groups)}
+
+    # Compute layout: rows = metrics, columns = categories
+    n_rows = len(metric_cols)  # One row per metric
+    n_cols = len(category_names)  # One column per category
+
+    # Use the existing get_layout function to determine figure size
+    _, _, auto_figsize = get_layout(
+        n_items=n_cols, n_cols=n_cols, figsize=figsize, strict_layout=strict_layout
+    )
+    figsize = figsize or auto_figsize
+
+    # Create subplot grid: rows = metrics, columns = categories
+    fig, axs = plt.subplots(n_rows, n_cols, figsize=figsize, squeeze=False)
+
+    lower, upper = disparity_thresholds
+
+    if raw_metrics:
+        # Raw numbers --> skip pass/fail colouring + disable thresholds.
+        show_pass_fail = False
+        # Force infinite thresholds so the “Fail” check can never fire
+        lower, upper = float("-inf"), float("inf")
+
+    for i, metric in enumerate(metric_cols):
+        for j, cat_name in enumerate(category_names):
+            ax = axs[i, j]  # Access subplot: row = metric, column = category
+
+            x_vals = []
+            y_vals = []
+            group_pass_fail = {}
+            groups = list(dispa[j].keys())
+            for group in dispa[j]:
+                val = dispa[j][group][metric]
+                if not np.isnan(val):
+                    x_vals.append(group)
+                    y_vals.append(val)
+                    group_pass_fail.setdefault(group, []).append(val)
+
+            # Determine pass/fail status for each group
+            group_status = {
+                group: "Pass" if all(lower <= v <= upper for v in vals) else "Fail"
+                for group, vals in group_pass_fail.items()
+            }
+
+            group_colors = (
+                {
+                    group: ("green" if group_status.get(group) == "Pass" else "red")
+                    for group in groups
+                }
+                if show_pass_fail
+                else base_colors
+            )
+
+            # Plot points
+            for x, y, group in zip(range(len(x_vals)), y_vals, x_vals):
+                sns.scatterplot(
+                    x=[x],
+                    y=[y],
+                    ax=ax,
+                    color=group_colors[group],
+                    s=100,
+                    label=None,  # No subplot legend
+                    **plot_kwargs,
+                )
+
+            # Customize axis
+            ax.set_title(f"{cat_name} - {metric}")
+            ax.set_xlabel("")
+            ax.set_xticks(range(len(groups)))
+            ax.set_xticklabels(groups, rotation=45, ha="right")
+            for tick_label in ax.get_xticklabels():
+                group = tick_label.get_text()
+                if show_pass_fail:
+                    tick_label.set_color(
+                        "green" if group_status.get(group) == "Pass" else "red"
+                    )
+                else:
+                    tick_label.set_color(base_colors.get(group, "black"))
+
+            ax.set_ylim(y_lim)
+            ax.grid(show_grid)
+
+            add_disparity_threshold_lines(ax, lower, upper, len(groups))
+            ax.set_xlim(-0.5, len(groups) - 0.5)
+
+    # Turn off unused subplots (shouldn't be needed since grid matches exactly)
+    for row_idx in range(len(metric_cols)):
+        for col_idx in range(len(category_names), n_cols):
+            if col_idx < n_cols:  # Just in case
+                axs[row_idx, col_idx].axis("off")
+
+    # Add overarching legend
+    if include_legend:
+        if show_pass_fail:
+            legend_handles = [
+                Line2D([0], [0], color="green", lw=4, label="Pass"),
+                Line2D([0], [0], color="red", lw=4, label="Fail"),
+            ]
+        else:
+            legend_handles = [
+                Line2D([0], [0], color=base_colors[group], lw=4, label=group)
+                for group in all_groups
+            ]
+
+        fig.legend(
+            handles=legend_handles,
+            loc="upper center",
+            bbox_to_anchor=(0.5, 1.05),
+            ncol=len(legend_handles),
+            fontsize="large",
+            frameon=False,
+        )
+
+    if strict_layout:
+        plt.tight_layout(w_pad=2, h_pad=2, rect=[0.01, 0.01, 1.01, 1])
+
     save_or_show_plot(fig, save_path, filename)
