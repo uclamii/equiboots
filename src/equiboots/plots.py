@@ -1113,11 +1113,9 @@ def eq_disparity_metrics_point_plot(
     lower, upper = disparity_thresholds
 
     if raw_metrics:
-        # If caller passed raw metrics we disable pass/fail colouring and
-        # threshold lines (they only make sense for ratios).
+        # Raw numbers --> skip pass/fail colouring + disable thresholds.
         show_pass_fail = False
-        # Set lower/upper so they will never trip the “Fail” logic even if
-        # the caller left show_pass_fail=True by mistake.
+        # Force infinite thresholds so the “Fail” check can never fire
         lower, upper = float("-inf"), float("inf")
 
     for i, metric in enumerate(metric_cols):
