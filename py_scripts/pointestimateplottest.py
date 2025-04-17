@@ -44,8 +44,12 @@ if __name__ == "__main__":
 
     # Run with custom y_lim and adjusted thresholds
     eqb.eq_disparity_metrics_point_plot(
-        dispa=[race_metrics_3, sex_metrics_3],
-        metric_cols=["Accuracy", "Precision", "Recall"],
+        dispa=[dispa_race, dispa_sex],
+        metric_cols=[
+            "Accuracy_ratio",
+            "Precision_ratio",
+            "Recall_ratio",
+        ],
         category_names=["race", "sex"],
         figsize=(6, 8),
         include_legend=True,
