@@ -439,18 +439,19 @@ def test_filter_groups_exclude_by_name():
 
 
 def test_eq_disparity_metrics_point_plot_divide_by_zero(monkeypatch):
-    """Verify graceful handling when reference group has zero metric value."""
+    """Ensure plot handles divide-by-zero gracefully when reference metric is zero."""
+    # Suppress plot display during test execution
     monkeypatch.setattr(plt, "show", lambda: None)
 
-    # New structure: one dict per category, keyed directly by group names
+    # Simulate disparity input where the reference group has a zero metric value
     dispa = [
         {
-            "White": {"Accuracy": 0.0},  # reference group = 0
+            "White": {"Accuracy": 0.0},  # Reference group with zero value
             "Black": {"Accuracy": 0.9},
         }
     ]
 
-    # Category name list is still needed for column headings
+    # Verify that plotting function executes without error
     plots.eq_disparity_metrics_point_plot(
         dispa,
         metric_cols=["Accuracy"],
