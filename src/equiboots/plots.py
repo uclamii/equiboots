@@ -318,6 +318,20 @@ def plot_with_layout(
     save_or_show_plot(fig, save_path, filename)
 
 
+def add_disparity_threshold_lines(
+    ax: plt.Axes, lower: float, upper: float, xmax: float
+) -> None:
+    """Add disparity threshold lines to the plot."""
+    ax.hlines(
+        [lower, 1.0, upper],
+        xmin=-0.5,
+        xmax=xmax + 0.5,
+        ls=":",
+        colors=["red", "black", "red"],
+    )
+    ax.set_xlim(-0.5, xmax + 0.5)
+
+
 ################################################################################
 # Residual Plot by Group
 ################################################################################
@@ -1019,15 +1033,7 @@ def eq_disparity_metrics_plot(
                 if show_pass_fail
                 else legend_colors.get(attr, "black")
             )
-
-        ax.hlines(
-            [lower, 1.0, upper],
-            xmin=-1,
-            xmax=len(attributes),
-            ls=":",
-            colors=["red", "black", "red"],
-        )
-        ax.set_xlim(-1, len(attributes))
+        add_disparity_threshold_lines(ax, lower, upper, len(attributes))
         ax.set_ylim(y_lim)
         ax.grid(show_grid)
 
@@ -1076,6 +1082,7 @@ def eq_disparity_metrics_point_plot(
     disparity_thresholds: Tuple[float, float] = (0.0, 2.0),
     show_pass_fail: bool = False,
     y_lim: Optional[Tuple[float, float]] = None,
+    raw_metrics: bool = False,
     **plot_kwargs: Dict[str, Union[str, float]],
 ) -> None:
     """
@@ -1084,59 +1091,15 @@ def eq_disparity_metrics_point_plot(
     its groups, and each row a metric. Converts raw metrics to disparity ratios
     using the last group in each category as the reference.
     """
-
-    if not isinstance(dispa, list) or not dispa:
-        raise ValueError("dispa must be a non-empty list of dictionaries")
-
-    if len(dispa) != len(category_names):
-        raise ValueError(
-            f"Length of dispa ({len(dispa)}) must match length of category_names "
-            f"({len(category_names)})"
-        )
-
-    # Build categories and compute disparity ratios
-    categories = {}
-    ratio_dispa = {}
-    for cat_name, d in zip(category_names, dispa):
-        if not isinstance(d, dict) or not d:
-            raise ValueError(
-                f"Dictionary for category {cat_name} must be a non-empty dictionary"
-            )
-        groups = sorted(d.keys())
-        categories[cat_name] = groups
-
-        # Use the last group as the reference (e.g., 'white' for race, 'M' for sex)
-        ref_group = groups[-1]
-        ref_metrics = d[ref_group]
-        print(f"Reference group for category {cat_name}: {ref_group}")
-
-        # Compute disparity ratios relative to the reference group
-        ratio_dispa[cat_name] = {}
-        for group in groups:
-            ratio_dispa[cat_name][group] = {}
-            for metric in metric_cols:
-                if metric in d[group] and metric in ref_metrics:
-                    ref_value = ref_metrics[metric]
-                    if ref_value != 0:  # Avoid division by zero
-                        ratio_dispa[cat_name][group][metric] = (
-                            d[group][metric] / ref_value
-                        )
-                    else:
-                        ratio_dispa[cat_name][group][metric] = float("nan")
-                else:
-                    ratio_dispa[cat_name][group][metric] = float("nan")
-
-    # Extract all groups for legend
-    all_groups = sorted({group for groups in categories.values() for group in groups})
-
     # Set up colors
     color_map = plt.get_cmap(cmap)
+    all_groups = sorted({group for groups in dispa for group in groups})
     colors = [color_map(i / len(all_groups)) for i in range(len(all_groups))]
     base_colors = {group: colors[i] for i, group in enumerate(all_groups)}
 
     # Compute layout: rows = metrics, columns = categories
     n_rows = len(metric_cols)  # One row per metric
-    n_cols = len(categories)  # One column per category
+    n_cols = len(category_names)  # One column per category
 
     # Use the existing get_layout function to determine figure size
     _, _, auto_figsize = get_layout(
@@ -1149,33 +1112,24 @@ def eq_disparity_metrics_point_plot(
 
     lower, upper = disparity_thresholds
 
-    # Determine y-axis limits if not specified
-    if y_lim is None:
-        # Compute min and max values across all data points (ratios)
-        all_values = [
-            ratio_dispa[cat_name][group][metric]
-            for cat_name in categories
-            for group in categories[cat_name]
-            for metric in metric_cols
-            if not np.isnan(ratio_dispa[cat_name][group][metric])
-        ]
-        if all_values:
-            y_min = min(all_values) - 0.1 * (max(all_values) - min(all_values))
-            y_max = max(all_values) + 0.1 * (max(all_values) - min(all_values))
-            y_lim = (y_min, y_max)
-        else:
-            y_lim = (-2, 4)  # Default if no data
+    if raw_metrics:
+        # If caller passed raw metrics we disable pass/fail colouring and
+        # threshold lines (they only make sense for ratios).
+        show_pass_fail = False
+        # Set lower/upper so they will never trip the “Fail” logic even if
+        # the caller left show_pass_fail=True by mistake.
+        lower, upper = float("-inf"), float("inf")
 
     for i, metric in enumerate(metric_cols):
-        for j, (cat_name, groups) in enumerate(categories.items()):
+        for j, cat_name in enumerate(category_names):
             ax = axs[i, j]  # Access subplot: row = metric, column = category
 
             x_vals = []
             y_vals = []
             group_pass_fail = {}
-
-            for group in groups:
-                val = ratio_dispa[cat_name][group][metric]
+            groups = list(dispa[j].keys())
+            for group in dispa[j]:
+                val = dispa[j][group][metric]
                 if not np.isnan(val):
                     x_vals.append(group)
                     y_vals.append(val)
@@ -1215,28 +1169,22 @@ def eq_disparity_metrics_point_plot(
             ax.set_xticklabels(groups, rotation=45, ha="right")
             for tick_label in ax.get_xticklabels():
                 group = tick_label.get_text()
-                tick_label.set_color(
-                    "green"
-                    if group_status.get(group) == "Pass"
-                    else "red" if show_pass_fail else "black"
-                )
+                if show_pass_fail:
+                    tick_label.set_color(
+                        "green" if group_status.get(group) == "Pass" else "red"
+                    )
+                else:
+                    tick_label.set_color(base_colors.get(group, "black"))
 
             ax.set_ylim(y_lim)
             ax.grid(show_grid)
 
-            # Add threshold lines
-            ax.hlines(
-                [lower, 1.0, upper],
-                xmin=-0.5,
-                xmax=len(groups) - 0.5,
-                ls=":",
-                colors=["red", "black", "red"],
-            )
+            add_disparity_threshold_lines(ax, lower, upper, len(groups))
             ax.set_xlim(-0.5, len(groups) - 0.5)
 
     # Turn off unused subplots (shouldn't be needed since grid matches exactly)
     for row_idx in range(len(metric_cols)):
-        for col_idx in range(len(categories), n_cols):
+        for col_idx in range(len(category_names), n_cols):
             if col_idx < n_cols:  # Just in case
                 axs[row_idx, col_idx].axis("off")
 
