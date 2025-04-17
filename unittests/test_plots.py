@@ -439,15 +439,18 @@ def test_filter_groups_exclude_by_name():
 
 
 def test_eq_disparity_metrics_point_plot_divide_by_zero(monkeypatch):
+    """Verify graceful handling when reference group has zero metric value."""
     monkeypatch.setattr(plt, "show", lambda: None)
+
+    # New structure: one dict per category, keyed directly by group names
     dispa = [
         {
-            "Race": {
-                "White": {"Accuracy": 0.0},  # ref group has 0
-                "Black": {"Accuracy": 0.9},
-            }
+            "White": {"Accuracy": 0.0},  # reference group = 0
+            "Black": {"Accuracy": 0.9},
         }
     ]
+
+    # Category name list is still needed for column headings
     plots.eq_disparity_metrics_point_plot(
         dispa,
         metric_cols=["Accuracy"],
