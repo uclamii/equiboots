@@ -1,7 +1,9 @@
+.. _citations:   
+
 .. _target-link:
 
 
-Citing Model Metrics
+Citing EquiBoots
 ======================
 
 Shpaner, L., Funnell, A., & Petousis, P. (2025). EquiBoots (0.0.1a) [Software]. Zenodo. https://doi.org/10.5281/zenodo.15086941
