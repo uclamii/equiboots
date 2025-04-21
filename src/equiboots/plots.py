@@ -958,13 +958,9 @@ def eq_group_metrics_plot(
     plot_kind             : str, default "violinplot" - Seaborn plot type (e.g.,
                                                       'violinplot', 'boxplot')
     categories            : str or list    - Categories to include or 'all'
-    include_legend        : bool, default True - Show legend
-    cmap                  : str, default "tab20c" - Colormap name
     color_by_group        : bool, default True - Use separate colors per group
     max_cols              : int or None    - Max columns in facet grid
     strict_layout         : bool, default True - Apply tight layout adjustments
-    figsize               : tuple or None  - Figure size as (width, height) in inches
-    show_grid             : bool, default True - Toggle gridlines on subplots
     disparity_thresholds  : tuple, default (0.0, 2.0) - (lower, upper) bounds for
                                                         pass/fail
     show_pass_fail        : bool, default False - Color by pass/fail instead of
@@ -1115,13 +1111,10 @@ def eq_group_metrics_point_plot(
                                          {metric: value}
     metric_cols     : list             - Metric names to plot (defines rows)
     category_names  : list             - Category labels to plot (defines columns)
-    include_legend  : bool             - Show overarching legend if True
     cmap            : str              - Colormap for group coloring
     save_path       : str or None      - Directory to save figure (None displays)
     filename        : str              - Filename prefix (no extension)
     strict_layout   : bool             - Apply tight layout adjustments
-    figsize         : tuple or None    - Figure size (width, height) in inches
-    show_grid       : bool             - Toggle gridlines on subplots
     plot_thresholds : tuple            - (lower, upper) bounds for pass/fail
     show_pass_fail  : bool             - Color by pass/fail instead of group colors
     y_lim           : tuple or None    - y‑axis limits as (min, max)
