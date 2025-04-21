@@ -927,7 +927,7 @@ def eq_plot_bootstrapped_group_curves(
 ################################################################################
 
 
-def eq_group_metrics_snsplot(
+def eq_group_metrics_plot(
     group_metrics: List[Dict[str, Dict[str, float]]],
     metric_cols: List[str],
     name: str,

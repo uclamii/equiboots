@@ -185,22 +185,22 @@ def test_eq_plot_group_curves_all_curve_types(monkeypatch):
         plots.eq_plot_group_curves(data, curve_type=curve)
 
 
-def testeq_group_metrics_snsplot_typeerror():
+def testeq_group_metrics_plot_typeerror():
     with pytest.raises(TypeError):
-        plots.eq_group_metrics_snsplot(
+        plots.eq_group_metrics_plot(
             group_metrics={"A": {"Accuracy_ratio": 1.0}},
             metric_cols=["Accuracy_ratio"],
             name="test",
         )
 
 
-def test_eq_group_metrics_snsplot_invalid_kind():
+def test_eq_group_metrics_plot_invalid_kind():
     group_metrics = [
         {"A": {"Metric1": 0.9}},
         {"A": {"Metric1": 1.1}},
     ]
     with pytest.raises(ValueError):
-        plots.eq_group_metrics_snsplot(
+        plots.eq_group_metrics_plot(
             group_metrics=group_metrics,
             metric_cols=["Metric1"],
             name="group",
@@ -321,13 +321,13 @@ def test_eq_plot_bootstrapped_group_curves_calibration(monkeypatch):
     plots.eq_plot_bootstrapped_group_curves(boot_data, curve_type="calibration")
 
 
-def test_eq_group_metrics_snsplot_violin(monkeypatch):
+def test_eq_group_metrics_plot_violin(monkeypatch):
     group_metrics = [
         {"A": {"Metric1": 0.9, "Metric2": 0.1}},
         {"A": {"Metric1": 1.1, "Metric2": 0.2}},
     ]
     monkeypatch.setattr(plt, "show", lambda: None)
-    plots.eq_group_metrics_snsplot(
+    plots.eq_group_metrics_plot(
         group_metrics=group_metrics,
         metric_cols=["Metric1", "Metric2"],
         name="test",
