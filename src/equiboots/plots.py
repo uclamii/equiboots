@@ -923,7 +923,7 @@ def eq_plot_bootstrapped_group_curves(
 
 
 ################################################################################
-# Disparity Metrics (Violin/Box/Seaborn Plots)
+# Group and Disparity Metrics (Violin/Box/Seaborn Plots)
 ################################################################################
 
 
@@ -948,9 +948,30 @@ def eq_group_metrics_plot(
     **plot_kwargs: Dict[str, Union[str, float]],
 ) -> None:
     """
-    Plot disparity metrics as violin, box/other seaborn plots, with
+    Plot group and disparity metrics as violin, box, or other seaborn plots with
     optional pass/fail coloring.
+
+    group_metrics         : list           - One dict per category mapping group
+                                             -> {metric: value}
+    metric_cols           : list           - Metric names to plot
+    name                  : str            - Plot title or identifier
+    plot_kind             : str, default "violinplot" - Seaborn plot type (e.g.,
+                                                      'violinplot', 'boxplot')
+    categories            : str or list    - Categories to include or 'all'
+    include_legend        : bool, default True - Show legend
+    cmap                  : str, default "tab20c" - Colormap name
+    color_by_group        : bool, default True - Use separate colors per group
+    max_cols              : int or None    - Max columns in facet grid
+    strict_layout         : bool, default True - Apply tight layout adjustments
+    figsize               : tuple or None  - Figure size as (width, height) in inches
+    show_grid             : bool, default True - Toggle gridlines on subplots
+    disparity_thresholds  : tuple, default (0.0, 2.0) - (lower, upper) bounds for
+                                                        pass/fail
+    show_pass_fail        : bool, default False - Color by pass/fail instead of
+                                                  group colors
+    y_lim                 : tuple or None  - y-axis limits as (min, max)
     """
+
     if not isinstance(group_metrics, list):
         raise TypeError("group_metrics should be a list")
 
@@ -1065,7 +1086,9 @@ def eq_group_metrics_plot(
     save_or_show_plot(fig, save_path, filename)
 
 
-#################################################################################
+################################################################################
+# Group and Disparity Metrics (Point Estimate Plots)
+################################################################################
 
 
 def eq_group_metrics_point_plot(
@@ -1086,11 +1109,25 @@ def eq_group_metrics_point_plot(
     **plot_kwargs: Dict[str, Union[str, float]],
 ) -> None:
     """
-    Plot point estimates of disparity metrics in a single plot, with each column
-    representing a sensitive attribute category (e.g., race, sex) containing all
-    its groups, and each row a metric. Converts raw metrics to disparity ratios
-    using the last group in each category as the reference.
+    Plot point estimates of group and disparity metrics by category.
+
+    group_metrics   : list of dict     - One dict per category mapping group ->
+                                         {metric: value}
+    metric_cols     : list             - Metric names to plot (defines rows)
+    category_names  : list             - Category labels to plot (defines columns)
+    include_legend  : bool             - Show overarching legend if True
+    cmap            : str              - Colormap for group coloring
+    save_path       : str or None      - Directory to save figure (None displays)
+    filename        : str              - Filename prefix (no extension)
+    strict_layout   : bool             - Apply tight layout adjustments
+    figsize         : tuple or None    - Figure size (width, height) in inches
+    show_grid       : bool             - Toggle gridlines on subplots
+    plot_thresholds : tuple            - (lower, upper) bounds for pass/fail
+    show_pass_fail  : bool             - Color by pass/fail instead of group colors
+    y_lim           : tuple or None    - y‑axis limits as (min, max)
+    raw_metrics     : bool             - Treat metrics as raw; not metric ratios
     """
+
     # Set up colors
     color_map = plt.get_cmap(cmap)
     all_groups = sorted({group for groups in group_metrics for group in groups})
