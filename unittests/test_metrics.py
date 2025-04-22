@@ -1,3 +1,4 @@
+import pandas as pd
 import numpy as np
 from sklearn.preprocessing import MultiLabelBinarizer
 from src.equiboots import metrics
@@ -8,6 +9,7 @@ from src.equiboots.metrics import (
     multi_class_classification_metrics,
     multi_label_classification_metrics,
     regression_metrics,
+    metrics_dataframe,
 )
 
 
@@ -111,3 +113,26 @@ def test_main_executes_examples(monkeypatch):
     import runpy
 
     runpy.run_module("src.equiboots.metrics", run_name="__main__")
+
+
+def test_metrics_dataframe_outputs_correct_format():
+    # Sample input
+    input_data = [
+        {
+            "GroupA": {"Accuracy": 0.9, "F1 Score": 0.85},
+            "GroupB": {"Accuracy": 0.8, "F1 Score": 0.75},
+        },
+        {
+            "GroupA": {"Accuracy": 0.92, "F1 Score": 0.88},
+            "GroupB": {"Accuracy": 0.78, "F1 Score": 0.70},
+        },
+    ]
+
+    df = metrics_dataframe(input_data)
+
+    # Assertions
+    assert isinstance(df, pd.DataFrame)
+    assert set(df.columns) == {"Accuracy", "F1 Score", "attribute_value"}
+    assert df.shape[0] == 4  # 2 groups * 2 timepoints = 4 rows
+    assert all(df["attribute_value"].isin(["GroupA", "GroupB"]))
+    assert df["Accuracy"].between(0, 1).all()

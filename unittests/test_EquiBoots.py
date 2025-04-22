@@ -305,20 +305,19 @@ def test_calculate_disparities_warns_on_zero_ref_value():
         reference_groups=["white"],
         task="binary_classification",
     )
+    eq.min_group_size = 0  # disable group filtering
 
-    # Create a fake metric dict with a zero reference value
     metric_dict = {
-        "white": {"accuracy": 0.0},  # reference group with zero value
+        "white": {"accuracy": 0.0},  # reference group
         "black": {"accuracy": 0.8},
     }
 
     with warnings.catch_warnings(record=True) as w:
-        warnings.simplefilter("always")  # catch all warnings
+        warnings.simplefilter("always")
         disparities = eq.calculate_groups_disparities(metric_dict, "race")
 
-        # Make sure the warning was triggered
         assert any("Reference metric value is zero" in str(warn.message) for warn in w)
-        assert disparities["black"]["accuracy_ratio"] == -1
+        assert disparities["black"]["accuracy_Ratio"] == -1
 
 
 def test_default_reference_group_selection():
@@ -430,13 +429,16 @@ def test_reference_group_zero_warning():
         fairness_df=pd.DataFrame({"race": ["A", "B"]}),
         fairness_vars=["race"],
     )
+    eb.reference_groups = {"race": "A"}
+    eb.min_group_size = 0  # avoid group filtering
+
     metrics_dict = {
         "A": {"acc": 0.0},
         "B": {"acc": 0.9},
     }
-    eb.reference_groups = {"race": "A"}
+
     disparities = eb.calculate_groups_disparities(metrics_dict, var_name="race")
-    assert disparities["B"]["acc_ratio"] == -1
+    assert disparities["B"]["acc_Ratio"] == -1
 
 
 def set_fix_seeds(self, seeds: list) -> None:
