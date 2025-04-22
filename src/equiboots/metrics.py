@@ -244,7 +244,7 @@ def regression_metrics(y_true: np.ndarray, y_pred: np.ndarray) -> Dict[str, floa
     return metrics
 
 
-def melt_metrics_data(metrics_data: List[Dict[str, Dict[str, float]]]) -> pd.DataFrame:
+def metrics_dataframe(metrics_data: List[Dict[str, Dict[str, float]]]) -> pd.DataFrame:
     """
     Transform a list of metrics dictionaries into a flattened DataFrame.
 
