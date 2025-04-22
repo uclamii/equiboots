@@ -1,3 +1,4 @@
+import pandas as pd
 import numpy as np
 
 from sklearn.metrics import (
@@ -241,6 +242,20 @@ def regression_metrics(y_true: np.ndarray, y_pred: np.ndarray) -> Dict[str, floa
     }
 
     return metrics
+
+
+def metrics_dataframe(metrics_data: List[Dict[str, Dict[str, float]]]) -> pd.DataFrame:
+    """
+    Transform a list of metrics dictionaries into a flattened DataFrame.
+
+    Returns
+    -------
+        A DataFrame with columns for each metric and an 'attribute_value' column
+        indicating the group.
+    """
+    melted = pd.DataFrame(metrics_data).melt()
+    df = melted["value"].apply(pd.Series).assign(attribute_value=melted["variable"])
+    return df
 
 
 ####################################### toy examples

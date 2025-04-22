@@ -432,11 +432,12 @@ class EquiBoots:
                     continue
 
                 ref_value = ref_metrics[metric_name]
+                sanitized_name = metric_name.replace(" ", "_")
                 if ref_value != 0:
                     ratio = value / ref_value
-                    disparities[category][f"{metric_name}_ratio"] = ratio
+                    disparities[category][f"{sanitized_name}_Ratio"] = ratio
                 else:
-                    disparities[category][f"{metric_name}_ratio"] = -1
+                    disparities[category][f"{sanitized_name}_Ratio"] = -1
                     warnings.warn(
                         "Reference metric value is zero returning negative value"
                     )
