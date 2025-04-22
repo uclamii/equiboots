@@ -2,6 +2,7 @@ import numpy as np
 import pandas as pd
 from equiboots import EquiBoots
 from sklearn.preprocessing import MultiLabelBinarizer
+import equiboots as eqb
 
 
 def eq_general_test(task):
@@ -99,22 +100,17 @@ def eq_general_test(task):
     # Get metrics
     # Note: The metrics are calculated for each group in the groupings_vars
     race_metrics = eq.get_metrics(data)
+    sex_metrics = eq.get_metrics(data)
 
     print("race_metrics", race_metrics)
     print("len(race_metrics)", len(race_metrics))
 
     dispa = eq.calculate_disparities(race_metrics, "race")
 
-    melted = pd.DataFrame(dispa).melt()
-    df = (
-        melted["value"]
-        .apply(pd.Series)
-        .assign(
-            attribute_value=melted["variable"],
-        )
-    )
+    # Create DataFrame from disparities
+    disa_metrics_df = eqb.metrics_dataframe(metrics_data=dispa)
+    print(f"Disparity Metrics DataFrame\n{disa_metrics_df}\n")
 
-    print(df.head())
     print("dispa", dispa)
     print("len(dispa)", len(dispa))
 
