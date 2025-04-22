@@ -318,7 +318,7 @@ def plot_with_layout(
     save_or_show_plot(fig, save_path, filename)
 
 
-def add_disparity_threshold_lines(
+def add_plot_threshold_lines(
     ax: plt.Axes, lower: float, upper: float, xmax: float
 ) -> None:
     """Add disparity threshold lines to the plot."""
@@ -752,9 +752,9 @@ def _plot_bootstrapped_curve_ax(
             if scores
             else (float("nan"), float("nan"))
         )
-        label = f"{group} (Mean Brier = {mean_brier:.3f} [{lower_brier:.3f}, {upper_brier:.3f}],)"
+        label = f"{group} (Mean Brier = {mean_brier:.3f} [{lower_brier:.3f}, {upper_brier:.3f}])"
     else:
-        label = f"{group} ({label_prefix} = {mean_auc:.2f} [{lower_auc:.2f}, {upper_auc:.2f}],)"
+        label = f"{group} ({label_prefix} = {mean_auc:.2f} [{lower_auc:.2f}, {upper_auc:.2f}])"
 
     # Set default plotting styles
     curve_kwargs = curve_kwargs or {"color": "#1f77b4"}
@@ -923,12 +923,12 @@ def eq_plot_bootstrapped_group_curves(
 
 
 ################################################################################
-# Disparity Metrics (Violin/Box/Seaborn Plots)
+# Group and Disparity Metrics (Violin/Box/Seaborn Plots)
 ################################################################################
 
 
-def eq_disparity_metrics_plot(
-    dispa: List[Dict[str, Dict[str, float]]],
+def eq_group_metrics_plot(
+    group_metrics: List[Dict[str, Dict[str, float]]],
     metric_cols: List[str],
     name: str,
     plot_kind: str = "violinplot",
@@ -948,13 +948,30 @@ def eq_disparity_metrics_plot(
     **plot_kwargs: Dict[str, Union[str, float]],
 ) -> None:
     """
-    Plot disparity metrics as violin, box/other seaborn plots, with
+    Plot group and disparity metrics as violin, box, or other seaborn plots with
     optional pass/fail coloring.
-    """
-    if not isinstance(dispa, list):
-        raise TypeError("dispa should be a list")
 
-    all_keys = sorted({key for row in dispa for key in row.keys()})
+    group_metrics         : list           - One dict per category mapping group
+                                             -> {metric: value}
+    metric_cols           : list           - Metric names to plot
+    name                  : str            - Plot title or identifier
+    plot_kind             : str, default "violinplot" - Seaborn plot type (e.g.,
+                                                      'violinplot', 'boxplot')
+    categories            : str or list    - Categories to include or 'all'
+    color_by_group        : bool, default True - Use separate colors per group
+    max_cols              : int or None    - Max columns in facet grid
+    strict_layout         : bool, default True - Apply tight layout adjustments
+    disparity_thresholds  : tuple, default (0.0, 2.0) - (lower, upper) bounds for
+                                                        pass/fail
+    show_pass_fail        : bool, default False - Color by pass/fail instead of
+                                                  group colors
+    y_lim                 : tuple or None  - y-axis limits as (min, max)
+    """
+
+    if not isinstance(group_metrics, list):
+        raise TypeError("group_metrics should be a list")
+
+    all_keys = sorted({key for row in group_metrics for key in row.keys()})
     attributes = (
         [k for k in all_keys if k in categories] if categories != "all" else all_keys
     )
@@ -982,7 +999,7 @@ def eq_disparity_metrics_plot(
         x_vals, y_vals = [], []
         group_pass_fail = {}
 
-        for row in dispa:
+        for row in group_metrics:
             for attr in attributes:
                 if attr in row:
                     val = row[attr][col]
@@ -1033,7 +1050,7 @@ def eq_disparity_metrics_plot(
                 if show_pass_fail
                 else legend_colors.get(attr, "black")
             )
-        add_disparity_threshold_lines(ax, lower, upper, len(attributes))
+        add_plot_threshold_lines(ax, lower, upper, len(attributes))
         ax.set_ylim(y_lim)
         ax.grid(show_grid)
 
@@ -1065,11 +1082,13 @@ def eq_disparity_metrics_plot(
     save_or_show_plot(fig, save_path, filename)
 
 
-#################################################################################
+################################################################################
+# Group and Disparity Metrics (Point Estimate Plots)
+################################################################################
 
 
-def eq_disparity_metrics_point_plot(
-    dispa: List[Dict[str, Dict[str, float]]],
+def eq_group_metrics_point_plot(
+    group_metrics: List[Dict[str, Dict[str, float]]],
     metric_cols: List[str],
     category_names: List[str],
     include_legend: bool = True,
@@ -1079,21 +1098,32 @@ def eq_disparity_metrics_point_plot(
     strict_layout: bool = True,
     figsize: Optional[Tuple[float, float]] = None,
     show_grid: bool = True,
-    disparity_thresholds: Tuple[float, float] = (0.0, 2.0),
+    plot_thresholds: Tuple[float, float] = (0.0, 2.0),
     show_pass_fail: bool = False,
     y_lim: Optional[Tuple[float, float]] = None,
     raw_metrics: bool = False,
     **plot_kwargs: Dict[str, Union[str, float]],
 ) -> None:
     """
-    Plot point estimates of disparity metrics in a single plot, with each column
-    representing a sensitive attribute category (e.g., race, sex) containing all
-    its groups, and each row a metric. Converts raw metrics to disparity ratios
-    using the last group in each category as the reference.
+    Plot point estimates of group and disparity metrics by category.
+
+    group_metrics   : list of dict     - One dict per category mapping group ->
+                                         {metric: value}
+    metric_cols     : list             - Metric names to plot (defines rows)
+    category_names  : list             - Category labels to plot (defines columns)
+    cmap            : str              - Colormap for group coloring
+    save_path       : str or None      - Directory to save figure (None displays)
+    filename        : str              - Filename prefix (no extension)
+    strict_layout   : bool             - Apply tight layout adjustments
+    plot_thresholds : tuple            - (lower, upper) bounds for pass/fail
+    show_pass_fail  : bool             - Color by pass/fail instead of group colors
+    y_lim           : tuple or None    - y‑axis limits as (min, max)
+    raw_metrics     : bool             - Treat metrics as raw; not metric ratios
     """
+
     # Set up colors
     color_map = plt.get_cmap(cmap)
-    all_groups = sorted({group for groups in dispa for group in groups})
+    all_groups = sorted({group for groups in group_metrics for group in groups})
     colors = [color_map(i / len(all_groups)) for i in range(len(all_groups))]
     base_colors = {group: colors[i] for i, group in enumerate(all_groups)}
 
@@ -1110,7 +1140,7 @@ def eq_disparity_metrics_point_plot(
     # Create subplot grid: rows = metrics, columns = categories
     fig, axs = plt.subplots(n_rows, n_cols, figsize=figsize, squeeze=False)
 
-    lower, upper = disparity_thresholds
+    lower, upper = plot_thresholds
 
     if raw_metrics:
         # Raw numbers --> skip pass/fail colouring + disable thresholds.
@@ -1125,9 +1155,9 @@ def eq_disparity_metrics_point_plot(
             x_vals = []
             y_vals = []
             group_pass_fail = {}
-            groups = list(dispa[j].keys())
-            for group in dispa[j]:
-                val = dispa[j][group][metric]
+            groups = list(group_metrics[j].keys())
+            for group in group_metrics[j]:
+                val = group_metrics[j][group][metric]
                 if not np.isnan(val):
                     x_vals.append(group)
                     y_vals.append(val)
@@ -1177,7 +1207,7 @@ def eq_disparity_metrics_point_plot(
             ax.set_ylim(y_lim)
             ax.grid(show_grid)
 
-            add_disparity_threshold_lines(ax, lower, upper, len(groups))
+            add_plot_threshold_lines(ax, lower, upper, len(groups))
             ax.set_xlim(-0.5, len(groups) - 0.5)
 
     # Turn off unused subplots (shouldn't be needed since grid matches exactly)
