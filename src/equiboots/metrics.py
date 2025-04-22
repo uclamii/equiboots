@@ -248,10 +248,6 @@ def metrics_dataframe(metrics_data: List[Dict[str, Dict[str, float]]]) -> pd.Dat
     """
     Transform a list of metrics dictionaries into a flattened DataFrame.
 
-    metrics_data : List[Dict[str, Dict[str, float]]]
-        A list where each element is a dictionary mapping group names to metric
-        dictionaries.
-
     Returns
     -------
         A DataFrame with columns for each metric and an 'attribute_value' column
