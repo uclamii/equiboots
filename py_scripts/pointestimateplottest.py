@@ -39,12 +39,12 @@ if __name__ == "__main__":
     race_metrics_3 = eq.get_metrics(data_race)
     sex_metrics_3 = eq.get_metrics(data_sex)
 
-    dispa_race = eq.calculate_disparities(race_metrics_3, "race")
-    dispa_sex = eq.calculate_disparities(sex_metrics_3, "sex")
+    group_race = eq.calculate_disparities(race_metrics_3, "race")
+    group_sex = eq.calculate_disparities(sex_metrics_3, "sex")
 
     # Run with custom y_lim and adjusted thresholds
-    eqb.eq_disparity_metrics_point_plot(
-        dispa=[dispa_race, dispa_sex],
+    eqb.eq_group_metrics_point_plot(
+        group_metrics=[group_race, group_sex],
         metric_cols=[
             "Accuracy_ratio",
             "Precision_ratio",
@@ -53,7 +53,7 @@ if __name__ == "__main__":
         category_names=["race", "sex"],
         figsize=(6, 8),
         include_legend=True,
-        disparity_thresholds=(0.9, 1.1),
+        plot_thresholds=(0.9, 1.1),
         show_pass_fail=True,
         show_grid=True,
         y_lim=(0.7, 1.3),
