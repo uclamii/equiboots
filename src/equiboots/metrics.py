@@ -13,11 +13,22 @@ from sklearn.metrics import (
     mean_absolute_error,
     mean_squared_error,
     confusion_matrix,
-    root_mean_squared_error,
     r2_score,
     explained_variance_score,
     mean_squared_log_error,
 )
+
+# --- Root-Mean-Squared Error fallback for old sklearns ------------------------
+try:
+    from sklearn.metrics import root_mean_squared_error  # ≥ 1.4
+except ImportError:  # < 1.4
+
+    def root_mean_squared_error(y_true, y_pred, **kwargs):
+        # mean_squared_error(..., squared=False) --> RMSE
+        return mean_squared_error(y_true, y_pred, squared=False, **kwargs)
+
+
+# ------------------------------------------------------------------------------
 
 from sklearn.preprocessing import MultiLabelBinarizer
 from typing import Optional, List, Dict, Tuple
