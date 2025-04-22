@@ -70,7 +70,7 @@ if __name__ == "__main__":
         save_path="./images",
         show_pass_fail=True,
         # y_lim=(-2, 4),
-        # disparity_thresholds=[0.9, 1.2],
+        # plot_thresholds=[0.9, 1.2],
     )
 
     eqb.eq_plot_bootstrapped_group_curves(

@@ -1,7 +1,7 @@
 import pandas as pd
 import numpy as np
 from sklearn.preprocessing import MultiLabelBinarizer
-from src.equiboots import metrics
+from src.equiboots import metrics, root_mean_squared_error
 
 from src.equiboots.metrics import (
     binary_classification_metrics,
@@ -10,6 +10,7 @@ from src.equiboots.metrics import (
     multi_label_classification_metrics,
     regression_metrics,
     metrics_dataframe,
+    mean_squared_error,
 )
 
 
@@ -136,3 +137,15 @@ def test_metrics_dataframe_outputs_correct_format():
     assert df.shape[0] == 4  # 2 groups * 2 timepoints = 4 rows
     assert all(df["attribute_value"].isin(["GroupA", "GroupB"]))
     assert df["Accuracy"].between(0, 1).all()
+
+
+def test_root_mean_squared_error_equivalence():
+    y_true = np.array([3.0, -0.5, 2.0, 7.0])
+    y_pred = np.array([2.5, 0.0, 2.0, 8.0])
+
+    expected_rmse = mean_squared_error(y_true, y_pred, squared=False)
+    actual_rmse = root_mean_squared_error(y_true, y_pred)
+
+    assert np.isclose(
+        expected_rmse, actual_rmse
+    ), "RMSE fallback does not match expected output"
