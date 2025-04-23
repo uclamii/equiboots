@@ -97,10 +97,8 @@ def eq_general_test(task):
 
     print("Categories below minimum size", eq.groups_below_min_size)
 
-    # Get metrics
-    # Note: The metrics are calculated for each group in the groupings_vars
+    # The metrics are calculated for each group in the groupings_vars
     race_metrics = eq.get_metrics(data)
-    sex_metrics = eq.get_metrics(data)
 
     print("race_metrics", race_metrics)
     print("len(race_metrics)", len(race_metrics))

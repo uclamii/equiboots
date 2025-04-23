@@ -942,7 +942,7 @@ def eq_group_metrics_plot(
     strict_layout: bool = True,
     figsize: Optional[Tuple[float, float]] = None,
     show_grid: bool = True,
-    disparity_thresholds: Tuple[float, float] = (0.0, 2.0),
+    plot_thresholds: Tuple[float, float] = (0.0, 2.0),
     show_pass_fail: bool = False,
     y_lim: Optional[Tuple[float, float]] = None,
     **plot_kwargs: Dict[str, Union[str, float]],
@@ -961,7 +961,7 @@ def eq_group_metrics_plot(
     color_by_group        : bool, default True - Use separate colors per group
     max_cols              : int or None    - Max columns in facet grid
     strict_layout         : bool, default True - Apply tight layout adjustments
-    disparity_thresholds  : tuple, default (0.0, 2.0) - (lower, upper) bounds for
+    plot_thresholds  : tuple, default (0.0, 2.0) - (lower, upper) bounds for
                                                         pass/fail
     show_pass_fail        : bool, default False - Color by pass/fail instead of
                                                   group colors
@@ -1007,7 +1007,7 @@ def eq_group_metrics_plot(
                     y_vals.append(val)
                     group_pass_fail.setdefault(attr, []).append(val)
 
-        lower, upper = disparity_thresholds
+        lower, upper = plot_thresholds
 
         group_status = {
             attr: "Pass" if all(lower <= v <= upper for v in vals) else "Fail"
