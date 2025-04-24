@@ -332,6 +332,21 @@ def add_plot_threshold_lines(
     ax.set_xlim(-0.5, xmax + 0.5)
 
 
+def generate_alpha_labels(n: int) -> List[str]:
+    """Generate alphabetical labels for n groups (A, B, ..., Z, AA, AB, ...)."""
+    labels = []
+    for i in range(n):
+        if i < 26:
+            # Single letter: A to Z
+            labels.append(chr(65 + i))
+        else:
+            # Double letter: AA, AB, ..., AZ, BA, BB, ...
+            first = chr(65 + (i // 26 - 1))  # First letter (A, B, ...)
+            second = chr(65 + (i % 26))  # Second letter (A, B, ...)
+            labels.append(first + second)
+    return labels
+
+
 ################################################################################
 # Residual Plot by Group
 ################################################################################
@@ -975,6 +990,9 @@ def eq_group_metrics_plot(
     attributes = (
         [k for k in all_keys if k in categories] if categories != "all" else all_keys
     )
+    alpha_labels = generate_alpha_labels(len(attributes))  # alph. labels (A, B, ...)
+    group_to_alpha = dict(zip(attributes, alpha_labels))  # Map grp nms to alph. lbls
+    alpha_to_group = dict(zip(alpha_labels, attributes))  # Rev map for leg (A: name)
 
     color_map = plt.get_cmap(cmap)
     colors = [color_map(i / len(attributes)) for i in range(len(attributes))]
@@ -1003,7 +1021,7 @@ def eq_group_metrics_plot(
             for attr in attributes:
                 if attr in row:
                     val = row[attr][col]
-                    x_vals.append(attr)
+                    x_vals.append(group_to_alpha[attr])
                     y_vals.append(val)
                     group_pass_fail.setdefault(attr, []).append(val)
 
@@ -1033,7 +1051,7 @@ def eq_group_metrics_plot(
             x=x_vals,
             y=y_vals,
             hue=x_vals,
-            palette=group_colors,
+            palette={group_to_alpha[attr]: group_colors[attr] for attr in attributes},
             legend=False,
             **plot_kwargs,
         )
@@ -1042,9 +1060,10 @@ def eq_group_metrics_plot(
 
         ax.set_xlabel("")
         ax.set_xticks(range(len(attributes)))
-        ax.set_xticklabels(attributes, rotation=0, fontweight="bold")
+        ax.set_xticklabels(alpha_labels, rotation=0, fontweight="bold")
         for tick_label in ax.get_xticklabels():
-            attr = tick_label.get_text()
+            # Get the corresponding attribute for the tick label
+            attr = alpha_to_group[tick_label.get_text()]
             tick_label.set_color(
                 ("green" if group_status.get(attr) == "Pass" else "red")
                 if show_pass_fail
@@ -1058,25 +1077,58 @@ def eq_group_metrics_plot(
         axs[j // n_cols, j % n_cols].axis("off")
 
     if include_legend:
+        # Group labels: Show colored lines only when show_pass_fail=False
+        group_legend_handles = [
+            Line2D(
+                [0],
+                [0],
+                linestyle="" if show_pass_fail else None,
+                color=None if show_pass_fail else base_colors[group],
+                lw=4,
+                label=f"{group_to_alpha[group]}: {group}",
+            )
+            for group in attributes
+        ]
+
+        # Pass/Fail legend entries (only if show_pass_fail is True)
+        pass_fail_legend_handles = []
         if show_pass_fail:
-            legend_handles = [
+            pass_fail_legend_handles = [
                 Line2D([0], [0], color="green", lw=4, label="Pass"),
                 Line2D([0], [0], color="red", lw=4, label="Fail"),
             ]
-        else:
-            legend_handles = [
-                Line2D([0], [0], color=legend_colors[attr], lw=4, label=attr)
-                for attr in attributes
-            ]
 
+        # First legend: Group labels
         fig.legend(
-            handles=legend_handles,
+            handles=group_legend_handles,
             loc="upper center",
             bbox_to_anchor=(0.5, 1.15),
-            ncol=len(legend_handles),
+            ncol=len(group_legend_handles),
             fontsize="large",
             frameon=False,
         )
+
+        # Second legend: Pass/Fail (closer to group labels)
+        if show_pass_fail:
+            fig.legend(
+                handles=pass_fail_legend_handles,
+                loc="upper center",
+                bbox_to_anchor=(0.5, 1.10),
+                ncol=len(pass_fail_legend_handles),
+                fontsize="large",
+                frameon=False,
+            )
+
+        # Second legend: Pass/Fail (closer to group labels)
+        if show_pass_fail:
+            fig.legend(
+                handles=pass_fail_legend_handles,
+                loc="upper center",
+                bbox_to_anchor=(0.5, 1.10),  # Moved closer to group labels
+                ncol=len(pass_fail_legend_handles),
+                fontsize="large",
+                frameon=False,
+            )
 
     plt.tight_layout(w_pad=2, h_pad=2, rect=[0.01, 0.01, 1.01, 1])
     save_or_show_plot(fig, save_path, filename)
@@ -1101,6 +1153,7 @@ def eq_group_metrics_point_plot(
     plot_thresholds: Tuple[float, float] = (0.0, 2.0),
     show_pass_fail: bool = False,
     y_lim: Optional[Tuple[float, float]] = None,
+    leg_cols: int = 3,
     raw_metrics: bool = False,
     **plot_kwargs: Dict[str, Union[str, float]],
 ) -> None:
@@ -1127,13 +1180,21 @@ def eq_group_metrics_point_plot(
     colors = [color_map(i / len(all_groups)) for i in range(len(all_groups))]
     base_colors = {group: colors[i] for i, group in enumerate(all_groups)}
 
+    # Create alphabetical labels (A, B, C, ...)
+    alpha_labels = generate_alpha_labels(len(all_groups))
+    group_to_alpha = dict(zip(all_groups, alpha_labels))
+    alpha_to_group = dict(zip(alpha_labels, all_groups))
+
     # Compute layout: rows = metrics, columns = categories
     n_rows = len(metric_cols)  # One row per metric
     n_cols = len(category_names)  # One column per category
 
     # Use the existing get_layout function to determine figure size
     _, _, auto_figsize = get_layout(
-        n_items=n_cols, n_cols=n_cols, figsize=figsize, strict_layout=strict_layout
+        n_items=n_cols,
+        n_cols=n_cols,
+        figsize=figsize,
+        strict_layout=strict_layout,
     )
     figsize = figsize or auto_figsize
 
@@ -1159,7 +1220,7 @@ def eq_group_metrics_point_plot(
             for group in group_metrics[j]:
                 val = group_metrics[j][group][metric]
                 if not np.isnan(val):
-                    x_vals.append(group)
+                    x_vals.append(group_to_alpha[group])
                     y_vals.append(val)
                     group_pass_fail.setdefault(group, []).append(val)
 
@@ -1184,25 +1245,35 @@ def eq_group_metrics_point_plot(
                     x=[x],
                     y=[y],
                     ax=ax,
-                    color=group_colors[group],
+                    color=group_colors[alpha_to_group[group]],
                     s=100,
                     label=None,  # No subplot legend
                     **plot_kwargs,
                 )
 
             # Customize axis
-            ax.set_title(f"{cat_name} - {metric}")
+            ax.set_title(f"{cat_name}")
             ax.set_xlabel("")
             ax.set_xticks(range(len(groups)))
-            ax.set_xticklabels(groups, rotation=45, ha="right")
+            ax.set_xticklabels(
+                [group_to_alpha[group] for group in groups],
+                rotation=45,
+                ha="right",
+            )
             for tick_label in ax.get_xticklabels():
-                group = tick_label.get_text()
+                group = alpha_to_group[tick_label.get_text()]
                 if show_pass_fail:
                     tick_label.set_color(
                         "green" if group_status.get(group) == "Pass" else "red"
                     )
                 else:
                     tick_label.set_color(base_colors.get(group, "black"))
+
+            # Set y-axis label to metric name (only on the leftmost subplot of ea. row)
+            if j == 0:  # Only set y-label on the first subplot of the row
+                ax.set_ylabel(metric)
+            else:
+                ax.set_ylabel("")  # Clear y-label for other subplots in the row
 
             ax.set_ylim(y_lim)
             ax.grid(show_grid)
@@ -1216,27 +1287,48 @@ def eq_group_metrics_point_plot(
             if col_idx < n_cols:  # Just in case
                 axs[row_idx, col_idx].axis("off")
 
-    # Add overarching legend
     if include_legend:
+        # Group labels: Show colored lines only when show_pass_fail=False
+        group_legend_handles = [
+            Line2D(
+                [0],
+                [0],
+                linestyle="" if show_pass_fail else None,
+                color=None if show_pass_fail else base_colors[group],
+                lw=4,
+                label=f"{group_to_alpha[group]}: {group}",
+            )
+            for group in all_groups
+        ]
+
+        # Pass/Fail legend entries (only if show_pass_fail is True)
+        pass_fail_legend_handles = []
         if show_pass_fail:
-            legend_handles = [
+            pass_fail_legend_handles = [
                 Line2D([0], [0], color="green", lw=4, label="Pass"),
                 Line2D([0], [0], color="red", lw=4, label="Fail"),
             ]
-        else:
-            legend_handles = [
-                Line2D([0], [0], color=base_colors[group], lw=4, label=group)
-                for group in all_groups
-            ]
 
+        # First legend: Group labels (wrapped into 2 rows)
         fig.legend(
-            handles=legend_handles,
+            handles=group_legend_handles,
             loc="upper center",
-            bbox_to_anchor=(0.5, 1.05),
-            ncol=len(legend_handles),
+            bbox_to_anchor=(0.5, 1.20),  # Adj. to make space for 2 rows
+            ncol=leg_cols,  # Wrap into 2 rows (12 groups / 6 = 2 rows)
             fontsize="large",
             frameon=False,
         )
+
+        # Second legend: Pass/Fail (closer to group labels)
+        if show_pass_fail:
+            fig.legend(
+                handles=pass_fail_legend_handles,
+                loc="upper center",
+                bbox_to_anchor=(0.5, 1.05),  # Adj. to account for extra row above
+                ncol=len(pass_fail_legend_handles),
+                fontsize="large",
+                frameon=False,
+            )
 
     if strict_layout:
         plt.tight_layout(w_pad=2, h_pad=2, rect=[0.01, 0.01, 1.01, 1])
