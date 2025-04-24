@@ -347,6 +347,146 @@ def generate_alpha_labels(n: int) -> List[str]:
     return labels
 
 
+def setup_plot_environment(
+    group_list: List[str],
+    cmap: str,
+    color_by_group: bool,
+    metric_cols: List[str],
+    max_cols: Optional[int],
+    n_cols: int,
+    figsize: Optional[Tuple[float, float]],
+    strict_layout: bool,
+    y_lim: Optional[Tuple[float, float]] = None,
+    layout_type: str = "point",
+) -> Tuple[
+    plt.Figure,
+    np.ndarray,
+    Dict[str, str],
+    Dict[str, str],
+    Dict[str, str],
+    Dict[str, str],
+    int,
+    int,
+]:
+    """Set up colors, labels, and subplot grid for plotting."""
+    # Color setup
+    color_map = plt.get_cmap(cmap)
+    colors = [color_map(i / len(group_list)) for i in range(len(group_list))]
+    base_colors = {
+        group: colors[i] if color_by_group else "#1f77b4"
+        for i, group in enumerate(group_list)
+    }
+
+    # Alphabetical labels
+    alpha_labels = generate_alpha_labels(len(group_list))
+    group_to_alpha = dict(zip(group_list, alpha_labels))
+    alpha_to_group = dict(zip(alpha_labels, group_list))
+
+    # Subplot grid setup
+    if layout_type == "point":
+        # For eq_group_metrics_point_plot: one row per metric, one col. per cat.
+        n_rows = len(metric_cols)
+        n_cols = n_cols  # Already set to len(category_names)
+    else:
+        # For eq_group_metrics_plot: one column per metric, calculate rows
+        n_cols = max_cols if max_cols is not None else len(metric_cols)
+        n_rows = len(metric_cols) // n_cols + (1 if len(metric_cols) % n_cols else 0)
+
+    _, _, auto_figsize = get_layout(len(metric_cols), n_cols, figsize, strict_layout)
+    figsize = figsize or auto_figsize
+    fig, axs = plt.subplots(n_rows, n_cols, figsize=figsize, squeeze=False)
+
+    # Default y_lim if not specified
+    if y_lim is None:
+        y_lim = (-2, 4)
+
+    return fig, axs, group_to_alpha, alpha_to_group, base_colors, y_lim, n_rows, n_cols
+
+
+def compute_pass_fail(
+    group_metrics: List[Dict[str, Dict[str, float]]],
+    group_list: List[str],
+    metric: str,
+    plot_thresholds: Tuple[float, float],
+    raw_metrics: bool = False,
+) -> Tuple[Dict[str, str], float, float]:
+    """
+    Compute pass/fail status and thresholds.
+
+    raw_metrics: non disparity metrics; just raw performance
+    group_metrics: list of dictionaries with group metrics
+    """
+
+    lower, upper = plot_thresholds
+    if raw_metrics:
+        # Disable pass/fail for raw metrics
+        lower, upper = float("-inf"), float("inf")
+
+    group_pass_fail = {}
+    for row in group_metrics:
+        for group in group_list:
+            if group in row:  # Check if the group exists in the current row
+                val = row[group][metric]  # Extract the metric value for the group
+                # Append the value to the group's list in group_pass_fail
+                # Use setdefault to initialize an empty list if the group isn't
+                # in the dictionary yet
+                group_pass_fail.setdefault(group, []).append(val)
+
+    group_status = {
+        group: "Pass" if all(lower <= v <= upper for v in vals) else "Fail"
+        for group, vals in group_pass_fail.items()
+    }
+    return group_status, lower, upper
+
+
+def create_legend(
+    fig: plt.Figure,
+    group_list: List[str],
+    group_to_alpha: Dict[str, str],
+    base_colors: Dict[str, str],
+    show_pass_fail: bool,
+    leg_cols: int = 6,
+) -> None:
+    """Create legends for group labels and pass/fail status."""
+    group_legend_handles = [
+        Line2D(
+            [0],
+            [0],
+            linestyle="" if show_pass_fail else None,
+            color=None if show_pass_fail else base_colors[group],
+            lw=4,
+            label=f"{group_to_alpha[group]}: {group}",
+        )
+        for group in group_list
+    ]
+
+    pass_fail_legend_handles = []
+    if show_pass_fail:
+        pass_fail_legend_handles = [
+            Line2D([0], [0], color="green", lw=4, label="Pass"),
+            Line2D([0], [0], color="red", lw=4, label="Fail"),
+        ]
+
+    fig.legend(
+        handles=group_legend_handles,
+        loc="upper center",
+        bbox_to_anchor=(0.5, 1.20),
+        ncol=leg_cols,
+        fontsize="large",
+        frameon=False,
+    )
+
+    if show_pass_fail:
+        fig.legend(
+            handles=pass_fail_legend_handles,
+            loc="upper center",
+            bbox_to_anchor=(0.5, 1.05),
+            ncol=len(pass_fail_legend_handles),
+            fontsize="large",
+            frameon=False,
+        )
+
+
 ################################################################################
 # Residual Plot by Group
 ################################################################################
@@ -946,7 +1086,7 @@ def eq_group_metrics_plot(
     group_metrics: List[Dict[str, Dict[str, float]]],
     metric_cols: List[str],
     name: str,
-    plot_kind: str = "violinplot",
+    plot_type: str = "violinplot",
     categories: Union[str, List[str]] = "all",
     include_legend: bool = True,
     cmap: str = "tab20c",
@@ -967,19 +1107,15 @@ def eq_group_metrics_plot(
     optional pass/fail coloring.
 
     group_metrics         : list           - One dict per category mapping group
-                                             -> {metric: value}
     metric_cols           : list           - Metric names to plot
     name                  : str            - Plot title or identifier
-    plot_kind             : str, default "violinplot" - Seaborn plot type (e.g.,
-                                                      'violinplot', 'boxplot')
+    plot_kind             : str, default "violinplot" - Seaborn plot type
     categories            : str or list    - Categories to include or 'all'
     color_by_group        : bool, default True - Use separate colors per group
     max_cols              : int or None    - Max columns in facet grid
     strict_layout         : bool, default True - Apply tight layout adjustments
-    plot_thresholds  : tuple, default (0.0, 2.0) - (lower, upper) bounds for
-                                                        pass/fail
-    show_pass_fail        : bool, default False - Color by pass/fail instead of
-                                                  group colors
+    plot_thresholds       : tuple, default (0.0, 2.0) - (lower, upper) for pass/fail
+    show_pass_fail        : bool, default False - Color by pass/fail
     y_lim                 : tuple or None  - y-axis limits as (min, max)
     """
 
@@ -990,32 +1126,31 @@ def eq_group_metrics_plot(
     attributes = (
         [k for k in all_keys if k in categories] if categories != "all" else all_keys
     )
-    alpha_labels = generate_alpha_labels(len(attributes))  # alph. labels (A, B, ...)
-    group_to_alpha = dict(zip(attributes, alpha_labels))  # Map grp nms to alph. lbls
-    alpha_to_group = dict(zip(alpha_labels, attributes))  # Rev map for leg (A: name)
 
-    color_map = plt.get_cmap(cmap)
-    colors = [color_map(i / len(attributes)) for i in range(len(attributes))]
-    base_colors = {
-        attr: (colors[i] if color_by_group else "#1f77b4")
-        for i, attr in enumerate(attributes)
-    }
-    legend_colors = {attr: colors[i] for i, attr in enumerate(attributes)}
-
-    n_rows, n_cols, auto_figsize = get_layout(
-        len(metric_cols), max_cols, figsize, strict_layout
+    # Shared setup
+    n_cols = max_cols if max_cols is not None else len(metric_cols)
+    fig, axs, group_to_alpha, alpha_to_group, base_colors, y_lim, n_rows, n_cols = (
+        setup_plot_environment(
+            attributes,
+            cmap,
+            color_by_group,
+            metric_cols,
+            max_cols,
+            n_cols,
+            figsize,
+            strict_layout,
+            y_lim,
+            layout_type="violin",
+        )
     )
-    if figsize is None:
-        figsize = auto_figsize
-    fig, axs = plt.subplots(n_rows, n_cols, figsize=figsize, squeeze=False)
-
-    if y_lim is None:  # Set default y_lim if not specified
-        y_lim = (-2, 4)  # Always default to (-2, 4) if not specified
 
     for i, col in enumerate(metric_cols):
         ax = axs[i // n_cols, i % n_cols]
         x_vals, y_vals = [], []
-        group_pass_fail = {}
+
+        group_status, lower, upper = compute_pass_fail(
+            group_metrics, attributes, col, plot_thresholds
+        )
 
         for row in group_metrics:
             for attr in attributes:
@@ -1023,51 +1158,51 @@ def eq_group_metrics_plot(
                     val = row[attr][col]
                     x_vals.append(group_to_alpha[attr])
                     y_vals.append(val)
-                    group_pass_fail.setdefault(attr, []).append(val)
-
-        lower, upper = plot_thresholds
-
-        group_status = {
-            attr: "Pass" if all(lower <= v <= upper for v in vals) else "Fail"
-            for attr, vals in group_pass_fail.items()
-        }
 
         group_colors = (
             {
-                attr: ("green" if group_status.get(attr) == "Pass" else "red")
+                attr: "green" if group_status.get(attr) == "Pass" else "red"
                 for attr in attributes
             }
             if show_pass_fail
             else base_colors
         )
 
-        plot_func = getattr(sns, plot_kind, None)
+        plot_func = getattr(sns, plot_type, None)
         if not plot_func:
             raise ValueError(
-                f"Unsupported plot_kind: '{plot_kind}'. Must be a seaborn plot type."
+                f"Unsupported plot_type: '{plot_type}'. Must be a valid seaborn plot type."
             )
-        plot_func(
-            ax=ax,
-            x=x_vals,
-            y=y_vals,
-            hue=x_vals,
-            palette={group_to_alpha[attr]: group_colors[attr] for attr in attributes},
-            legend=False,
-            **plot_kwargs,
-        )
+        try:
+            plot_func(
+                ax=ax,
+                x=x_vals,
+                y=y_vals,
+                hue=x_vals,
+                palette={
+                    group_to_alpha[attr]: group_colors[attr] for attr in attributes
+                },
+                legend=False,
+                **plot_kwargs,
+            )
+        except Exception as e:
+            raise ValueError(
+                f"Failed to plot with {plot_type}: {str(e)}. "
+                f" Ensure the plot type supports x, y, hue, palette, and ax parameters."
+            )
 
         ax.set_title(f"{name}_{col}")
-
         ax.set_xlabel("")
         ax.set_xticks(range(len(attributes)))
-        ax.set_xticklabels(alpha_labels, rotation=0, fontweight="bold")
+        ax.set_xticklabels(
+            [group_to_alpha[attr] for attr in attributes], rotation=0, fontweight="bold"
+        )
         for tick_label in ax.get_xticklabels():
-            # Get the corresponding attribute for the tick label
             attr = alpha_to_group[tick_label.get_text()]
             tick_label.set_color(
-                ("green" if group_status.get(attr) == "Pass" else "red")
-                if show_pass_fail
-                else legend_colors.get(attr, "black")
+                "green"
+                if group_status.get(attr) == "Pass"
+                else "red" if show_pass_fail else base_colors.get(attr, "black")
             )
         add_plot_threshold_lines(ax, lower, upper, len(attributes))
         ax.set_ylim(y_lim)
@@ -1077,60 +1212,10 @@ def eq_group_metrics_plot(
         axs[j // n_cols, j % n_cols].axis("off")
 
     if include_legend:
-        # Group labels: Show colored lines only when show_pass_fail=False
-        group_legend_handles = [
-            Line2D(
-                [0],
-                [0],
-                linestyle="" if show_pass_fail else None,
-                color=None if show_pass_fail else base_colors[group],
-                lw=4,
-                label=f"{group_to_alpha[group]}: {group}",
-            )
-            for group in attributes
-        ]
+        create_legend(fig, attributes, group_to_alpha, base_colors, show_pass_fail)
 
-        # Pass/Fail legend entries (only if show_pass_fail is True)
-        pass_fail_legend_handles = []
-        if show_pass_fail:
-            pass_fail_legend_handles = [
-                Line2D([0], [0], color="green", lw=4, label="Pass"),
-                Line2D([0], [0], color="red", lw=4, label="Fail"),
-            ]
-
-        # First legend: Group labels
-        fig.legend(
-            handles=group_legend_handles,
-            loc="upper center",
-            bbox_to_anchor=(0.5, 1.15),
-            ncol=len(group_legend_handles),
-            fontsize="large",
-            frameon=False,
-        )
-
-        # Second legend: Pass/Fail (closer to group labels)
-        if show_pass_fail:
-            fig.legend(
-                handles=pass_fail_legend_handles,
-                loc="upper center",
-                bbox_to_anchor=(0.5, 1.10),
-                ncol=len(pass_fail_legend_handles),
-                fontsize="large",
-                frameon=False,
-            )
-
-        # Second legend: Pass/Fail (closer to group labels)
-        if show_pass_fail:
-            fig.legend(
-                handles=pass_fail_legend_handles,
-                loc="upper center",
-                bbox_to_anchor=(0.5, 1.10),  # Moved closer to group labels
-                ncol=len(pass_fail_legend_handles),
-                fontsize="large",
-                frameon=False,
-            )
-
-    plt.tight_layout(w_pad=2, h_pad=2, rect=[0.01, 0.01, 1.01, 1])
+    if strict_layout:
+        plt.tight_layout(w_pad=2, h_pad=2, rect=[0.01, 0.01, 1.01, 1])
     save_or_show_plot(fig, save_path, filename)
 
 
@@ -1160,86 +1245,62 @@ def eq_group_metrics_point_plot(
     """
     Plot point estimates of group and disparity metrics by category.
 
-    group_metrics   : list of dict     - One dict per category mapping group ->
-                                         {metric: value}
+    group_metrics   : list of dict     - One dict per category mapping group
     metric_cols     : list             - Metric names to plot (defines rows)
     category_names  : list             - Category labels to plot (defines columns)
     cmap            : str              - Colormap for group coloring
-    save_path       : str or None      - Directory to save figure (None displays)
-    filename        : str              - Filename prefix (no extension)
     strict_layout   : bool             - Apply tight layout adjustments
     plot_thresholds : tuple            - (lower, upper) bounds for pass/fail
     show_pass_fail  : bool             - Color by pass/fail instead of group colors
     y_lim           : tuple or None    - y‑axis limits as (min, max)
+    leg_cols        : int              - no. of columns in legend
     raw_metrics     : bool             - Treat metrics as raw; not metric ratios
     """
-
-    # Set up colors
-    color_map = plt.get_cmap(cmap)
     all_groups = sorted({group for groups in group_metrics for group in groups})
-    colors = [color_map(i / len(all_groups)) for i in range(len(all_groups))]
-    base_colors = {group: colors[i] for i, group in enumerate(all_groups)}
 
-    # Create alphabetical labels (A, B, C, ...)
-    alpha_labels = generate_alpha_labels(len(all_groups))
-    group_to_alpha = dict(zip(all_groups, alpha_labels))
-    alpha_to_group = dict(zip(alpha_labels, all_groups))
-
-    # Compute layout: rows = metrics, columns = categories
-    n_rows = len(metric_cols)  # One row per metric
-    n_cols = len(category_names)  # One column per category
-
-    # Use the existing get_layout function to determine figure size
-    _, _, auto_figsize = get_layout(
-        n_items=n_cols,
-        n_cols=n_cols,
-        figsize=figsize,
-        strict_layout=strict_layout,
+    # Shared setup
+    n_cols = len(category_names)
+    fig, axs, group_to_alpha, alpha_to_group, base_colors, y_lim, _, n_cols = (
+        setup_plot_environment(
+            all_groups,
+            cmap,
+            True,
+            metric_cols,
+            None,
+            n_cols,
+            figsize,
+            strict_layout,
+            y_lim,
+            layout_type="point",
+        )
     )
-    figsize = figsize or auto_figsize
-
-    # Create subplot grid: rows = metrics, columns = categories
-    fig, axs = plt.subplots(n_rows, n_cols, figsize=figsize, squeeze=False)
-
-    lower, upper = plot_thresholds
-
-    if raw_metrics:
-        # Raw numbers --> skip pass/fail colouring + disable thresholds.
-        show_pass_fail = False
-        # Force infinite thresholds so the “Fail” check can never fire
-        lower, upper = float("-inf"), float("inf")
 
     for i, metric in enumerate(metric_cols):
         for j, cat_name in enumerate(category_names):
-            ax = axs[i, j]  # Access subplot: row = metric, column = category
+            ax = axs[i, j]
 
-            x_vals = []
-            y_vals = []
-            group_pass_fail = {}
+            x_vals, y_vals = [], []
             groups = list(group_metrics[j].keys())
+
+            group_status, lower, upper = compute_pass_fail(
+                group_metrics, groups, metric, plot_thresholds, raw_metrics
+            )
+
             for group in group_metrics[j]:
                 val = group_metrics[j][group][metric]
                 if not np.isnan(val):
                     x_vals.append(group_to_alpha[group])
                     y_vals.append(val)
-                    group_pass_fail.setdefault(group, []).append(val)
-
-            # Determine pass/fail status for each group
-            group_status = {
-                group: "Pass" if all(lower <= v <= upper for v in vals) else "Fail"
-                for group, vals in group_pass_fail.items()
-            }
 
             group_colors = (
                 {
-                    group: ("green" if group_status.get(group) == "Pass" else "red")
+                    group: "green" if group_status.get(group) == "Pass" else "red"
                     for group in groups
                 }
                 if show_pass_fail
                 else base_colors
             )
 
-            # Plot points
             for x, y, group in zip(range(len(x_vals)), y_vals, x_vals):
                 sns.scatterplot(
                     x=[x],
@@ -1247,90 +1308,44 @@ def eq_group_metrics_point_plot(
                     ax=ax,
                     color=group_colors[alpha_to_group[group]],
                     s=100,
-                    label=None,  # No subplot legend
+                    label=None,
                     **plot_kwargs,
                 )
 
-            # Customize axis
             ax.set_title(f"{cat_name}")
             ax.set_xlabel("")
             ax.set_xticks(range(len(groups)))
             ax.set_xticklabels(
-                [group_to_alpha[group] for group in groups],
-                rotation=45,
-                ha="right",
+                [group_to_alpha[group] for group in groups], rotation=45, ha="right"
             )
             for tick_label in ax.get_xticklabels():
                 group = alpha_to_group[tick_label.get_text()]
-                if show_pass_fail:
-                    tick_label.set_color(
-                        "green" if group_status.get(group) == "Pass" else "red"
-                    )
-                else:
-                    tick_label.set_color(base_colors.get(group, "black"))
+                tick_label.set_color(
+                    "green"
+                    if group_status.get(group) == "Pass"
+                    else "red" if show_pass_fail else base_colors.get(group, "black")
+                )
 
-            # Set y-axis label to metric name (only on the leftmost subplot of ea. row)
-            if j == 0:  # Only set y-label on the first subplot of the row
+            if j == 0:
                 ax.set_ylabel(metric)
             else:
-                ax.set_ylabel("")  # Clear y-label for other subplots in the row
+                ax.set_ylabel("")
 
             ax.set_ylim(y_lim)
             ax.grid(show_grid)
-
             add_plot_threshold_lines(ax, lower, upper, len(groups))
             ax.set_xlim(-0.5, len(groups) - 0.5)
 
-    # Turn off unused subplots (shouldn't be needed since grid matches exactly)
     for row_idx in range(len(metric_cols)):
         for col_idx in range(len(category_names), n_cols):
-            if col_idx < n_cols:  # Just in case
+            if col_idx < n_cols:
                 axs[row_idx, col_idx].axis("off")
 
     if include_legend:
-        # Group labels: Show colored lines only when show_pass_fail=False
-        group_legend_handles = [
-            Line2D(
-                [0],
-                [0],
-                linestyle="" if show_pass_fail else None,
-                color=None if show_pass_fail else base_colors[group],
-                lw=4,
-                label=f"{group_to_alpha[group]}: {group}",
-            )
-            for group in all_groups
-        ]
-
-        # Pass/Fail legend entries (only if show_pass_fail is True)
-        pass_fail_legend_handles = []
-        if show_pass_fail:
-            pass_fail_legend_handles = [
-                Line2D([0], [0], color="green", lw=4, label="Pass"),
-                Line2D([0], [0], color="red", lw=4, label="Fail"),
-            ]
-
-        # First legend: Group labels (wrapped into 2 rows)
-        fig.legend(
-            handles=group_legend_handles,
-            loc="upper center",
-            bbox_to_anchor=(0.5, 1.20),  # Adj. to make space for 2 rows
-            ncol=leg_cols,  # Wrap into 2 rows (12 groups / 6 = 2 rows)
-            fontsize="large",
-            frameon=False,
+        create_legend(
+            fig, all_groups, group_to_alpha, base_colors, show_pass_fail, leg_cols
         )
-
-        # Second legend: Pass/Fail (closer to group labels)
-        if show_pass_fail:
-            fig.legend(
-                handles=pass_fail_legend_handles,
-                loc="upper center",
-                bbox_to_anchor=(0.5, 1.05),  # Adj. to account for extra row above
-                ncol=len(pass_fail_legend_handles),
-                fontsize="large",
-                frameon=False,
-            )
 
     if strict_layout:
         plt.tight_layout(w_pad=2, h_pad=2, rect=[0.01, 0.01, 1.01, 1])
-
     save_or_show_plot(fig, save_path, filename)
