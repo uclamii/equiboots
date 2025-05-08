@@ -112,6 +112,17 @@ def eq_general_test(task):
     print("dispa", dispa)
     print("len(dispa)", len(dispa))
 
+    # Calculate differences
+
+    diffs = eq.calculate_differences(race_metrics, "race")
+    
+    # Create DataFrame from differences
+    disa_diffs_df = eqb.metrics_dataframe(metrics_data=diffs)
+    print(f"Disparity Metrics DataFrame\n{disa_diffs_df}\n")
+
+    print("diffs", diffs)
+    print("len(diffs)", len(diffs))
+
 
 if __name__ == "__main__":
     task = "multi_label_classification"

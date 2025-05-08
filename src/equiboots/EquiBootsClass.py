@@ -398,7 +398,7 @@ class EquiBoots:
         return sliced_dict_metrics
 
     def calculate_disparities(self, metric_dict, var_name: str) -> dict:
-        """Calculate metrics for each group based on the task type."""
+        """Calculate disparities metrics for each group based on the task type."""
         if self.bootstrap_flag:
             return [
                 self.calculate_groups_disparities(metrics, var_name=var_name)
@@ -409,6 +409,7 @@ class EquiBoots:
                 metric_dict,
                 var_name=var_name,
             )
+        
 
     def calculate_groups_disparities(self, metric_dict: dict, var_name: str) -> dict:
         """
@@ -443,6 +444,46 @@ class EquiBoots:
                     )
 
         return disparities
+
+    def calculate_differences(self, metric_dict, var_name: str) -> dict:
+        """Calculate difference metrics for each group based on the task type."""
+        if self.bootstrap_flag:
+            return [
+                self.calculate_groups_differences(metrics, var_name=var_name)
+                for metrics in metric_dict
+            ]
+        else:
+            return self.calculate_groups_differences(
+                metric_dict,
+                var_name=var_name,
+            )
+    
+    def calculate_groups_differences(self, metric_dict: dict, var_name: str) -> dict:
+        """
+        Calculate differences between each group and the reference group.
+        """
+        ref_cat = self.reference_groups[var_name]
+        differences = {}
+
+        # Get reference group metrics
+        ref_metrics = metric_dict[ref_cat]
+
+        # Calculate disparities for each group
+        for category, metrics in metric_dict.items():
+
+            differences[category] = {}
+            for metric_name, value in metrics.items():
+                if not isinstance(value, (int, float)) or not isinstance(
+                    ref_metrics.get(metric_name), (int, float)
+                ):
+                    continue
+
+                ref_value = ref_metrics[metric_name]
+                sanitized_name = metric_name.replace(" ", "_")
+                difference = value - ref_value
+                differences[category][f"{sanitized_name}_diff"] = difference
+
+        return differences
 
     def set_fix_seeds(self, seeds: list) -> None:
         """
