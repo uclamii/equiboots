@@ -458,7 +458,7 @@ class EquiBoots:
         self,
         metric_dict: dict,
         var_name: str,
-        test_config: Optional[Dict[str, Any]] = None
+        test_config: Dict[str, Any],
     ) -> Dict[str, Dict[str, StatTestResult]]:
         """Analyzes statistical significance of metric differences between groups.
         
@@ -466,13 +466,12 @@ class EquiBoots:
             metric_dict: Dictionary of metrics from get_metrics()
             var_name: Name of the demographic variable being analyzed
             test_config: Optional configuration for statistical testing:
-                - test_type: Type of test (mann_whitney, t_test, ks_test, permutation, wilcoxon)
+                - test_type: Type of test (chi-squared, bootstrap test)
                 - alpha: Significance level (default: 0.05)
                 - adjust_method: Multiple comparison adjustment (bonferroni, fdr_bh, holm, none)
-                - bootstrap_iterations: Number of bootstrap iterations for permutation test (default: 1000)
                 - confidence_level: Confidence level for intervals (default: 0.95)
-                - alternative: Alternative hypothesis ("two-sided", "less", "greater")
-                - custom_test_func: Optional custom test function
+                - classification_task: Whether the task is classification (default: True)
+
                 
         Returns:
             Dictionary containing test results for each group and metric, with StatTestResult objects
