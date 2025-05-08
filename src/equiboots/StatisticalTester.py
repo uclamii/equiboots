@@ -12,6 +12,7 @@ class StatTestResult:
     """Stores statistical test results including test statistic, p-value, and significance."""
     statistic: float
     p_value: float
+    critical_value: Optional[float] = None
     is_significant: bool
     test_name: str
     effect_size: Optional[float] = None
@@ -29,7 +30,9 @@ class StatisticalTester:
         "t_test": "Welch's t-test (parametric)",
         "ks_test": "Kolmogorov-Smirnov test",
         "permutation": "Permutation test (non-parametric)",
-        "wilcoxon": "Wilcoxon signed-rank test"
+        "wilcoxon": "Wilcoxon signed-rank test",
+        "chi_square": "Chi-square test",
+        "z_test": "Z-test (parametric)",
     }
     
     ADJUSTMENT_METHODS = {
@@ -39,17 +42,20 @@ class StatisticalTester:
         "none": "No correction"
     }
 
-    def __init__(self):
+    def __init__(self, critical_value):
         """Initializes StatisticalTester with default test implementations."""
         self._test_implementations = {
             "mann_whitney": self._mann_whitney_test,
             "t_test": self._t_test,
             "ks_test": self._ks_test,
             "permutation": self._permutation_test,
-            "wilcoxon": self._wilcoxon_test
+            "wilcoxon": self._wilcoxon_test,
+            "chi_square": self._chi_square_test,
+            "z_test": self._z_test, 
         }
+        self.critical_value: Optional[float] = None
 
-    def _mann_whitney_test(self, ref_data: Union[float, List[float]], comp_data: Union[float, List[float]], config: Dict[str, Any]) -> StatTestResult:
+    def _mann_whitney_test(self, ref_data: Union[float, List[float]], comp_data: Union[float, List[float]], config: Dict[str, Any],) -> StatTestResult:
         """Performs Mann-Whitney U test using pingouin for non-parametric comparison.
         
         Args:
@@ -153,6 +159,114 @@ class StatisticalTester:
             test_name="Kolmogorov-Smirnov",
             effect_size=effect_size
         )
+    
+    def _permutation_test(self, ref_distribution: List[float], comp_distribution: List[float], config: Dict[str, Any]) -> StatTestResult:
+        """Performs permutation test with confidence intervals.
+        
+        Args:
+            ref_distribution: List of values from reference group
+            comp_distribution: List of values from comparison group
+            config: Configuration dictionary containing test parameters
+            
+        Returns:
+            StatTestResult object containing test results
+        """
+        # Convert to numpy arrays
+        ref_array = np.array(ref_distribution)
+        comp_array = np.array(comp_distribution)
+        
+        # Define the test statistic (mean difference)
+        def statistic(x, y):
+            return np.mean(y) - np.mean(x)
+        
+        # Perform permutation test
+        result = stats.permutation_test(
+            (ref_array, comp_array),
+            statistic,
+            n_resamples=config.get("bootstrap_iterations", 1000),
+            alternative=config.get("alternative", "two-sided"),
+            random_state=42  # For reproducibility
+        )
+        
+        # Calculate confidence intervals using bootstrap
+        ci_level = config.get("confidence_level", 0.95)
+        ci_lower = np.percentile(result.null_distribution, (1 - ci_level) * 100 / 2)
+        ci_upper = np.percentile(result.null_distribution, (1 + ci_level) * 100 / 2)
+        
+        effect_size = self._calculate_effect_size(ref_distribution, comp_distribution)
+        
+        return StatTestResult(
+            statistic=result.statistic,
+            p_value=result.pvalue,
+            is_significant=result.pvalue < config.get("alpha", 0.05),
+            test_name="Permutation Test",
+            effect_size=effect_size,
+            confidence_interval=(ci_lower, ci_upper)
+        )
+
+    def _wilcoxon_test(self, ref_data: Union[float, List[float]], comp_data: Union[float, List[float]], config: Dict[str, Any]) -> StatTestResult:
+        """Performs Wilcoxon signed-rank test using pingouin for paired samples.
+        
+        Args:
+            ref_data: List of values from reference group
+            comp_data: List of values from comparison group
+            config: Configuration dictionary containing test parameters
+            
+        Returns:
+            StatTestResult object containing test results
+        """
+        if isinstance(ref_data, (int, float)):
+            ref_data = [ref_data]
+        if isinstance(comp_data, (int, float)):
+            comp_data = [comp_data]
+            
+        # Convert to numpy arrays
+        ref_array = np.array(ref_data)
+        comp_array = np.array(comp_data)
+        
+        # Use pingouin's implementation
+        result = pg.wilcoxon(
+            ref_array,
+            comp_array,
+            alternative=config.get("alternative", "two-sided")
+        )
+        
+        return StatTestResult(
+            statistic=result['W-val'].iloc[0],
+            p_value=result['p-val'].iloc[0],
+            is_significant=result['p-val'].iloc[0] < config.get("alpha", 0.05),
+            test_name="Wilcoxon Signed-Rank Test",
+            effect_size=result['RBC'].iloc[0]  # Rank-biserial correlation as effect size
+        ) 
+    
+    def _chi_square_test(self, ref_data: Union[int, List[int]], comp_data: Union[int, List[int]], config: Dict[str, Any]) -> StatTestResult:
+        """Performs Chi-square test for categorical data.
+        
+        Args:
+            ref_data: List of values from reference group
+            comp_data: List of values from comparison group
+            config: Configuration dictionary containing test parameters
+            
+        Returns:
+            StatTestResult object containing test results
+        """
+        # Convert to numpy arrays
+        ref_array = np.array(ref_data)
+        comp_array = np.array(comp_data)
+        
+        # Create contingency table
+        contingency_table = pd.crosstab(ref_array, comp_array)
+        
+        # Use scipy's implementation
+        chi2, p_value, _, _ = stats.chi2_contingency(contingency_table)
+        
+        return StatTestResult(
+            statistic=chi2,
+            p_value=p_value,
+            is_significant=p_value < config.get("alpha", 0.05),
+            test_name="Chi-Square Test"
+        )
+      
 
     def _calculate_effect_size(self, ref_data: List[float], comp_data: List[float]) -> float:
         """Calculates Cohen's d effect size using pingouin.
@@ -420,81 +534,4 @@ class StatisticalTester:
         
         return organized_data
 
-    def _permutation_test(self, ref_distribution: List[float], comp_distribution: List[float], config: Dict[str, Any]) -> StatTestResult:
-        """Performs permutation test with confidence intervals.
-        
-        Args:
-            ref_distribution: List of values from reference group
-            comp_distribution: List of values from comparison group
-            config: Configuration dictionary containing test parameters
-            
-        Returns:
-            StatTestResult object containing test results
-        """
-        # Convert to numpy arrays
-        ref_array = np.array(ref_distribution)
-        comp_array = np.array(comp_distribution)
-        
-        # Define the test statistic (mean difference)
-        def statistic(x, y):
-            return np.mean(y) - np.mean(x)
-        
-        # Perform permutation test
-        result = stats.permutation_test(
-            (ref_array, comp_array),
-            statistic,
-            n_resamples=config.get("bootstrap_iterations", 1000),
-            alternative=config.get("alternative", "two-sided"),
-            random_state=42  # For reproducibility
-        )
-        
-        # Calculate confidence intervals using bootstrap
-        ci_level = config.get("confidence_level", 0.95)
-        ci_lower = np.percentile(result.null_distribution, (1 - ci_level) * 100 / 2)
-        ci_upper = np.percentile(result.null_distribution, (1 + ci_level) * 100 / 2)
-        
-        effect_size = self._calculate_effect_size(ref_distribution, comp_distribution)
-        
-        return StatTestResult(
-            statistic=result.statistic,
-            p_value=result.pvalue,
-            is_significant=result.pvalue < config.get("alpha", 0.05),
-            test_name="Permutation Test",
-            effect_size=effect_size,
-            confidence_interval=(ci_lower, ci_upper)
-        )
-
-    def _wilcoxon_test(self, ref_data: Union[float, List[float]], comp_data: Union[float, List[float]], config: Dict[str, Any]) -> StatTestResult:
-        """Performs Wilcoxon signed-rank test using pingouin for paired samples.
-        
-        Args:
-            ref_data: List of values from reference group
-            comp_data: List of values from comparison group
-            config: Configuration dictionary containing test parameters
-            
-        Returns:
-            StatTestResult object containing test results
-        """
-        if isinstance(ref_data, (int, float)):
-            ref_data = [ref_data]
-        if isinstance(comp_data, (int, float)):
-            comp_data = [comp_data]
-            
-        # Convert to numpy arrays
-        ref_array = np.array(ref_data)
-        comp_array = np.array(comp_data)
-        
-        # Use pingouin's implementation
-        result = pg.wilcoxon(
-            ref_array,
-            comp_array,
-            alternative=config.get("alternative", "two-sided")
-        )
-        
-        return StatTestResult(
-            statistic=result['W-val'].iloc[0],
-            p_value=result['p-val'].iloc[0],
-            is_significant=result['p-val'].iloc[0] < config.get("alpha", 0.05),
-            test_name="Wilcoxon Signed-Rank Test",
-            effect_size=result['RBC'].iloc[0]  # Rank-biserial correlation as effect size
-        ) 
+    
