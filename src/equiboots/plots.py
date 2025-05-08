@@ -1321,13 +1321,15 @@ def eq_group_metrics_point_plot(
             ax.set_xticklabels(
                 [group_to_alpha[group] for group in groups], rotation=45, ha="right"
             )
+
             for tick_label in ax.get_xticklabels():
-                group = alpha_to_group[tick_label.get_text()]
-                tick_label.set_color(
-                    "green"
-                    if group_status.get(group) == "Pass"
-                    else "red" if show_pass_fail else base_colors.get(group, "black")
-                )
+                alpha = tick_label.get_text()
+                group = alpha_to_group[alpha]
+                if show_pass_fail:
+                    color = "green" if group_status[group] == "Pass" else "red"
+                else:
+                    color = base_colors[group]  # legend color
+                tick_label.set_color(color)
 
             if j == 0:
                 ax.set_ylabel(metric)
