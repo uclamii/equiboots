@@ -1099,6 +1099,7 @@ def eq_group_metrics_plot(
     show_grid: bool = True,
     plot_thresholds: Tuple[float, float] = (0.0, 2.0),
     show_pass_fail: bool = False,
+    leg_cols: int = 6,
     y_lim: Optional[Tuple[float, float]] = None,
     **plot_kwargs: Dict[str, Union[str, float]],
 ) -> None:
@@ -1212,7 +1213,9 @@ def eq_group_metrics_plot(
         axs[j // n_cols, j % n_cols].axis("off")
 
     if include_legend:
-        create_legend(fig, attributes, group_to_alpha, base_colors, show_pass_fail)
+        create_legend(
+            fig, attributes, group_to_alpha, base_colors, show_pass_fail, leg_cols
+        )
 
     if strict_layout:
         plt.tight_layout(w_pad=2, h_pad=2, rect=[0.01, 0.01, 1.01, 1])
