@@ -1,12 +1,3 @@
-import matplotlib.pyplot as plt
-from sklearn.metrics import (
-    roc_curve,
-    auc,
-    precision_recall_curve,
-    average_precision_score,
-    brier_score_loss,
-)
-from sklearn.calibration import calibration_curve
 import numpy as np
 import pandas as pd
 import equiboots as eqb
@@ -59,4 +50,37 @@ if __name__ == "__main__":
     melted = pd.DataFrame(dispa).melt()
     df = melted["value"].apply(pd.Series).assign(attribute_value=melted["variable"])
 
-    eqb.eq_plot_roc_auc_bootstrap(race_metrics)
+    eqb.eq_disparity_metrics_plot(
+        dispa,
+        metric_cols=[
+            "Accuracy_ratio",
+            "Precision_ratio",
+            "Predicted Prevalence_ratio",
+            "FP Rate_ratio",
+            "TN Rate_ratio",
+            "Recall_ratio",
+        ],
+        name="race",
+        categories="all",
+        figsize=(24, 4),
+        plot_kind="violinplot",
+        color_by_group=True,
+        show_grid=False,
+        strict_layout=True,
+        save_path="./images",
+        show_pass_fail=True,
+        # y_lim=(-2, 4),
+        # plot_thresholds=[0.9, 1.2],
+    )
+
+    eqb.eq_plot_bootstrapped_group_curves(
+        boot_sliced_data=data,
+        curve_type="roc",
+        title="Bootstrapped ROC Curve by Race",
+        filename="boot_roc_race",
+        # bar_every=100,
+        dpi=100,
+        n_bins=10,
+        figsize=(6, 6),
+        color_by_group=True,
+    )

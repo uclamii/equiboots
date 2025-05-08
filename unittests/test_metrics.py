@@ -1,6 +1,7 @@
+import pandas as pd
 import numpy as np
 from sklearn.preprocessing import MultiLabelBinarizer
-from src.equiboots import metrics
+from src.equiboots import metrics, root_mean_squared_error
 
 from src.equiboots.metrics import (
     binary_classification_metrics,
@@ -8,6 +9,8 @@ from src.equiboots.metrics import (
     multi_class_classification_metrics,
     multi_label_classification_metrics,
     regression_metrics,
+    metrics_dataframe,
+    mean_squared_error,
 )
 
 
@@ -111,3 +114,38 @@ def test_main_executes_examples(monkeypatch):
     import runpy
 
     runpy.run_module("src.equiboots.metrics", run_name="__main__")
+
+
+def test_metrics_dataframe_outputs_correct_format():
+    # Sample input
+    input_data = [
+        {
+            "GroupA": {"Accuracy": 0.9, "F1 Score": 0.85},
+            "GroupB": {"Accuracy": 0.8, "F1 Score": 0.75},
+        },
+        {
+            "GroupA": {"Accuracy": 0.92, "F1 Score": 0.88},
+            "GroupB": {"Accuracy": 0.78, "F1 Score": 0.70},
+        },
+    ]
+
+    df = metrics_dataframe(input_data)
+
+    # Assertions
+    assert isinstance(df, pd.DataFrame)
+    assert set(df.columns) == {"Accuracy", "F1 Score", "attribute_value"}
+    assert df.shape[0] == 4  # 2 groups * 2 timepoints = 4 rows
+    assert all(df["attribute_value"].isin(["GroupA", "GroupB"]))
+    assert df["Accuracy"].between(0, 1).all()
+
+
+def test_root_mean_squared_error_equivalence():
+    y_true = np.array([3.0, -0.5, 2.0, 7.0])
+    y_pred = np.array([2.5, 0.0, 2.0, 8.0])
+
+    expected_rmse = mean_squared_error(y_true, y_pred, squared=False)
+    actual_rmse = root_mean_squared_error(y_true, y_pred)
+
+    assert np.isclose(
+        expected_rmse, actual_rmse
+    ), "RMSE fallback does not match expected output"
