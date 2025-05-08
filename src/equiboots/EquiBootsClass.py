@@ -9,6 +9,8 @@ from .metrics import (
     multi_label_classification_metrics,
     regression_metrics,
 )
+from .StatisticalTester import StatisticalTester, StatTestResult
+from typing import Optional, Dict, Any
 
 
 class EquiBoots:
@@ -451,3 +453,56 @@ class EquiBoots:
         if not all(isinstance(seed, int) for seed in seeds):
             raise ValueError("All seeds must be integers.")
         self.seeds = seeds
+
+    def analyze_statistical_significance(
+        self,
+        metric_dict: dict,
+        var_name: str,
+        test_config: Optional[Dict[str, Any]] = None
+    ) -> Dict[str, Dict[str, StatTestResult]]:
+        """Analyzes statistical significance of metric differences between groups.
+        
+        Args:
+            metric_dict: Dictionary of metrics from get_metrics()
+            var_name: Name of the demographic variable being analyzed
+            test_config: Optional configuration for statistical testing:
+                - test_type: Type of test (mann_whitney, t_test, ks_test, permutation, wilcoxon)
+                - alpha: Significance level (default: 0.05)
+                - adjust_method: Multiple comparison adjustment (bonferroni, fdr_bh, holm, none)
+                - bootstrap_iterations: Number of bootstrap iterations for permutation test (default: 1000)
+                - confidence_level: Confidence level for intervals (default: 0.95)
+                - alternative: Alternative hypothesis ("two-sided", "less", "greater")
+                - custom_test_func: Optional custom test function
+                
+        Returns:
+            Dictionary containing test results for each group and metric, with StatTestResult objects
+            containing:
+            - test statistics
+            - p-values (adjusted if specified)
+            - significance flags
+            - effect sizes (Cohen's d for t-test, rank-biserial correlation for non-parametric tests)
+            - confidence intervals (where applicable)
+        """
+        tester = StatisticalTester()
+        reference_group = self.reference_groups[var_name]
+        
+        if test_config is None:
+            test_config = {}
+            
+        test_results = tester.analyze_metrics(
+            metrics_data=metric_dict,
+            reference_group=reference_group,
+            test_config=test_config
+        )
+        
+        return test_results
+
+    @staticmethod
+    def list_available_tests() -> Dict[str, str]:
+        """List available statistical tests and their descriptions."""
+        return StatisticalTester.AVAILABLE_TESTS
+
+    @staticmethod
+    def list_adjustment_methods() -> Dict[str, str]:
+        """List available adjustment methods and their descriptions."""
+        return StatisticalTester.ADJUSTMENT_METHODS
