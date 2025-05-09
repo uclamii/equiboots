@@ -39,21 +39,19 @@ class StatisticalTester:
         "none": "No correction",
     }
 
-    def __init__(self, critical_value):
+    def __init__(self):
         """Initializes StatisticalTester with default test implementations."""
         self._test_implementations = {
             "chi_square": self._chi_square_test,
             "bootstrap_test": self._bootstrap_test,
         }
-        self.critical_value: Optional[float] = None
 
     def _bootstrap_test(self, data: List[float], iterations: int) -> List[float]:
         pass
 
     def _chi_square_test(
         self,
-        ref_data: Union[int, List[int]],
-        comp_data: Union[int, List[int]],
+        metrics: Dict[str, Any],
         config: Dict[str, Any],
     ) -> StatTestResult:
         """Performs Chi-square test for categorical data.
@@ -67,11 +65,9 @@ class StatisticalTester:
             StatTestResult object containing test results
         """
         # Convert to numpy arrays
-        ref_array = np.array(ref_data)
-        comp_array = np.array(comp_data)
-
+        data = pd.DataFrame(metrics)
         # Create contingency table
-        contingency_table = pd.crosstab(ref_array, comp_array)
+        contingency_table = data.T
 
         # Use scipy's implementation
         chi2, p_value, _, _ = stats.chi2_contingency(contingency_table)
@@ -209,22 +205,51 @@ class StatisticalTester:
         # if significant
         # then do pairwise test
         # return results
+        metrics_CM = ["TP", "FP", "TN", "FN"]
+        # Get the keys of the metrics dictionary
 
-        ref_metrics = metrics[reference_group]
+        metrics = {
+            key: {k: v for k, v in metrics[key].items() if k in metrics_CM}
+            for key in metrics.keys()
+        }
 
-        for group, group_metrics in metrics.items():
-            if group == reference_group:
+        ref_metrics = {k: v for k, v in metrics.items() if k in [reference_group]}
 
-                continue
+        test_result = test_func(metrics, config)
+        # omnibous test
+        results["omnibus"] = test_result
 
-            results[group] = {}
+        if test_result.is_significant:
+            ## TODO
+            # Calculate effect size
+            effect_size = self._calculate_effect_size(
+                ref_metrics, metrics[reference_group]
+            )
+            results["omnibus"].effect_size = effect_size
 
-            for metric_name, value in group_metrics.items():
+            # Calculate pairwise tests
+            for group, group_metrics in metrics.items():
+                if group == reference_group:
+                    continue
 
-                if isinstance(value, (int, float)):
+                comp_metrics = {k: v for k, v in metrics.items() if k in [group]}
 
-                    test_result = test_func(ref_metrics[metric_name], value, config)
+                ref_comp_metrics = {**ref_metrics, **comp_metrics}
 
-                    results[group][metric_name] = test_result
+                test_result = test_func(ref_comp_metrics, config)
+                results[group] = test_result
+                if test_result.is_significant:
+                    ## TODO
+                    # Calculate effect size
+                    effect_size = self._calculate_effect_size(
+                        ref_comp_metrics, metrics[group]  # reference group
+                    )
+                    results[group].effect_size = effect_size
 
-        return results
+            return results
+
+        else:  # no need to calculate effect size
+            test_result.effect_size = None
+            test_result.confidence_interval = None
+            # no need for pairwise test
+            return results
