@@ -461,7 +461,7 @@ class EquiBoots:
         test_config: Dict[str, Any],
     ) -> Dict[str, Dict[str, StatTestResult]]:
         """Analyzes statistical significance of metric differences between groups.
-        
+
         Args:
             metric_dict: Dictionary of metrics from get_metrics()
             var_name: Name of the demographic variable being analyzed
@@ -472,7 +472,7 @@ class EquiBoots:
                 - confidence_level: Confidence level for intervals (default: 0.95)
                 - classification_task: Whether the task is classification (default: True)
 
-                
+
         Returns:
             Dictionary containing test results for each group and metric, with StatTestResult objects
             containing:
@@ -484,16 +484,17 @@ class EquiBoots:
         """
         tester = StatisticalTester()
         reference_group = self.reference_groups[var_name]
-        
+
         if test_config is None:
-            test_config = {}
-            
+            raise ValueError("test_config cannot be None, please provide a dictionary")
+
         test_results = tester.analyze_metrics(
             metrics_data=metric_dict,
             reference_group=reference_group,
-            test_config=test_config
+            test_config=test_config,
+            task=self.task,
         )
-        
+
         return test_results
 
     @staticmethod
