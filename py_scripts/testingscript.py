@@ -70,7 +70,7 @@ def eq_general_test(task):
         boot_sample_size=100,
         balanced=True,  # False is stratified, True is balanced
         stratify_by_outcome=False,
-        group_min_size=1750,
+        group_min_size=50,
     )
 
     # Set group_min_size based on task for debugging purposes
@@ -114,5 +114,5 @@ def eq_general_test(task):
 
 
 if __name__ == "__main__":
-    task = "multi_label_classification"
+    task = "binary_classification"
     eq_general_test(task)

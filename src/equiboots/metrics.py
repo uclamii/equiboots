@@ -69,6 +69,10 @@ def binary_classification_metrics(
         "FP Rate": fp / (fp + tn) if fp + tn > 0 else 0,
         "FN Rate": fn / (tp + fn) if tp + fn > 0 else 0,
         "TN Rate": tn / (fp + tn) if fp + tn > 0 else 0,
+        "TP": tp,
+        "FP": fp,
+        "FN": fn,
+        "TN": tn,
         "Prevalence": prevalence,
         "Predicted Prevalence": predicted_prevalence,
     }
