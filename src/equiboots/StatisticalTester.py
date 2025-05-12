@@ -57,8 +57,7 @@ class StatisticalTester:
         """Performs Chi-square test for categorical data.
 
         Args:
-            ref_data: List of values from reference group
-            comp_data: List of values from comparison group
+            metrics: Metrics of CM in a dictionary
             config: Configuration dictionary containing test parameters
 
         Returns:
@@ -164,10 +163,11 @@ class StatisticalTester:
                     "Use bootstrapped metrics."
                 )
 
-        if config["adjust_method"] != "none":
-            results = self._adjust_p_values(
-                results, config["adjust_method"], config["alpha"]
-            )
+        # TODO: update adjustment of p_Values
+        # if config["adjust_method"] != "none":
+        #     results = self._adjust_p_values(
+        #         results, config["adjust_method"], config["alpha"]
+        #     )
 
         return results
 
@@ -195,10 +195,7 @@ class StatisticalTester:
 
         results = {}
 
-        test_func = (
-            config.get("custom_test_func")
-            or self._test_implementations[config["test_type"]]
-        )
+        test_func = self._test_implementations[config["test_type"]]
 
         ## TODO: get tp,tn,fp,fn from metrics for each group
         # then do omninous test
@@ -215,24 +212,23 @@ class StatisticalTester:
 
         ref_metrics = {k: v for k, v in metrics.items() if k in [reference_group]}
 
-        test_result = test_func(metrics, config)
         # omnibous test
-        results["omnibus"] = test_result
+        results["omnibus"] = test_func(metrics, config)
 
-        if test_result.is_significant:
+        if results["omnibus"].is_significant:
             ## TODO
             # Calculate effect size
-            effect_size = self._calculate_effect_size(
-                ref_metrics, metrics[reference_group]
-            )
-            results["omnibus"].effect_size = effect_size
+            # effect_size = self._calculate_effect_size(
+            #     ref_metrics, metrics[reference_group]
+            # )
+            # results["omnibus"].effect_size = effect_size
 
             # Calculate pairwise tests
             for group, group_metrics in metrics.items():
                 if group == reference_group:
                     continue
 
-                comp_metrics = {k: v for k, v in metrics.items() if k in [group]}
+                comp_metrics = {k: v for k, v in group_metrics.items() if k in [group]}
 
                 ref_comp_metrics = {**ref_metrics, **comp_metrics}
 
@@ -240,16 +236,17 @@ class StatisticalTester:
                 results[group] = test_result
                 if test_result.is_significant:
                     ## TODO
-                    # Calculate effect size
-                    effect_size = self._calculate_effect_size(
-                        ref_comp_metrics, metrics[group]  # reference group
-                    )
-                    results[group].effect_size = effect_size
+                    # # Calculate effect size
+                    # effect_size = self._calculate_effect_size(
+                    #     ref_comp_metrics, metrics[group]  # reference group
+                    # )
+                    # results[group].effect_size = effect_size
+                    pass
 
             return results
 
         else:  # no need to calculate effect size
-            test_result.effect_size = None
-            test_result.confidence_interval = None
+            results["omnibus"].effect_size = None
+            results["omnibus"].confidence_interval = None
             # no need for pairwise test
             return results

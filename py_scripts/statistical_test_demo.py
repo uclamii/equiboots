@@ -109,10 +109,14 @@ def eq_general_test(task):
         "alpha": 0.05,
         "adjust_method": "bonferroni",
         "confidence_level": 0.95,
-        "classification_task": 100,
+        "classification_task": "binary_classification",
     }
 
-    eq.analyze_statistical_significance(race_metrics, "race", test_config)
+    stat_test_results = eq.analyze_statistical_significance(
+        race_metrics, "race", test_config
+    )
+
+    print(stat_test_results)
 
 
 if __name__ == "__main__":
