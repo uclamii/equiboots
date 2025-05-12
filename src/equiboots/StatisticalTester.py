@@ -187,11 +187,6 @@ class StatisticalTester:
 
         test_func = self._test_implementations[config["test_type"]]
 
-        ## TODO: get tp,tn,fp,fn from metrics for each group
-        # then do omninous test
-        # if significant
-        # then do pairwise test
-        # return results
         metrics_CM = ["TP", "FP", "TN", "FN"]
         # Get the keys of the metrics dictionary
 
@@ -218,12 +213,10 @@ class StatisticalTester:
 
                 ref_comp_metrics = {**ref_metrics, **comp_metrics}
 
-                test_result = test_func(ref_comp_metrics, config)
-                results[group] = test_result
+                results[group] = test_func(ref_comp_metrics, config)
                 if results[group].is_significant:
                     effect_size = self._calculate_effect_size(ref_comp_metrics)
                     results[group].effect_size = effect_size
-                    pass
 
             return results
 
