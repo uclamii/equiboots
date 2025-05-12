@@ -4,7 +4,7 @@ from scipy import stats
 from statsmodels.stats.multitest import multipletests
 from typing import Dict, List, Tuple, Optional, Union, Any
 from dataclasses import dataclass
-import pingouin as pg
+from scipy.stats.contingency import association
 
 
 @dataclass
@@ -78,24 +78,14 @@ class StatisticalTester:
             test_name="Chi-Square Test",
         )
 
-    def _calculate_effect_size(
-        self, ref_data: List[float], comp_data: List[float]
-    ) -> float:
-        """Calculates Cohen's d effect size using pingouin.
-
-        Args:
-            ref_data: List of values from reference group
-            comp_data: List of values from comparison group
+    def _calculate_effect_size(self, metrics: Dict) -> float:
+        """Calculates the Cramer's V effect size using scipy.
 
         Returns:
-            float: Cohen's d effect size
+            float: Cramer's V effect size
         """
-        # Convert lists to numpy arrays
-        ref_array = np.array(ref_data)
-        comp_array = np.array(comp_data)
-
-        # Calculate Cohen's d using pingouin
-        effect_size = pg.compute_effsize(ref_array, comp_array, eftype="cohen")
+        coningency_table = pd.DataFrame(metrics).T
+        effect_size = association(coningency_table, method="cramer")
         return effect_size
 
     def _adjust_p_values(
@@ -215,32 +205,24 @@ class StatisticalTester:
         # omnibous test
         results["omnibus"] = test_func(metrics, config)
 
-        if results["omnibus"].is_significant:
-            ## TODO
-            # Calculate effect size
-            # effect_size = self._calculate_effect_size(
-            #     ref_metrics, metrics[reference_group]
-            # )
-            # results["omnibus"].effect_size = effect_size
+        if results["omnibus"].is_signnificant:
+            effect_size = self._calculate_effect_size(metrics)
+            results["omnibus"].effect_size = effect_size
 
             # Calculate pairwise tests
-            for group, group_metrics in metrics.items():
+            for group, _ in metrics.items():
                 if group == reference_group:
                     continue
 
-                comp_metrics = {k: v for k, v in group_metrics.items() if k in [group]}
+                comp_metrics = {k: v for k, v in metrics.items() if k in [group]}
 
                 ref_comp_metrics = {**ref_metrics, **comp_metrics}
 
                 test_result = test_func(ref_comp_metrics, config)
                 results[group] = test_result
-                if test_result.is_significant:
-                    ## TODO
-                    # # Calculate effect size
-                    # effect_size = self._calculate_effect_size(
-                    #     ref_comp_metrics, metrics[group]  # reference group
-                    # )
-                    # results[group].effect_size = effect_size
+                if results[group].is_significant:
+                    effect_size = self._calculate_effect_size(ref_comp_metrics)
+                    results[group].effect_size = effect_size
                     pass
 
             return results
