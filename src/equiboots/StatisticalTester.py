@@ -102,7 +102,11 @@ class StatisticalTester:
         self, results: Dict[str, Dict[str, StatTestResult]], method: str, alpha: float
     ) -> Dict[str, Dict[str, StatTestResult]]:
         """Adjusts p-values for multiple comparisons using specified method."""
-        p_values = []
+
+        results = {
+            k: (v if isinstance(v, dict) else {k: v}) for k, v in results.items()
+        }
+        p_values = []  # this needs to be input of all p-values for ea. test
         for group_results in results.values():
             for test_result in group_results.values():
                 p_values.append(test_result.p_value)
@@ -164,10 +168,16 @@ class StatisticalTester:
                 )
 
         # TODO: update adjustment of p_Values
-        # if config["adjust_method"] != "none":
-        #     results = self._adjust_p_values(
-        #         results, config["adjust_method"], config["alpha"]
-        #     )
+        if config["adjust_method"] != "none":
+
+            # Avoid running this command if results have a len of 1; then
+            # we do not need to adj. p-value
+            if len(results) > 1:
+                # Adjust p-values for multiple comparisons
+                adjusted_results = self._adjust_p_values(
+                    results, config["adjust_method"], config["alpha"]
+                )
+                results = adjusted_results
 
         return results
 
@@ -215,7 +225,8 @@ class StatisticalTester:
         # omnibous test
         results["omnibus"] = test_func(metrics, config)
 
-        if results["omnibus"].is_significant:
+        if True:
+            # if results["omnibus"].is_significant:
             ## TODO
             # Calculate effect size
             # effect_size = self._calculate_effect_size(
@@ -234,7 +245,8 @@ class StatisticalTester:
 
                 test_result = test_func(ref_comp_metrics, config)
                 results[group] = test_result
-                if test_result.is_significant:
+                if results[group].is_significant:
+                    # if test_result.is_significant:
                     ## TODO
                     # # Calculate effect size
                     # effect_size = self._calculate_effect_size(
