@@ -103,13 +103,9 @@ class StatisticalTester:
     ) -> Dict[str, Dict[str, StatTestResult]]:
         """Adjusts p-values for multiple comparisons using specified method."""
 
-        results = {
-            k: (v if isinstance(v, dict) else {k: v}) for k, v in results.items()
-        }
         p_values = []  # this needs to be input of all p-values for ea. test
         for group_results in results.values():
-            for test_result in group_results.values():
-                p_values.append(test_result.p_value)
+            p_values.append(group_results.p_value)
 
         if method == "bonferroni":
             adjusted_p_values = multipletests(
@@ -122,23 +118,13 @@ class StatisticalTester:
         else:
             return results
 
-        p_value_idx = 0
-        adjusted_results = {}
-        for group, group_results in results.items():
-            adjusted_results[group] = {}
-            for metric, test_result in group_results.items():
-                adjusted_result = StatTestResult(
-                    statistic=test_result.statistic,
-                    p_value=adjusted_p_values[p_value_idx],
-                    is_significant=adjusted_p_values[p_value_idx] < alpha,
-                    test_name=test_result.test_name,
-                    effect_size=test_result.effect_size,
-                    confidence_interval=test_result.confidence_interval,
-                )
-                adjusted_results[group][metric] = adjusted_result
-                p_value_idx += 1
+        for idx, group in enumerate(results.keys()):
+            results[group].p_value = adjusted_p_values[idx]
+            results[group].is_significant = adjusted_p_values[idx] < alpha
 
-        return adjusted_results
+        return results
+
+    # TODO: need to retun results; get inside the results; update the object, then return the results
 
     def analyze_metrics(
         self,
