@@ -103,7 +103,7 @@ class StatisticalTester:
     ) -> Dict[str, Dict[str, StatTestResult]]:
         """Adjusts p-values for multiple comparisons using specified method."""
 
-        p_values = []  # this needs to be input of all p-values for ea. test
+        p_values = []
         for group_results in results.values():
             p_values.append(group_results.p_value)
 
@@ -123,8 +123,6 @@ class StatisticalTester:
             results[group].is_significant = adjusted_p_values[idx] < alpha
 
         return results
-
-    # TODO: need to retun results; get inside the results; update the object, then return the results
 
     def analyze_metrics(
         self,
