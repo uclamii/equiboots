@@ -135,23 +135,23 @@ class StatisticalTester:
                 results = self._analyze_single_metrics(
                     metrics_data, reference_group, config
                 )
+                ## TODO make adjust to method
+                # adjust p_values
+                if config["adjust_method"] != "none":
+                    # Avoid running this command if results have a len of 1; then
+                    # we do not need to adj. p-value
+                    if len(results) > 1:
+                        # Adjust p-values for multiple comparisons
+                        adjusted_results = self._adjust_p_values(
+                            results, config["adjust_method"], config["alpha"]
+                        )
+                        results = adjusted_results
+                ##
             else:
                 raise ValueError(
                     "Task not supported for non-bootstrapped metrics. "
                     "Use bootstrapped metrics."
                 )
-
-        # TODO: update adjustment of p_Values
-        if config["adjust_method"] != "none":
-
-            # Avoid running this command if results have a len of 1; then
-            # we do not need to adj. p-value
-            if len(results) > 1:
-                # Adjust p-values for multiple comparisons
-                adjusted_results = self._adjust_p_values(
-                    results, config["adjust_method"], config["alpha"]
-                )
-                results = adjusted_results
 
         return results
 
@@ -191,7 +191,7 @@ class StatisticalTester:
 
         ref_metrics = {k: v for k, v in metrics.items() if k in [reference_group]}
 
-        # omnibous test
+        # omnibus test
         results["omnibus"] = test_func(metrics, config)
 
         if results["omnibus"].is_significant:
@@ -209,7 +209,9 @@ class StatisticalTester:
                 if results[group].is_significant:
                     effect_size = self._calculate_effect_size(ref_comp_metrics)
                     results[group].effect_size = effect_size
-                    pass
+                else:
+                    results[group].effect_size = None
+                    results[group].confidence_interval = None
 
             return results
 
