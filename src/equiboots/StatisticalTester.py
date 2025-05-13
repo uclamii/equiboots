@@ -220,3 +220,29 @@ class StatisticalTester:
             results["omnibus"].confidence_interval = None
             # no need for pairwise test
             return results
+
+    def _analyze_bootstrapped_metrics(
+        self, metrics_diffs: list[Dict], reference_group: str, config: Dict[str, Any]
+    ) -> Dict[str, Dict[str, StatTestResult]]:
+        """Analyzes bootstrapped metrics differences against a reference group."""
+
+        results = {}
+
+        test_func = self._test_implementations[config["test_type"]]
+
+        metrics_boot = ["Accuracy_diff", "Precision_diff"]
+
+        # TODO
+        # 1.
+        # a.Filter out reference group
+        # b. keep only metrics_boot
+        # c. call the test, for each metrics_boot requires a distribution or list of values
+
+        # 2. Get distribution of diffs for each metrics_boot
+        # 3. 95% C.I. for a sample # stats.norm.interval(0.68, loc=mu, scale=sigma/sqrt(N))
+        # 4. Check if C.I. overlaps 0, if yes non statistically significant
+        # 5. Calculate p_value, and asjust_p, effect size using bootstrap (optional)
+        # 6. Return StatisticalTestResult object
+
+        # 7. return for List[Dict[str=group,Dict[str=metric,StatisticalTestResult]]]
+        return None
