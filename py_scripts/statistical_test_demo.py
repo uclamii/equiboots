@@ -65,7 +65,7 @@ def eq_general_test(task):
         fairness_vars=["race", "sex"],
         reference_groups=["white", "M"],
         task=task,
-        bootstrap_flag=True,
+        bootstrap_flag=False,
         num_bootstraps=10,
         boot_sample_size=100,
         balanced=True,  # False is stratified, True is balanced
@@ -90,10 +90,11 @@ def eq_general_test(task):
 
     data = eq.slicer("race")
 
-    for key in data[0].keys():
-        print("key", key)
-        print(data[0][key]["y_true"].shape)
-        print(np.unique(data[0][key]["y_true"], axis=0, return_counts=True))
+    if eq.bootstrap_flag:
+        for key in data[0].keys():
+            print("key", key)
+            print(data[0][key]["y_true"].shape)
+            print(np.unique(data[0][key]["y_true"], axis=0, return_counts=True))
 
     print("Categories below minimum size", eq.groups_below_min_size)
 
@@ -103,25 +104,19 @@ def eq_general_test(task):
     print("race_metrics", race_metrics)
     print("len(race_metrics)", len(race_metrics))
 
-    dispa = eq.calculate_disparities(race_metrics, "race")
+    test_config = {
+        "test_type": "chi_square",
+        "alpha": 0.05,
+        "adjust_method": "bonferroni",
+        "confidence_level": 0.95,
+        "classification_task": "binary_classification",
+    }
 
-    # Create DataFrame from disparities
-    disa_metrics_df = eqb.metrics_dataframe(metrics_data=dispa)
-    print(f"Disparity Metrics DataFrame\n{disa_metrics_df}\n")
+    stat_test_results = eq.analyze_statistical_significance(
+        race_metrics, "race", test_config
+    )
 
-    print("dispa", dispa)
-    print("len(dispa)", len(dispa))
-
-    # Calculate differences
-
-    diffs = eq.calculate_differences(race_metrics, "race")
-    
-    # Create DataFrame from differences
-    disa_diffs_df = eqb.metrics_dataframe(metrics_data=diffs)
-    print(f"Disparity Metrics DataFrame\n{disa_diffs_df}\n")
-
-    print("diffs", diffs)
-    print("len(diffs)", len(diffs))
+    print(stat_test_results)
 
 
 if __name__ == "__main__":
