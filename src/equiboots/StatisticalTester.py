@@ -200,7 +200,7 @@ class StatisticalTester:
         # omnibous test
         results["omnibus"] = test_func(metrics, config)
 
-        if results["omnibus"].is_signnificant:
+        if results["omnibus"].is_significant:
             effect_size = self._calculate_effect_size(metrics)
             results["omnibus"].effect_size = effect_size
 
