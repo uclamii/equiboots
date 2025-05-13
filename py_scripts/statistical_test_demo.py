@@ -104,13 +104,16 @@ def eq_general_test(task):
     print("race_metrics", race_metrics)
     print("len(race_metrics)", len(race_metrics))
 
-    test_config = {
-        "test_type": "chi_square",
-        "alpha": 0.05,
-        "adjust_method": "bonferroni",
-        "confidence_level": 0.95,
-        "classification_task": "binary_classification",
-    }
+    if eq.bootstrap_flag:
+        pass
+    else:
+        test_config = {
+            "test_type": "chi_square",
+            "alpha": 0.05,
+            "adjust_method": "bonferroni",
+            "confidence_level": 0.95,
+            "classification_task": "binary_classification",
+        }
 
     stat_test_results = eq.analyze_statistical_significance(
         race_metrics, "race", test_config
