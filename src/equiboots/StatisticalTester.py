@@ -46,13 +46,38 @@ class StatisticalTester:
             "bootstrap_test": self._bootstrap_test,
         }
 
-    def _bootstrap_test(self, data: List[float], iterations: int) -> List[float]:
+    def _bootstrap_test(self, data: List[float]) -> List[float]:
 
         # 3. 95% C.I. for a sample # stats.norm.interval(0.68, loc=mu, scale=sigma/sqrt(N))
+        mu = np.mean(data)
+        sigma = np.std(data)
+        se = sigma / np.sqrt(len(data))
+
+        ## Lower and Upper Bounds of C.I.
+        ci_lower, ci_upper = stats.norm.interval(0.95, loc=mu, scale=se)
+
         # 4. Check if C.I. overlaps 0, if yes non statistically significant
+
+        # Does CI cross zero?
+        if ci_lower <= 0 <= ci_upper:
+            is_significant = False
+        else:
+            is_significant = True
+
         # 5. Calculate p_value, and asjust_p, effect size using bootstrap (optional)
+        # two‐sided p‐value under H0: mean=0
+        z = mu / se if se else np.nan
+        p_value = 2 * (1 - stats.norm.cdf(abs(z)))
+
         # 6. Return StatisticalTestResult object
-        pass
+        return StatTestResult(
+            statistic=mu,
+            p_value=p_value,
+            is_significant=is_significant,
+            test_name="bootstrap_mean",
+            confidence_interval=(ci_lower, ci_upper),
+            # effect_size=effect_size,
+        )
 
     def _chi_square_test(
         self,
