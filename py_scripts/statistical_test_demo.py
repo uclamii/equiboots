@@ -80,7 +80,8 @@ def eq_general_test(task):
     # multi_label_classification: group_min_size = 1750
 
     # Set seeds
-    eq.set_fix_seeds([42, 123, 222, 999])
+    seeds = np.arange(eq.num_bootstraps).tolist()
+    eq.set_fix_seeds(seeds)
 
     print("seeds", eq.seeds)
 
@@ -122,6 +123,10 @@ def eq_general_test(task):
             "confidence_level": 0.95,
             "classification_task": "binary_classification",
         }
+
+        stat_test_results = eq.analyze_statistical_significance(
+            race_metrics, "race", test_config, diffs
+        )
     else:
         test_config = {
             "test_type": "chi_square",
@@ -130,10 +135,9 @@ def eq_general_test(task):
             "confidence_level": 0.95,
             "classification_task": "binary_classification",
         }
-
-    stat_test_results = eq.analyze_statistical_significance(
-        race_metrics, "race", test_config
-    )
+        stat_test_results = eq.analyze_statistical_significance(
+            race_metrics, "race", test_config
+        )
 
     print(stat_test_results)
 

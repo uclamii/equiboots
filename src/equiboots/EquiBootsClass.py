@@ -10,7 +10,7 @@ from .metrics import (
     regression_metrics,
 )
 from .StatisticalTester import StatisticalTester, StatTestResult
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 
 
 class EquiBoots:
@@ -501,6 +501,7 @@ class EquiBoots:
         metric_dict: dict,
         var_name: str,
         test_config: Dict[str, Any],
+        differences: Optional[List[Dict]],
     ) -> Dict[str, Dict[str, StatTestResult]]:
         """Analyzes statistical significance of metric differences between groups.
 
@@ -526,10 +527,6 @@ class EquiBoots:
         """
         tester = StatisticalTester()
         reference_group = self.reference_groups[var_name]
-
-        ## need to check whether this causes an error when done with non bootstrapped but
-        ## it shouldn't as it has a bootstrap flag check within it
-        differences = self.calculate_differences(metric_dict, var_name)
 
         if test_config is None:
             raise ValueError("test_config cannot be None, please provide a dictionary")
