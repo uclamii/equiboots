@@ -47,6 +47,11 @@ class StatisticalTester:
         }
 
     def _bootstrap_test(self, data: List[float], iterations: int) -> List[float]:
+
+        # 3. 95% C.I. for a sample # stats.norm.interval(0.68, loc=mu, scale=sigma/sqrt(N))
+        # 4. Check if C.I. overlaps 0, if yes non statistically significant
+        # 5. Calculate p_value, and asjust_p, effect size using bootstrap (optional)
+        # 6. Return StatisticalTestResult object
         pass
 
     def _chi_square_test(
@@ -120,6 +125,7 @@ class StatisticalTester:
         reference_group: str,
         test_config: Dict[str, Any],
         task: Optional[str] = None,
+        differences: Optional[dict] = None,
     ) -> Dict[str, Dict[str, StatTestResult]]:
         """Analyzes metrics for statistical significance against a reference group."""
 
@@ -128,7 +134,7 @@ class StatisticalTester:
 
         if isinstance(metrics_data, list):
             results = self._analyze_bootstrapped_metrics(
-                metrics_data, reference_group, config
+                differences, reference_group, config
             )
         else:
             if task == "binary_classification":
@@ -222,7 +228,7 @@ class StatisticalTester:
             return results
 
     def _analyze_bootstrapped_metrics(
-        self, metrics_diffs: list[Dict], reference_group: str, config: Dict[str, Any]
+        self, metrics_diff: list[Dict], reference_group: str, config: Dict[str, Any]
     ) -> Dict[str, Dict[str, StatTestResult]]:
         """Analyzes bootstrapped metrics differences against a reference group."""
 
@@ -232,17 +238,29 @@ class StatisticalTester:
 
         metrics_boot = ["Accuracy_diff", "Precision_diff"]
 
-        # TODO
-        # 1.
-        # a.Filter out reference group
-        # b. keep only metrics_boot
-        # c. call the test, for each metrics_boot requires a distribution or list of values
+        aggregated_metric_dict = {}
+        for metric_dict in metrics_diff:
+            ## getting rid of reference group
+            metric_dict.pop(reference_group, None)
 
-        # 2. Get distribution of diffs for each metrics_boot
-        # 3. 95% C.I. for a sample # stats.norm.interval(0.68, loc=mu, scale=sigma/sqrt(N))
-        # 4. Check if C.I. overlaps 0, if yes non statistically significant
-        # 5. Calculate p_value, and asjust_p, effect size using bootstrap (optional)
-        # 6. Return StatisticalTestResult object
+            for group_key, group_metrics in metric_dict.items():
+                ### create new key in dictionary for each group e.g. "asian" and set to an empty list
+                if group_key not in aggregated_metric_dict:
+                    aggregated_metric_dict[group_key] = {
+                        metric: [] for metric in metrics_boot
+                    }
+
+                ## populate list with the values from each bootstrap for each group
+                for metric in metrics_boot:
+                    aggregated_metric_dict[group_key][metric].append(
+                        group_metrics[metric]
+                    )
+
+        # calls test for each group e.g. hispanic etc. and then calls the
+        # bootstrap test func for each metric. e.g. Precision_diff
+        for group_key, group_metrics in aggregated_metric_dict.items():
+            for metric in metrics_boot:
+                test_result = test_func(group_metrics[metric])
 
         # 7. return for List[Dict[str=group,Dict[str=metric,StatisticalTestResult]]]
         return None
