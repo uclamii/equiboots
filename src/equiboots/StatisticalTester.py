@@ -48,7 +48,7 @@ class StatisticalTester:
 
     def _bootstrap_test(self, data: List[float]) -> List[float]:
 
-        # 3. 95% C.I. for a sample # stats.norm.interval(0.68, loc=mu, scale=sigma/sqrt(N))
+        # 3. 95% C.I. for a sample
         mu = np.mean(data)
         sigma = np.std(data)
         se = sigma / np.sqrt(len(data))
@@ -284,8 +284,10 @@ class StatisticalTester:
         # calls test for each group e.g. hispanic etc. and then calls the
         # bootstrap test func for each metric. e.g. Precision_diff
         for group_key, group_metrics in aggregated_metric_dict.items():
+            results[group_key] = {}
             for metric in metrics_boot:
                 test_result = test_func(group_metrics[metric])
+                results[group_key][metric] = test_result
 
         # 7. return for List[Dict[str=group,Dict[str=metric,StatisticalTestResult]]]
-        return None
+        return results
