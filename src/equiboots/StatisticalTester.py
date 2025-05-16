@@ -47,16 +47,18 @@ class StatisticalTester:
         }
 
     def _bootstrap_test(self, data: List[float]) -> List[float]:
-
-        # 3. 95% C.I. for a sample
+        is_normal = stats.shapiro(data).pvalue < 0.05
+        ### TODO: put a shapiro test for normality in before we do the test
         mu = np.mean(data)
         sigma = np.std(data)
-        se = sigma / np.sqrt(len(data))
 
-        ## Lower and Upper Bounds of C.I.
-        ci_lower, ci_upper = stats.norm.interval(0.95, loc=mu, scale=se)
+        if is_normal:
 
-        # 4. Check if C.I. overlaps 0, if yes non statistically significant
+            ci_lower, ci_upper = np.percentile(data, [2.5, 97.5])
+        else:
+            Warning("Data is not normal. Try more bootstrap samples.")
+            se = sigma
+            ci_lower, ci_upper = stats.norm.interval(0.95, loc=mu, scale=se)
 
         # Does CI cross zero?
         if ci_lower <= 0 <= ci_upper:
@@ -64,10 +66,10 @@ class StatisticalTester:
         else:
             is_significant = True
 
-        # 5. Calculate p_value, and asjust_p, effect size using bootstrap (optional)
-        # two‐sided p‐value under H0: mean=0
-        z = mu / se if se else np.nan
-        p_value = 2 * (1 - stats.norm.cdf(abs(z)))
+        # TODO: Work out if this is correct
+        p_value = len([num for num in data if num < 0]) / len(data)
+        if p_value > 0.975:
+            p_value = 1 - p_value
 
         # 6. Return StatisticalTestResult object
         return StatTestResult(

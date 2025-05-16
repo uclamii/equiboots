@@ -66,7 +66,7 @@ def eq_general_test(task):
         reference_groups=["white", "M"],
         task=task,
         bootstrap_flag=True,
-        num_bootstraps=100,
+        num_bootstraps=1000,
         boot_sample_size=100,
         balanced=True,  # False is stratified, True is balanced
         stratify_by_outcome=False,
