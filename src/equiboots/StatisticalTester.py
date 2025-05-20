@@ -46,10 +46,9 @@ class StatisticalTester:
             "bootstrap_test": self._bootstrap_test,
         }
 
-    def _bootstrap_test(
-        self, data: List[float], config: dict, test_type: str = "two-tailed"
-    ) -> List[float]:
+    def _bootstrap_test(self, data: List[float], config: dict) -> List[float]:
 
+        tail_type = config["tail_type"]
         ### assumption that with sufficiently large data we can assume the bootstrapped samples are normal
         if len(data) >= 5000:
             is_normal = True
@@ -63,18 +62,18 @@ class StatisticalTester:
         mu = np.mean(data)
         sigma = np.std(data)
 
-        if test_type == "two-tailed":
+        if tail_type == "two_tailed":
             lower = (config["alpha"] / 2) * 100
             higher = (1 - (config["alpha"] / 2)) * 100
-        elif test_type == "one-tail-less":
+        elif tail_type == "one_tail_less":
             lower = 0
             higher = config["alpha"] * 100
-        elif test_type == "one-tail-greater":
+        elif tail_type == "one_tail_greater":
             lower = (1 - config["alpha"]) * 100
             higher = 100
         else:
             ValueError(
-                "Must specify two-tailed, one-tail-less or one-tail-greater for the test_type"
+                "Must specify two-tailed, one-tail-less or one-tail-greater for the tail_type"
             )
 
         if is_normal:
@@ -99,7 +98,7 @@ class StatisticalTester:
         if p_value > 1 - (config["alpha"] / 2):
             # right sided p_value test
             p_value = 1 - p_value
-        elif test_type == "two-tailed":
+        elif tail_type == "two-tailed":
             ## assuming symmetric dist
             p_value *= 2
 
