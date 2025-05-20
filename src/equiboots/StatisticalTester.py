@@ -46,19 +46,23 @@ class StatisticalTester:
             "bootstrap_test": self._bootstrap_test,
         }
 
-    def _bootstrap_test(self, data: List[float]) -> List[float]:
-        is_normal = stats.shapiro(data).pvalue < 0.05
+    def _bootstrap_test(
+        self, data: List[float], config: dict, test_type: str = "two-tailed"
+    ) -> List[float]:
+        is_normal = stats.shapiro(data).pvalue <= config.alpha
         ### TODO: put a shapiro test for normality in before we do the test
         mu = np.mean(data)
         sigma = np.std(data)
 
         if is_normal:
-
-            ci_lower, ci_upper = np.percentile(data, [2.5, 97.5])
+            lower, higher = config.alpha / 2, 1 - (config.alpha / 2)
+            ci_lower, ci_upper = np.percentile(data, [lower, higher])
         else:
             Warning("Data is not normal. Try more bootstrap samples.")
             se = sigma
-            ci_lower, ci_upper = stats.norm.interval(0.95, loc=mu, scale=se)
+            ci_lower, ci_upper = stats.norm.interval(
+                config.confidence_level, loc=mu, scale=se
+            )
 
         # Does CI cross zero?
         if ci_lower <= 0 <= ci_upper:
@@ -67,9 +71,15 @@ class StatisticalTester:
             is_significant = True
 
         # TODO: Work out if this is correct
+        # one-tailed test
+        # left sided p_value test
         p_value = len([num for num in data if num < 0]) / len(data)
-        if p_value > 0.975:
+        if p_value > 1 - (config.alpha / 2):
+            # right sided p_value test
             p_value = 1 - p_value
+        elif test_type == "two-tailed":
+            ## assuming symmetric dist
+            p_value *= 2
 
         # 6. Return StatisticalTestResult object
         return StatTestResult(
@@ -106,7 +116,7 @@ class StatisticalTester:
         return StatTestResult(
             statistic=chi2,
             p_value=p_value,
-            is_significant=p_value < config.get("alpha", 0.05),
+            is_significant=p_value <= config.get("alpha", 0.05),
             test_name="Chi-Square Test",
         )
 
@@ -142,7 +152,7 @@ class StatisticalTester:
 
         for idx, group in enumerate(results.keys()):
             results[group].p_value = adjusted_p_values[idx]
-            results[group].is_significant = adjusted_p_values[idx] < alpha
+            results[group].is_significant = adjusted_p_values[idx] <= alpha
 
         return results
 
@@ -288,7 +298,7 @@ class StatisticalTester:
         for group_key, group_metrics in aggregated_metric_dict.items():
             results[group_key] = {}
             for metric in metrics_boot:
-                test_result = test_func(group_metrics[metric])
+                test_result = test_func(group_metrics[metric], config)
                 results[group_key][metric] = test_result
 
         # 7. return for List[Dict[str=group,Dict[str=metric,StatisticalTestResult]]]
