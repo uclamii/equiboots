@@ -122,6 +122,7 @@ def eq_general_test(task):
             "adjust_method": "bonferroni",
             "confidence_level": 0.95,
             "classification_task": "binary_classification",
+            "tail_type": "one-tailed-less",
         }
 
         stat_test_results = eq.analyze_statistical_significance(
