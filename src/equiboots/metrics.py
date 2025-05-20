@@ -330,6 +330,13 @@ def regression_example():
     print("\nRegression Metrics:\n", metrics)
 
 
+def calibration_area(p):
+    # for p: 2D vertices of a polygon:
+    # area = 1/2 abs(sum(p0 ^ p1 + p1 ^ p2 + ... + pn-1 ^ p0))
+    # where ^ is the cross product
+    return np.abs(np.cross(p, np.roll(p, 1, axis=0)).sum()) / 2
+
+
 if __name__ == "__main__":
     binary_classification_example()
     multi_class_classification_example()
