@@ -103,6 +103,10 @@ class StatisticalTester:
             ## assuming symmetric dist
             p_value *= 2
 
+        ### effect size is set as zero if the pooled std is 0
+        ### this could actually mean effect size is inf
+        effect_size = self.cohens_d(data)
+
         # 6. Return StatisticalTestResult object
         return StatTestResult(
             statistic=mu,
@@ -110,7 +114,7 @@ class StatisticalTester:
             is_significant=is_significant,
             test_name="bootstrap_mean",
             confidence_interval=(ci_lower, ci_upper),
-            # effect_size=effect_size,
+            effect_size=effect_size,
         )
 
     def _chi_square_test(
@@ -237,6 +241,12 @@ class StatisticalTester:
                 f"Invalid adjustment method: {config['adjust_method']}. Available methods: {self.ADJUSTMENT_METHODS.keys()}"
             )
 
+    def cohens_d(self, data):
+        """Calculate Cohen's d for one-sample against zero"""
+        mean = np.mean(data)
+        pooled_std = np.sqrt(np.std(data) ** 2 / 2)
+        return mean / pooled_std if pooled_std > 0 else 0
+
     def _analyze_single_metrics(
         self, metrics: Dict, reference_group: str, config: Dict[str, Any]
     ) -> Dict[str, Dict[str, StatTestResult]]:
@@ -323,5 +333,6 @@ class StatisticalTester:
                 test_result = test_func(group_metrics[metric], config)
                 results[group_key][metric] = test_result
 
+        ### TODO
         # 7. return for List[Dict[str=group,Dict[str=metric,StatisticalTestResult]]]
         return results
