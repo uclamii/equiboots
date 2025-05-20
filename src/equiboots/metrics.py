@@ -273,6 +273,56 @@ def metrics_dataframe(metrics_data: List[Dict[str, Dict[str, float]]]) -> pd.Dat
     return df
 
 
+def calibration_area(p):
+    """
+    Compute the area enclosed by a closed polygon using the shoelace formula.
+
+    Parameters
+    ----------
+    p : array_like of shape (N, 2)
+        Sequence of 2D vertices (x, y) in order. If the first and last points
+        are not the same, they are implicitly connected.
+
+    Returns
+    -------
+    float
+        Absolute polygon area.
+
+    Notes
+    -----
+    Implements the shoelace formula:
+
+        area = 0.5 * |sum(x_i * y_{i+1} - x_{i+1} * y_i)|
+
+    Cross-product form used here:
+
+        area = 0.5 * abs(sum(cross(p[i], p[i-1]) for i in range(N)))
+
+    References
+    ----------
+    Pierre D (2014). Find the area between two curves plotted in matplotlib.
+    https://stackoverflow.com/questions/25439243/find-the-area-between-two-curves-plotted-in-matplotlib-fill-between-area
+    """
+    return np.abs(np.cross(p, np.roll(p, 1, axis=0)).sum()) / 2
+
+
+def calibration_auc(mean_pred: np.ndarray, frac_pos: np.ndarray) -> float:
+    """
+    Compute the area under a calibration curve defined by
+    mean_pred (x) and frac_pos (y) using the shoelace formula.
+    Assumes endpoints (0,0) and (1,1).
+    """
+    # stack the polygon: start at (0,0), then your bins, then (1,1)
+    p = np.vstack(
+        [
+            [0.0, 0.0],
+            np.column_stack((mean_pred, frac_pos)),
+            [1.0, 1.0],
+        ]
+    )
+    return calibration_area(p)
+
+
 ####################################### toy examples
 
 
@@ -328,13 +378,6 @@ def regression_example():
     # Calculate metrics
     metrics = regression_metrics(y_true, y_pred)
     print("\nRegression Metrics:\n", metrics)
-
-
-def calibration_area(p):
-    # for p: 2D vertices of a polygon:
-    # area = 1/2 abs(sum(p0 ^ p1 + p1 ^ p2 + ... + pn-1 ^ p0))
-    # where ^ is the cross product
-    return np.abs(np.cross(p, np.roll(p, 1, axis=0)).sum()) / 2
 
 
 if __name__ == "__main__":
