@@ -66,7 +66,7 @@ def eq_general_test(task):
         reference_groups=["white", "M"],
         task=task,
         bootstrap_flag=True,
-        num_bootstraps=30,
+        num_bootstraps=2000,
         boot_sample_size=100,
         balanced=True,  # False is stratified, True is balanced
         stratify_by_outcome=False,
@@ -122,7 +122,7 @@ def eq_general_test(task):
             "adjust_method": "bonferroni",
             "confidence_level": 0.95,
             "classification_task": "binary_classification",
-            "tail_type": "one_tail_less",
+            "tail_type": "two_tailed",
         }
 
         stat_test_results = eq.analyze_statistical_significance(
