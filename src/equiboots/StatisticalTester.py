@@ -49,19 +49,41 @@ class StatisticalTester:
     def _bootstrap_test(
         self, data: List[float], config: dict, test_type: str = "two-tailed"
     ) -> List[float]:
-        is_normal = stats.shapiro(data).pvalue <= config.alpha
-        ### TODO: put a shapiro test for normality in before we do the test
+
+        ### assumption that with sufficiently large data we can assume the bootstrapped samples are normal
+        if len(data) >= 5000:
+            is_normal = True
+        elif (
+            stats.shapiro(data).pvalue > config["alpha"]
+        ):  # fail to reject null hypothesis (that the data is normally distributed)
+            is_normal = True
+        else:
+            is_normal = False
+
         mu = np.mean(data)
         sigma = np.std(data)
 
+        if test_type == "two-tailed":
+            lower = (config["alpha"] / 2) * 100
+            higher = (1 - (config["alpha"] / 2)) * 100
+        elif test_type == "one-tail-less":
+            lower = 0
+            higher = config["alpha"] * 100
+        elif test_type == "one-tail-greater":
+            lower = (1 - config["alpha"]) * 100
+            higher = 100
+        else:
+            ValueError(
+                "Must specify two-tailed, one-tail-less or one-tail-greater for the test_type"
+            )
+
         if is_normal:
-            lower, higher = config.alpha / 2, 1 - (config.alpha / 2)
             ci_lower, ci_upper = np.percentile(data, [lower, higher])
         else:
             Warning("Data is not normal. Try more bootstrap samples.")
             se = sigma
             ci_lower, ci_upper = stats.norm.interval(
-                config.confidence_level, loc=mu, scale=se
+                config["confidence_level"], loc=mu, scale=se
             )
 
         # Does CI cross zero?
@@ -70,11 +92,11 @@ class StatisticalTester:
         else:
             is_significant = True
 
-        # TODO: Work out if this is correct
         # one-tailed test
         # left sided p_value test
+        # the 0 is our t / z value
         p_value = len([num for num in data if num < 0]) / len(data)
-        if p_value > 1 - (config.alpha / 2):
+        if p_value > 1 - (config["alpha"] / 2):
             # right sided p_value test
             p_value = 1 - p_value
         elif test_type == "two-tailed":
