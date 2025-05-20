@@ -91,17 +91,7 @@ class StatisticalTester:
         else:
             is_significant = True
 
-        # one-tailed test
-        # left sided p_value test
-        # the 0 is our t / z value
-        p_value = len([num for num in data if num < 0]) / len(data)
-        if p_value > 1 - (config["alpha"] / 2):
-            # right sided p_value test
-            p_value = 1 - p_value
-        elif tail_type == "two-tailed":
-            ## assuming symmetric dist
-            p_value *= 2
-
+        p_value = self.calc_p_value_bootstrap(data, config)
         ### effect size is set as zero if the pooled std is 0
         ### this could actually mean effect size is inf
         effect_size = self.cohens_d(data)
@@ -115,6 +105,20 @@ class StatisticalTester:
             confidence_interval=(ci_lower, ci_upper),
             effect_size=effect_size,
         )
+
+    def calc_p_value_bootstrap(self, data, config):
+        tail_type = config["tail_type"]
+        # one-tailed test
+        # left sided p_value test
+        # the 0 is our t / z value
+        p_value = len([num for num in data if num < 0]) / len(data)
+        if p_value > 1 - (config["alpha"] / 2):
+            # right sided p_value test
+            p_value = 1 - p_value
+        elif tail_type == "two-tailed":
+            ## assuming symmetric dist
+            p_value *= 2
+        return p_value
 
     def _chi_square_test(
         self,
@@ -240,11 +244,13 @@ class StatisticalTester:
                 f"Invalid adjustment method: {config['adjust_method']}. Available methods: {self.ADJUSTMENT_METHODS.keys()}"
             )
 
-    def cohens_d(self, data):
+    def cohens_d(self, data_1, data_2):
         """Calculate Cohen's d for one-sample against zero"""
-        mean = np.mean(data)
-        pooled_std = np.sqrt(np.std(data) ** 2 / 2)
-        return mean / pooled_std if pooled_std > 0 else 0
+        mean_1 = np.mean(data_1)
+        mean_2 = np.mean(data_2)
+        mean_sum = mean_1 + mean_2
+        pooled_std = np.sqrt((np.std(data_1) ** 2 + np.std(data_2) ** 2) / 2)
+        return mean_sum / pooled_std if pooled_std > 0 else 0
 
     def _analyze_single_metrics(
         self, metrics: Dict, reference_group: str, config: Dict[str, Any]
