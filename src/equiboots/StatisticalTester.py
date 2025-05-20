@@ -48,16 +48,12 @@ class StatisticalTester:
 
     def _bootstrap_test(self, data: List[float], config: dict) -> List[float]:
 
-        tail_type = config["tail_type"]
         ### assumption that with sufficiently large data we can assume the bootstrapped samples are normal
         if len(data) >= 5000:
             is_normal = True
-        elif (
-            stats.shapiro(data).pvalue > config["alpha"]
-        ):  # fail to reject null hypothesis (that the data is normally distributed)
-            is_normal = True
         else:
             is_normal = False
+            Warning("Data is not normal. Try more bootstraps >=5000")
 
         mu = np.mean(data)
         sigma = np.std(data)
@@ -67,7 +63,6 @@ class StatisticalTester:
         if is_normal:
             ci_lower, ci_upper = np.percentile(data, [lower, higher])
         else:
-            Warning("Data is not normal. Try more bootstrap samples.")
             se = sigma
             ci_lower, ci_upper = stats.norm.interval(
                 config["confidence_level"], loc=mu, scale=se
@@ -108,7 +103,7 @@ class StatisticalTester:
             lower = (1 - config["alpha"]) * 100
             higher = 100
         else:
-            ValueError(
+            raise ValueError(
                 "Must specify two-tailed, one-tail-less or one-tail-greater for the tail_type"
             )
         return lower, higher
@@ -318,6 +313,7 @@ class StatisticalTester:
 
         test_func = self._test_implementations[config["test_type"]]
 
+        ### TODO: make this a config variable
         metrics_boot = ["Accuracy_diff", "Precision_diff"]
 
         aggregated_metric_dict = {}
