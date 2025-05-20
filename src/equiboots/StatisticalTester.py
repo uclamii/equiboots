@@ -62,19 +62,7 @@ class StatisticalTester:
         mu = np.mean(data)
         sigma = np.std(data)
 
-        if tail_type == "two_tailed":
-            lower = (config["alpha"] / 2) * 100
-            higher = (1 - (config["alpha"] / 2)) * 100
-        elif tail_type == "one_tail_less":
-            lower = 0
-            higher = config["alpha"] * 100
-        elif tail_type == "one_tail_greater":
-            lower = (1 - config["alpha"]) * 100
-            higher = 100
-        else:
-            ValueError(
-                "Must specify two-tailed, one-tail-less or one-tail-greater for the tail_type"
-            )
+        lower, higher = self.get_ci_bounds(config)
 
         if is_normal:
             ci_lower, ci_upper = np.percentile(data, [lower, higher])
@@ -94,7 +82,7 @@ class StatisticalTester:
         p_value = self.calc_p_value_bootstrap(data, config)
         ### effect size is set as zero if the pooled std is 0
         ### this could actually mean effect size is inf
-        effect_size = self.cohens_d(data)
+        # effect_size = self.cohens_d(data)
 
         # 6. Return StatisticalTestResult object
         return StatTestResult(
@@ -103,10 +91,30 @@ class StatisticalTester:
             is_significant=is_significant,
             test_name="bootstrap_mean",
             confidence_interval=(ci_lower, ci_upper),
-            effect_size=effect_size,
+            # effect_size=effect_size,
         )
 
-    def calc_p_value_bootstrap(self, data, config):
+    def get_ci_bounds(self, config: dict) -> tuple:
+        """Get confidence interval bounds based on tail type"""
+        tail_type = config["tail_type"]
+
+        if tail_type == "two_tailed":
+            lower = (config["alpha"] / 2) * 100
+            higher = (1 - (config["alpha"] / 2)) * 100
+        elif tail_type == "one_tail_less":
+            lower = 0
+            higher = config["alpha"] * 100
+        elif tail_type == "one_tail_greater":
+            lower = (1 - config["alpha"]) * 100
+            higher = 100
+        else:
+            ValueError(
+                "Must specify two-tailed, one-tail-less or one-tail-greater for the tail_type"
+            )
+        return lower, higher
+
+    def calc_p_value_bootstrap(self, data: list, config: dict) -> float:
+        """Calculating the p-value using the data and config"""
         tail_type = config["tail_type"]
         # one-tailed test
         # left sided p_value test
