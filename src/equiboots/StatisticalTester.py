@@ -230,38 +230,35 @@ class StatisticalTester:
                 differences, reference_group, config
             )
 
-            if config["adjust_method"] != "none":
-                # Avoid running this command if results have a len of 1; then
-                # we do not need to adj. p-value
-                # TODO: modularise  and test this
-                if len(results) > 1:
-                    # Adjust p-values for multiple comparisons
-                    adjusted_results = self._adjust_p_values(
-                        results, config["adjust_method"], config["alpha"], boot=True
-                    )
-                    results = adjusted_results
         else:
             if task == "binary_classification":
                 results = self._analyze_single_metrics(
                     metrics_data, reference_group, config
                 )
-                if config["adjust_method"] != "none":
-                    # Avoid running this command if results have a len of 1; then
-                    # we do not need to adj. p-value
-                    if len(results) > 1:
-                        # Adjust p-values for multiple comparisons
-                        adjusted_results = self._adjust_p_values(
-                            results, config["adjust_method"], config["alpha"]
-                        )
-                        results = adjusted_results
-                ##
             else:
                 raise ValueError(
                     "Task not supported for non-bootstrapped metrics. "
                     "Use bootstrapped metrics."
                 )
+        ## Adjust p values here cos we now account for bootstrap within
+        if config["adjust_method"] != "none":
+            results = self.adjust_p_vals(config, results)
 
         return results
+
+    def adjust_p_vals(self, config, results):
+        """Runs the adjusting p value method based on bootstrap conditions"""
+        if config["test_type"] == "bootstrap_test":
+            boot = True
+        else:
+            boot = False
+        # Avoid running this command if results have a len of 1; then
+        if len(results) > 1:
+            # Adjust p-values for multiple comparisons
+            adjusted_results = self._adjust_p_values(
+                results, config["adjust_method"], config["alpha"], boot=boot
+            )
+        return adjusted_results
 
     def _validate_config(self, config: Dict[str, Any]):
         """Validates the configuration dictionary for required keys and values."""
