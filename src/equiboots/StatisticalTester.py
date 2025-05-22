@@ -205,13 +205,22 @@ class StatisticalTester:
             results = self._analyze_bootstrapped_metrics(
                 differences, reference_group, config
             )
+
+            if config["adjust_method"] != "none":
+                # Avoid running this command if results have a len of 1; then
+                # we do not need to adj. p-value
+                # TODO: modularise  and test this
+                if len(results) > 1:
+                    # Adjust p-values for multiple comparisons
+                    adjusted_results = self._adjust_p_values(
+                        results, config["adjust_method"], config["alpha"]
+                    )
+                    results = adjusted_results
         else:
             if task == "binary_classification":
                 results = self._analyze_single_metrics(
                     metrics_data, reference_group, config
                 )
-                ## TODO make adjust to method
-                # adjust p_values
                 if config["adjust_method"] != "none":
                     # Avoid running this command if results have a len of 1; then
                     # we do not need to adj. p-value
@@ -248,7 +257,7 @@ class StatisticalTester:
             )
 
     def cohens_d(self, data_1, data_2):
-        """Calculate Cohen's d for one-sample against zero"""
+        """Calculate Cohen's d"""
         mean_1 = np.mean(data_1)
         mean_2 = np.mean(data_2)
         mean_sum = mean_1 + mean_2
@@ -312,8 +321,8 @@ class StatisticalTester:
         results = {}
 
         test_func = self._test_implementations[config["test_type"]]
-
-        ### TODO: make this a config variable
+        metrics_boot = config["metrics"]
+        ### TODO: make this a config variable AF
         metrics_boot = ["Accuracy_diff", "Precision_diff"]
 
         aggregated_metric_dict = {}
@@ -342,6 +351,4 @@ class StatisticalTester:
                 test_result = test_func(group_metrics[metric], config)
                 results[group_key][metric] = test_result
 
-        ### TODO
-        # 7. return for List[Dict[str=group,Dict[str=metric,StatisticalTestResult]]]
         return results
