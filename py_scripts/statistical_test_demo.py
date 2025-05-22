@@ -66,7 +66,7 @@ def eq_general_test(task):
         reference_groups=["white", "M"],
         task=task,
         bootstrap_flag=False,
-        num_bootstraps=10,
+        num_bootstraps=100,
         boot_sample_size=100,
         balanced=True,  # False is stratified, True is balanced
         stratify_by_outcome=False,
@@ -80,13 +80,14 @@ def eq_general_test(task):
     # multi_label_classification: group_min_size = 1750
 
     # Set seeds
-    eq.set_fix_seeds([42, 123, 222, 999])
+    seeds = np.arange(eq.num_bootstraps).tolist()
+    eq.set_fix_seeds(seeds)
 
     print("seeds", eq.seeds)
 
     eq.grouper(groupings_vars=["race", "sex"])
 
-    print("groups", eq.groups)
+    # print("groups", eq.groups)
 
     data = eq.slicer("race")
 
@@ -101,20 +102,45 @@ def eq_general_test(task):
     # The metrics are calculated for each group in the groupings_vars
     race_metrics = eq.get_metrics(data)
 
-    print("race_metrics", race_metrics)
+    # print("race_metrics", race_metrics)
     print("len(race_metrics)", len(race_metrics))
 
-    test_config = {
-        "test_type": "chi_square",
-        "alpha": 0.05,
-        "adjust_method": "bonferroni",
-        "confidence_level": 0.95,
-        "classification_task": "binary_classification",
-    }
+    # Calculate differences
+    diffs = eq.calculate_differences(race_metrics, "race")
 
-    stat_test_results = eq.analyze_statistical_significance(
-        race_metrics, "race", test_config
-    )
+    # Create DataFrame from differences
+    disa_diffs_df = eqb.metrics_dataframe(metrics_data=diffs)
+    print(f"Disparity Metrics DataFrame\n{disa_diffs_df}\n")
+
+    print("diffs", diffs)
+    print("len(diffs)", len(diffs))
+    metrics_boot = ["Accuracy_diff", "Precision_diff"]
+
+    if eq.bootstrap_flag:
+        test_config = {
+            "test_type": "bootstrap_test",
+            "alpha": 0.05,
+            "adjust_method": "bonferroni",
+            "confidence_level": 0.95,
+            "classification_task": "binary_classification",
+            "tail_type": "two_tailed",
+            "metrics": metrics_boot,
+        }
+
+        stat_test_results = eq.analyze_statistical_significance(
+            race_metrics, "race", test_config, diffs
+        )
+    else:
+        test_config = {
+            "test_type": "chi_square",
+            "alpha": 0.05,
+            "adjust_method": "bonferroni",
+            "confidence_level": 0.95,
+            "classification_task": "binary_classification",
+        }
+        stat_test_results = eq.analyze_statistical_significance(
+            race_metrics, "race", test_config
+        )
 
     print(stat_test_results)
 

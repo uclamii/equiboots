@@ -10,7 +10,7 @@ from .metrics import (
     regression_metrics,
 )
 from .StatisticalTester import StatisticalTester, StatTestResult
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 
 
 class EquiBoots:
@@ -411,7 +411,6 @@ class EquiBoots:
                 metric_dict,
                 var_name=var_name,
             )
-        
 
     def calculate_groups_disparities(self, metric_dict: dict, var_name: str) -> dict:
         """
@@ -447,24 +446,26 @@ class EquiBoots:
 
         return disparities
 
-    def calculate_differences(self, metric_dict, var_name: str) -> dict:
+    def calculate_differences(self, metric_dict, ref_var_name: str) -> dict:
         """Calculate difference metrics for each group based on the task type."""
         if self.bootstrap_flag:
             return [
-                self.calculate_groups_differences(metrics, var_name=var_name)
+                self.calculate_groups_differences(metrics, ref_var_name=ref_var_name)
                 for metrics in metric_dict
             ]
         else:
             return self.calculate_groups_differences(
                 metric_dict,
-                var_name=var_name,
+                ref_var_name=ref_var_name,
             )
-    
-    def calculate_groups_differences(self, metric_dict: dict, var_name: str) -> dict:
+
+    def calculate_groups_differences(
+        self, metric_dict: dict, ref_var_name: str
+    ) -> dict:
         """
         Calculate differences between each group and the reference group.
         """
-        ref_cat = self.reference_groups[var_name]
+        ref_cat = self.reference_groups[ref_var_name]
         differences = {}
 
         # Get reference group metrics
@@ -500,6 +501,7 @@ class EquiBoots:
         metric_dict: dict,
         var_name: str,
         test_config: Dict[str, Any],
+        differences: Optional[List[Dict]] = None,
     ) -> Dict[str, Dict[str, StatTestResult]]:
         """Analyzes statistical significance of metric differences between groups.
 
@@ -534,6 +536,7 @@ class EquiBoots:
             reference_group=reference_group,
             test_config=test_config,
             task=self.task,
+            differences=differences,
         )
 
         return test_results
