@@ -303,7 +303,7 @@ def calibration_area(p):
     Pierre D (2014). Find the area between two curves plotted in matplotlib.
     https://stackoverflow.com/questions/25439243/find-the-area-between-two-curves-plotted-in-matplotlib-fill-between-area
     """
-    return np.abs(np.cross(p, np.roll(p, 1, axis=0)).sum()) / 2
+    return np.abs(np.cross(p, np.roll(p, 1, axis=0))).sum() / 2
 
 
 def calibration_auc(mean_pred: np.ndarray, frac_pos: np.ndarray) -> float:
@@ -312,14 +312,25 @@ def calibration_auc(mean_pred: np.ndarray, frac_pos: np.ndarray) -> float:
     mean_pred (x) and frac_pos (y) using the shoelace formula.
     Assumes endpoints (0,0) and (1,1).
     """
+    n = len(mean_pred) + 2
+    xy0 = np.c_[
+        np.hstack(((np.hstack(([0], mean_pred))), 1)),
+        np.hstack(((np.hstack(([0], frac_pos))), 1)),
+    ]
+    # xy0 =  np.c_[np.array([1,1,1,1,1]), np.linspace(0,1,n0)]
+    # xy0 = np.c_[np.linspace(0,1,n0), np.array([1,1,1,1,1])]
+    xy1 = np.c_[np.linspace(0, 1, n), np.linspace(0, 1, n)]
+
+    p = np.r_[xy0, xy1[::-1]]
     # stack the polygon: start at (0,0), then your bins, then (1,1)
-    p = np.vstack(
-        [
-            [0.0, 0.0],
-            np.column_stack((mean_pred, frac_pos)),
-            [1.0, 1.0],
-        ]
-    )
+    # p = np.vstack(
+    #     [
+    #         [0.0, 0.0],
+    #         np.column_stack((mean_pred, frac_pos)),
+    #         [1.0, 1.0],
+    #     ]
+    # )
+
     return calibration_area(p)
 
 
