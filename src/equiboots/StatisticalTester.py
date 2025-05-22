@@ -240,13 +240,13 @@ class StatisticalTester:
                     "Task not supported for non-bootstrapped metrics. "
                     "Use bootstrapped metrics."
                 )
-        ## Adjust p values here cos we now account for bootstrap within
+        ## Adjust p values here b/c we now account for bootstrap within
         if config["adjust_method"] != "none":
-            results = self.adjust_p_vals(config, results)
+            results = self.adjusting_p_vals(config, results)
 
         return results
 
-    def adjust_p_vals(self, config, results):
+    def adjusting_p_vals(self, config, results):
         """Runs the adjusting p value method based on bootstrap conditions"""
         if config["test_type"] == "bootstrap_test":
             boot = True
