@@ -65,7 +65,7 @@ def eq_general_test(task):
         fairness_vars=["race", "sex"],
         reference_groups=["white", "M"],
         task=task,
-        bootstrap_flag=True,
+        bootstrap_flag=False,
         num_bootstraps=100,
         boot_sample_size=100,
         balanced=True,  # False is stratified, True is balanced

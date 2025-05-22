@@ -501,7 +501,7 @@ class EquiBoots:
         metric_dict: dict,
         var_name: str,
         test_config: Dict[str, Any],
-        differences: Optional[List[Dict]],
+        differences: Optional[List[Dict]] = None,
     ) -> Dict[str, Dict[str, StatTestResult]]:
         """Analyzes statistical significance of metric differences between groups.
 
