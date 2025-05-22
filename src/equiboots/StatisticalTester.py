@@ -163,13 +163,29 @@ class StatisticalTester:
         return effect_size
 
     def _adjust_p_values(
-        self, results: Dict[str, Dict[str, StatTestResult]], method: str, alpha: float
+        self,
+        results: Dict[str, Dict[str, StatTestResult]],
+        method: str,
+        alpha: float,
+        boot: bool = False,
     ) -> Dict[str, Dict[str, StatTestResult]]:
         """Adjusts p-values for multiple comparisons using specified method."""
 
-        p_values = []
-        for group_results in results.values():
-            p_values.append(group_results.p_value)
+        if boot:
+            # When boot=True, results has nested structure: results[group][test_type]
+            p_values = []
+            group_test_pairs = []
+
+            # Collect all p-values and their corresponding group/test pairs
+            for group, group_results in results.items():
+                for test_type, test_result in group_results.items():
+                    p_values.append(test_result.p_value)
+                    group_test_pairs.append((group, test_type))
+        else:
+            # Original behavior: results[group] contains StatTestResult directly
+            p_values = []
+            for group, group_result in results.items():
+                p_values.append(group_result.p_value)
 
         if method == "bonferroni":
             adjusted_p_values = multipletests(
@@ -182,9 +198,17 @@ class StatisticalTester:
         else:
             return results
 
-        for idx, group in enumerate(results.keys()):
-            results[group].p_value = adjusted_p_values[idx]
-            results[group].is_significant = adjusted_p_values[idx] <= alpha
+        if boot:
+            # Update nested structure
+            for idx, (group, test_type) in enumerate(group_test_pairs):
+                results[group][test_type].p_value = adjusted_p_values[idx]
+                results[group][test_type].is_significant = (
+                    adjusted_p_values[idx] <= alpha
+                )
+        else:
+            for idx, group in enumerate(results.keys()):
+                results[group].p_value = adjusted_p_values[idx]
+                results[group].is_significant = adjusted_p_values[idx] <= alpha
 
         return results
 
@@ -213,7 +237,7 @@ class StatisticalTester:
                 if len(results) > 1:
                     # Adjust p-values for multiple comparisons
                     adjusted_results = self._adjust_p_values(
-                        results, config["adjust_method"], config["alpha"]
+                        results, config["adjust_method"], config["alpha"], boot=True
                     )
                     results = adjusted_results
         else:
@@ -322,8 +346,6 @@ class StatisticalTester:
 
         test_func = self._test_implementations[config["test_type"]]
         metrics_boot = config["metrics"]
-        ### TODO: make this a config variable AF
-        metrics_boot = ["Accuracy_diff", "Precision_diff"]
 
         aggregated_metric_dict = {}
         for metric_dict in metrics_diff:

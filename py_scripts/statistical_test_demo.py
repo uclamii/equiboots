@@ -114,6 +114,7 @@ def eq_general_test(task):
 
     print("diffs", diffs)
     print("len(diffs)", len(diffs))
+    metrics_boot = ["Accuracy_diff", "Precision_diff"]
 
     if eq.bootstrap_flag:
         test_config = {
@@ -123,6 +124,7 @@ def eq_general_test(task):
             "confidence_level": 0.95,
             "classification_task": "binary_classification",
             "tail_type": "two_tailed",
+            "metrics": metrics_boot,
         }
 
         stat_test_results = eq.analyze_statistical_significance(
