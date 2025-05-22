@@ -17,20 +17,14 @@ Before installing `equiboots`, ensure your system meets the following requiremen
 
 The following dependencies will be automatically installed with `equiboots`:
 
-`fastparquet==2024.11.0`  
-`matplotlib==3.10.1`  
-`model_tuner==0.0.29b1`  
-`numpy==1.23.5`  
-`pandas==1.5.0`  
-`pytest==8.3.5`  
-`pytest_cov==6.0.0`  
-`scikit-learn==1.5.1`  
-`scipy==1.14.0`  
-`seaborn==0.13.2`  
-`tqdm==4.66.4`  
-`ucimlrepo==0.0.7`  
-`statsmodels>=0.13.0`  
-`pingouin>=0.5.3`  
+- `matplotlib>=3.5.3, <=3.10.1`  
+- `numpy>=1.21.6, <=2.2.4`  
+- `pandas>=1.3.5, <=2.2.3`  
+- `scikit-learn>=1.0.2, <=1.5.2`  
+- `scipy>=1.8.0, <=1.15.2`  
+- `seaborn>=0.11.2, <=0.13.2`  
+- `statsmodels>=0.13, <=0.14.4`
+- `tqdm>=4.66.4, <=4.67.1`
 
 ## 💾 Installation
 

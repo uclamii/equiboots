@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "equiboots"
-version = "0.0.0a4"
+version = "0.0.0a5"
 description = "A Python library for fairness-aware model evaluation, bias auditing, and performance visualization, supporting classification and regression models with robust analytics across demographic groups."
 readme = { file = "README_min.md", content-type = "text/markdown" }
 authors = [
@@ -20,6 +20,7 @@ dependencies = [
     "scikit-learn>=1.0.2, <=1.5.2",
     "scipy>=1.8.0, <=1.15.2",
     "seaborn>=0.11.2, <=0.13.2",
+    "statsmodels>=0.13, <=0.14.4",
     "tqdm>=4.66.4, <=4.67.1"
 ]
 
