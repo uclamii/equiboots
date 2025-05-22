@@ -277,9 +277,6 @@ def perform_bootstrapped_audit(
 ######################### Plot Disparity Distributions #########################
 ################################################################################
 
-## TODO L.S.
-## make ref_group always straight line regardless of ref_group
-
 
 def plot_metrics(
     df,
