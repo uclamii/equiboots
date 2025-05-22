@@ -23,7 +23,7 @@ deployment.
 PyPI: https://pypi.org/project/equiboots  
 Documentation: https://uclamii.github.io/equiboots/
 
-Version: 0.0.0a3
+Version: 0.0.0a4
 """
 
 
@@ -31,7 +31,7 @@ Version: 0.0.0a3
 __doc__ = detailed_doc
 
 
-__version__ = "0.0.0a3"
+__version__ = "0.0.0a4"
 __author__ = "Leonid Shpaner, Arthur Funnell, Al Rahrooh, Panayiotis Petousis"
 __email__ = "lshpaner@ucla.edu; alafunnell@gmail.com; arahrooh@ucla.edu; pp89@ucla.edu"
 
