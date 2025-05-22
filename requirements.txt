@@ -1,8 +1,6 @@
 fastparquet==2024.11.0
 matplotlib==3.9.2
-# model_tuner==0.0.29b1
 numpy==1.23.5
-pingouin>=0.5.3
 pandas==2.2.2
 pytest==8.3.5
 pytest_cov==6.0.0
