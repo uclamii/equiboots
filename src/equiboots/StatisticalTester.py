@@ -258,7 +258,10 @@ class StatisticalTester:
             adjusted_results = self._adjust_p_values(
                 results, config["adjust_method"], config["alpha"], boot=boot
             )
-        return adjusted_results
+            return adjusted_results
+        else:
+            # No adjustment needed for single comparison
+            return results
 
     def _validate_config(self, config: Dict[str, Any]):
         """Validates the configuration dictionary for required keys and values."""
