@@ -18,10 +18,10 @@ class EquiBoots:
     def __init__(
         self,
         y_true: np.array,
-        y_prob: np.array,
         y_pred: np.array,
         fairness_df: pd.DataFrame,
         fairness_vars: list,
+        y_prob: np.array = None,
         seeds: list = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
         reference_groups: list = None,
         task: str = "binary_classification",
