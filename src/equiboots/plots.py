@@ -12,7 +12,7 @@ from scipy.interpolate import interp1d
 from matplotlib.lines import Line2D
 import seaborn as sns
 
-from .metrics import regression_metrics
+from .metrics import regression_metrics, calibration_auc
 from typing import Dict, List, Optional, Union, Tuple, Set, Callable
 
 ################################################################################
@@ -233,6 +233,7 @@ def plot_with_layout(
     color_by_group: bool = True,
     exclude_groups: Union[int, str, List[str], Set[str]] = 0,
     show_grid: bool = True,
+    y_lim: Optional[Tuple[float, float]] = None,
 ) -> None:
     """
     Master plotting wrapper that handles 3 layout modes:
@@ -293,8 +294,11 @@ def plot_with_layout(
                 **plot_kwargs,
                 overlay_mode=False,
             )
+            if y_lim is not None:
+                axes[i].set_ylim(y_lim)
         for j in range(i + 1, len(axes)):  # Hide unused subplots
             axes[j].axis("off")
+
         fig.suptitle(title)
         plt.tight_layout(rect=[0, 0, 1, 0.95])
     else:  # ---- Mode 3: overlay
@@ -311,6 +315,9 @@ def plot_with_layout(
         ax.set_title(title)
         ax.legend(**DEFAULT_LEGEND_KWARGS)
         fig.tight_layout(rect=[0, 0, 1, 0.97])
+
+        if y_lim is not None:
+            ax.set_ylim(y_lim)
 
     if show_grid:
         plt.grid(linestyle=":")
@@ -622,18 +629,6 @@ def _plot_group_curve_ax(
     single_group: bool = False,
     show_grid: bool = True,
 ) -> None:
-    """
-    Plot a single ROC, PR, or calibration curve for a group.
-
-    label_mode : str
-        - 'full': includes group name, count, pos/neg breakdown, metric
-        - 'simple': just shows AUC/Brier
-    is_subplot : bool
-        Indicates whether this axis is part of a subplot grid
-    single_group : bool
-        If this is a dedicated single-group plot
-    """
-
     y_true = data[group]["y_true"]
     y_prob = data[group]["y_prob"]
     total = len(y_true)
@@ -650,6 +645,15 @@ def _plot_group_curve_ax(
         x_label, y_label = "False Positive Rate", "True Positive Rate"
         ref_line = ([0, 1], [0, 1])
         prefix = "AUC"
+
+        if label_mode == "simple":
+            label = f"{prefix} = {score:.{decimal_places}f}"
+        else:
+            label = (
+                f"{prefix} for {group} = {score:.{decimal_places}f}, "
+                f"Count: {total:,}, Pos: {positives:,}, Neg: {negatives:,}"
+            )
+
     elif curve_type == "pr":
         precision, recall, _ = precision_recall_curve(y_true, y_prob)
         score = auc(recall, precision)
@@ -657,48 +661,67 @@ def _plot_group_curve_ax(
         x_label, y_label = "Recall", "Precision"
         ref_line = ([0, 1], [positives / total] * 2)
         prefix = "AUCPR"
+
+        if label_mode == "simple":
+            label = f"{prefix} = {score:.{decimal_places}f}"
+        else:
+            label = (
+                f"{prefix} for {group} = {score:.{decimal_places}f}, "
+                f"Count: {total:,}, Pos: {positives:,}, Neg: {negatives:,}"
+            )
+
     elif curve_type == "calibration":
-        y, x = calibration_curve(y_true, y_prob, n_bins=n_bins)
-        score = brier_score_loss(y_true, y_prob)
+        # 1) get binned calibration
+        frac_pos, mean_pred = calibration_curve(y_true, y_prob, n_bins=n_bins)
+        # 2) compute Brier for reference
+        brier = brier_score_loss(y_true, y_prob)
+
+        # compute calibration‐curve AUC via helper
+        cal_auc = calibration_auc(mean_pred, frac_pos)
+
+        # 4) assign plotting vars
+        x, y = mean_pred, frac_pos
         x_label, y_label = "Mean Predicted Value", "Fraction of Positives"
         ref_line = ([0, 1], [0, 1])
-        prefix = "Brier score"
+
+        # 5) custom label
+        if label_mode == "simple":
+            label = f"Cal AUC = {cal_auc:.{decimal_places}f}"
+        else:
+            label = (
+                f"Cal AUC for {group} = {cal_auc:.{decimal_places}f}, "
+                f"Brier = {brier:.{decimal_places}f}, "
+                f"Count: {total:,}"
+            )
+
     else:
         raise ValueError("Unsupported curve_type")
 
-    # Use the label_mode directly as passed from eq_plot_group_curves
-    label = (
-        f"{prefix} = {score:.{decimal_places}f}"
-        if label_mode == "simple"
-        else (
-            f"{prefix} for {group} = {score:.{decimal_places}f}, "
-            f"Count: {total:,}, Pos: {positives:,}, Neg: {negatives:,}"
-        )
-    )
-
+    #############  Common plotting
     ax.plot(x, y, label=label, **curve_kwargs)
     if curve_type == "calibration":
         ax.scatter(x, y, color=curve_kwargs.get("color", "black"), zorder=5)
     if curve_type != "pr":
         ax.plot(*ref_line, **line_kwargs)
+
     if title:
         ax.set_title(title)
     ax.set_xlabel(x_label)
     ax.set_ylabel(y_label)
+
     if show_legend:
-        # Adjust legend position based on curve type and subplot/single group status
+        # choose legend location per curve type & mode
         if is_subplot or single_group:
-            if curve_type == "roc":
-                legend_kwargs = {"loc": "lower right"}
-            elif curve_type == "pr":
-                legend_kwargs = {"loc": "upper right"}
-            elif curve_type == "calibration":
-                legend_kwargs = {"loc": "lower right"}
-            else:
-                legend_kwargs = {"loc": "best"}
+            loc = {
+                "roc": "lower right",
+                "pr": "upper right",
+                "calibration": "lower right",
+            }.get(curve_type, "best")
+            legend_kwargs = {"loc": loc}
         else:
             legend_kwargs = DEFAULT_LEGEND_KWARGS
         ax.legend(**legend_kwargs)
+
     ax.grid(show_grid)
     ax.tick_params(axis="both")
 
@@ -985,6 +1008,7 @@ def eq_plot_bootstrapped_group_curves(
     color_by_group: bool = True,
     exclude_groups: Union[int, str, List[str], Set[str]] = 0,
     show_grid: bool = True,
+    y_lim: Optional[Tuple[float, float]] = None,
 ) -> None:
     """
     Plot bootstrapped curves by group.
@@ -1074,6 +1098,7 @@ def eq_plot_bootstrapped_group_curves(
         color_by_group=color_by_group,
         exclude_groups=exclude_groups,
         show_grid=show_grid,
+        y_lim=y_lim,
     )
 
 
