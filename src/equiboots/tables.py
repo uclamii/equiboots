@@ -2,7 +2,9 @@ import pandas as pd
 import numpy as np
 
 
-def metrics_table(metrics, statistical_tests, differences=None, reference_group=None):
+def metrics_table(
+    metrics, statistical_tests=None, differences=None, reference_group=None
+):
 
     ### check if group_differences is a string
     ### if it is a string then this is a bootstrap table
@@ -36,12 +38,15 @@ def metrics_table(metrics, statistical_tests, differences=None, reference_group=
 
                     if values:
                         mean_value = np.mean(values)
-                        if (
-                            group in statistical_tests
-                            and metric in statistical_tests[group]
-                            and statistical_tests[group][metric].is_significant
-                        ):
-                            group_means[metric] = f"{mean_value:.6f} *"
+                        if statistical_tests:
+                            if (
+                                group in statistical_tests
+                                and metric in statistical_tests[group]
+                                and statistical_tests[group][metric].is_significant
+                            ):
+                                group_means[metric] = f"{mean_value:.6f} *"
+                            else:
+                                group_means[metric] = mean_value
                         else:
                             group_means[metric] = mean_value
                     else:
@@ -55,17 +60,19 @@ def metrics_table(metrics, statistical_tests, differences=None, reference_group=
 
         metrics_table = pd.DataFrame(metrics)
 
-        for test_name, test in statistical_tests.items():
-            if test.is_significant == True:
-                if test_name == "omnibus":
-                    ## Adding a star to the cols
-                    metrics_table.columns = [
-                        f"{col} *" for col in metrics_table.columns
-                    ]
-                else:
-                    ## Adding triangle to cols
-                    metrics_table.columns = [
-                        f"{col} ▲" if test_name in col else col
-                        for col in metrics_table.columns
-                    ]
+        if statistical_tests:
+            for test_name, test in statistical_tests.items():
+                if test.is_significant == True:
+                    if test_name == "omnibus":
+                        ## Adding a star to the cols
+                        metrics_table.columns = [
+                            f"{col} *" for col in metrics_table.columns
+                        ]
+                    else:
+                        ## Adding triangle to cols
+                        metrics_table.columns = [
+                            f"{col} ▲" if test_name in col else col
+                            for col in metrics_table.columns
+                        ]
+
         return metrics_table
