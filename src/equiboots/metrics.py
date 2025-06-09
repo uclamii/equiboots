@@ -18,6 +18,8 @@ from sklearn.metrics import (
     mean_squared_log_error,
 )
 
+from sklearn.calibration import calibration_curve
+
 # --- Root-Mean-Squared Error fallback for old sklearns ------------------------
 try:
     from sklearn.metrics import root_mean_squared_error  # ≥ 1.4
@@ -78,15 +80,16 @@ def binary_classification_metrics(
     }
 
     if y_proba is not None:
+        prob_true, prob_pred = calibration_curve(y_true, y_proba, n_bins=10)
         metrics.update(
             {
                 "ROC AUC": roc_auc_score(y_true, y_proba),
                 "Average Precision Score": average_precision_score(y_true, y_proba),
                 "Log Loss": log_loss(y_true, y_proba),
                 "Brier Score": brier_score_loss(y_true, y_proba),
+                "Calibration AUC": calibration_auc(prob_pred, prob_true),
             }
         )
-
     return metrics
 
 
@@ -271,6 +274,34 @@ def metrics_dataframe(metrics_data: List[Dict[str, Dict[str, float]]]) -> pd.Dat
     melted = pd.DataFrame(metrics_data).melt()
     df = melted["value"].apply(pd.Series).assign(attribute_value=melted["variable"])
     return df
+
+
+def area_trap(curve1, curve2):
+    y_diff = np.abs(curve1[:, 1] - curve2[:, 1])
+    x = curve1[:, 0]
+    return np.trapz(y_diff, x)
+
+
+def calibration_auc(mean_pred: np.ndarray, frac_pos: np.ndarray) -> float:
+    """
+    Compute the area between a calibration curve and the 45° diagonal
+    via the trapezoidal rule.
+
+    mean_pred: 1D array of bin centers (x)
+    frac_pos:  1D array of observed fraction positives per bin (y)
+    """
+
+    x = np.concatenate(([0.0], mean_pred, [1.0]))  ## common x-axis including 0 and 1
+
+    ## two y-vectors
+    y_curve = np.concatenate(([0.0], frac_pos, [1.0]))  ## calibration curve
+    y_diag = x.copy()  # perfect-calibration line y=x
+
+    ## Pack into (n+2)x2 arrays
+    curve = np.column_stack((x, y_curve))
+    diagonal = np.column_stack((x, y_diag))
+
+    return area_trap(curve, diagonal)  ## Integrate |y_curve - y_diag| dx
 
 
 ####################################### toy examples
