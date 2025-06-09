@@ -8,6 +8,7 @@ from sklearn.metrics import (
     brier_score_loss,
 )
 from sklearn.calibration import calibration_curve
+import statsmodels.api as sm
 from scipy.interpolate import interp1d
 from matplotlib.lines import Line2D
 import seaborn as sns
@@ -628,6 +629,7 @@ def _plot_group_curve_ax(
     is_subplot: bool = False,
     single_group: bool = False,
     show_grid: bool = True,
+    lowess: float = 0,
 ) -> None:
     y_true = data[group]["y_true"]
     y_prob = data[group]["y_prob"]
@@ -701,6 +703,16 @@ def _plot_group_curve_ax(
     ax.plot(x, y, label=label, **curve_kwargs)
     if curve_type == "calibration":
         ax.scatter(x, y, color=curve_kwargs.get("color", "black"), zorder=5)
+        if lowess:
+            smoothed = sm.nonparametric.lowess(y, x, frac=lowess)
+            ax.plot(
+                smoothed[:, 0],
+                smoothed[:, 1],
+                color=curve_kwargs.get("color", "black"),
+                linestyle=":",
+                linewidth=1.5,
+            )
+
     if curve_type != "pr":
         ax.plot(*ref_line, **line_kwargs)
 
@@ -745,6 +757,7 @@ def eq_plot_group_curves(
     color_by_group: bool = True,
     exclude_groups: Union[int, str, List[str], Set[str]] = 0,
     show_grid: bool = True,
+    lowess: float = 0,
 ) -> None:
     """
     Plot ROC, PR, or calibration curves by group.
@@ -800,6 +813,7 @@ def eq_plot_group_curves(
             is_subplot=subplots,
             single_group=bool(group),
             show_grid=show_grid,
+            lowess=lowess,
         )
 
     plot_with_layout(

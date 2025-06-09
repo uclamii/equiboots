@@ -204,7 +204,7 @@ def test_eq_group_metrics_plot_invalid_kind():
             group_metrics=group_metrics,
             metric_cols=["Metric1"],
             name="group",
-            plot_kind="invalid_plot_type",
+            plot_type="invalid_plot_type",
         )
 
 
@@ -331,7 +331,7 @@ def test_eq_group_metrics_plot_violin(monkeypatch):
         group_metrics=group_metrics,
         metric_cols=["Metric1", "Metric2"],
         name="test",
-        plot_kind="violinplot",
+        plot_type="violinplot",
         categories=["A"],
     )
 
