@@ -630,6 +630,7 @@ def _plot_group_curve_ax(
     single_group: bool = False,
     show_grid: bool = True,
     lowess: float = 0,
+    shade_area: bool = False,
 ) -> None:
     y_true = data[group]["y_true"]
     y_prob = data[group]["y_prob"]
@@ -700,6 +701,19 @@ def _plot_group_curve_ax(
                 f"Brier = {brier:.{decimal_places}f}, "
                 f"Count: {total:,}"
             )
+        if shade_area:
+            # 6) shade the area between the curve and the diagonal;
+            #    first include the endpoints so the shading covers 0-1
+            x_shade = np.concatenate(([0.0], x, [1.0]))
+            y_shade = np.concatenate(([0.0], y, [1.0]))
+            ax.fill_between(
+                x_shade,
+                y_shade,
+                x_shade,  # the 45 degree line is y = x
+                color=curve_kwargs.get("color", "gray"),
+                alpha=0.2,
+                label="_nolegend_",
+            )
 
     else:
         raise ValueError("Unsupported curve_type")
@@ -763,6 +777,7 @@ def eq_plot_group_curves(
     exclude_groups: Union[int, str, List[str], Set[str]] = 0,
     show_grid: bool = True,
     lowess: float = 0,
+    shade_area: bool = False,
 ) -> None:
     """
     Plot ROC, PR, or calibration curves by group.
@@ -819,6 +834,7 @@ def eq_plot_group_curves(
             single_group=bool(group),
             show_grid=show_grid,
             lowess=lowess,
+            shade_area=shade_area,
         )
 
     plot_with_layout(
