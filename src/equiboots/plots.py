@@ -959,18 +959,50 @@ def _plot_bootstrapped_curve_ax(
         np.percentile(aucs, [2.5, 97.5]) if aucs else (float("nan"), float("nan"))
     )
 
+    # non‐calibration AUCs (ROC/PR)
+    aucs = (
+        [np.trapz(y, grid_x) for y in y_array if not np.isnan(y).all()]
+        if label_prefix != "CAL"
+        else []
+    )
+    mean_auc = np.mean(aucs) if aucs else float("nan")
+    low_auc, high_auc = (
+        np.percentile(aucs, [2.5, 97.5]) if aucs else (float("nan"), float("nan"))
+    )
+
     # Construct legend label depending on curve type
+
     if label_prefix == "CAL" and brier_scores:
-        scores = brier_scores.get(group, [])
-        mean_brier = np.mean(scores) if scores else float("nan")
-        lower_brier, upper_brier = (
-            np.percentile(scores, [2.5, 97.5])
-            if scores
+        # … existing Brier logic …
+        b_scores = brier_scores.get(group, [])
+        mean_b = np.mean(b_scores) if b_scores else float("nan")
+        low_b, high_b = (
+            np.percentile(b_scores, [2.5, 97.5])
+            if b_scores
             else (float("nan"), float("nan"))
         )
-        label = f"{group} (Mean Brier = {mean_brier:.3f} [{lower_brier:.3f}, {upper_brier:.3f}])"
+
+        # compute Cal-AUC *only* on fully populated bootstrap curves
+        cal_aucs = []
+        for y_row in y_array:
+            if not np.isnan(y_row).any():  # drop rows with any NaNs
+                cal_aucs.append(calibration_auc(grid_x, y_row))
+
+        if cal_aucs:
+            mean_c = np.mean(cal_aucs)
+            low_c, high_c = np.percentile(cal_aucs, [2.5, 97.5])
+        else:
+            mean_c = low_c = high_c = float("nan")
+
+        label = (
+            f"{group}\n"
+            f"(Mean Cal AUC = {mean_c:.3f} [{low_c:.3f},{high_c:.3f}];\n"
+            f"Mean Brier = {mean_b:.3f} [{low_b:.3f},{high_b:.3f}])"
+        )
     else:
-        label = f"{group} ({label_prefix} = {mean_auc:.2f} [{lower_auc:.2f}, {upper_auc:.2f}])"
+        label = (
+            f"{group} ({label_prefix} = {mean_auc:.2f} [{low_auc:.2f},{high_auc:.2f}])"
+        )
 
     # Set default plotting styles
     curve_kwargs = curve_kwargs or {"color": "#1f77b4"}
