@@ -270,6 +270,9 @@ def plot_with_layout(
             **plot_kwargs,
             overlay_mode=False,
         )
+        if y_lim is not None:
+            ax.set_ylim(y_lim)
+
         ax.set_title(f"{title} ({group})")
         fig.tight_layout()
         save_or_show_plot(fig, save_path, f"{filename}_{group}")
