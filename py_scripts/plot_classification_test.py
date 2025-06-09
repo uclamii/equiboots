@@ -44,3 +44,20 @@ if __name__ == "__main__":
         title="ROC AUC by Race Group",
         n_bins=10,
     )
+
+    # Regular calibration ex. w/ calibration area printed to legend
+    eqb.eq_plot_group_curves(
+        sliced_data,
+        curve_type="calibration",
+        title="ROC AUC by Race Group",
+        n_bins=10,
+    )
+
+    # LOWESS smoothing calibration
+    eqb.eq_plot_group_curves(
+        sliced_data,
+        curve_type="calibration",
+        title="ROC AUC by Race Group",
+        n_bins=10,
+        lowess=0.5,
+    )
