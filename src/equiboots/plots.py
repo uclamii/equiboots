@@ -688,7 +688,12 @@ def _plot_group_curve_ax(
 
         # 5) custom label
         if label_mode == "simple":
-            label = f"Cal AUC = {cal_auc:.{decimal_places}f}"
+            label = (
+                f"Cal AUC = {cal_auc:.{decimal_places}f}, "
+                f"Brier = {brier:.{decimal_places}f}, "
+                f"Count = {total:,}"
+            )
+
         else:
             label = (
                 f"Cal AUC for {group} = {cal_auc:.{decimal_places}f}, "
