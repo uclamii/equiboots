@@ -11,7 +11,6 @@ from sklearn.calibration import calibration_curve
 from scipy.interpolate import interp1d
 from matplotlib.lines import Line2D
 import seaborn as sns
-
 from .metrics import regression_metrics
 from typing import Dict, List, Optional, Union, Tuple, Set, Callable
 
@@ -1101,6 +1100,7 @@ def eq_group_metrics_plot(
     show_pass_fail: bool = False,
     leg_cols: int = 6,
     y_lim: Optional[Tuple[float, float]] = None,
+    statistical_tests: dict = None,
     **plot_kwargs: Dict[str, Union[str, float]],
 ) -> None:
     """
@@ -1144,6 +1144,16 @@ def eq_group_metrics_plot(
             layout_type="violin",
         )
     )
+
+    ## Initialise signficance checking
+    significance_map = {}
+    if statistical_tests:
+        for group, metrics in statistical_tests.items():
+            for metric_key, test_result in metrics.items():
+                ## we have to remove _diff for it to work
+                clean_metric = metric_key.replace("_diff", "")
+                if clean_metric in metric_cols and group in attributes:
+                    significance_map[(group, clean_metric)] = test_result.is_significant
 
     for i, col in enumerate(metric_cols):
         ax = axs[i // n_cols, i % n_cols]
@@ -1193,13 +1203,19 @@ def eq_group_metrics_plot(
             )
 
         ax.set_title(f"{name}_{col}")
+
         ax.set_xlabel("")
         ax.set_xticks(range(len(attributes)))
-        ax.set_xticklabels(
-            [group_to_alpha[attr] for attr in attributes], rotation=0, fontweight="bold"
-        )
+        labels = [
+            group_to_alpha[attr]
+            + (" *" if significance_map.get((attr, col), False) else "")
+            for attr in attributes
+        ]
+        ax.set_xticklabels(labels, rotation=0, fontweight="bold")
         for tick_label in ax.get_xticklabels():
-            attr = alpha_to_group[tick_label.get_text()]
+            # So our lookup doesn't break
+            label_text = tick_label.get_text().replace(" *", "")
+            attr = alpha_to_group[label_text]
             tick_label.set_color(
                 "green"
                 if group_status.get(attr) == "Pass"
@@ -1216,6 +1232,24 @@ def eq_group_metrics_plot(
         create_legend(
             fig, attributes, group_to_alpha, base_colors, show_pass_fail, leg_cols
         )
+
+        if statistical_tests:
+            stat_legend_elements = [
+                Line2D(
+                    [0],
+                    [0],
+                    marker="*",
+                    color="w",
+                    markerfacecolor="black",
+                    markersize=10,
+                    label="Statistically Signficanct Difference",
+                ),
+            ]
+            stat_legend = fig.legend(
+                handles=stat_legend_elements,
+                loc="upper right",
+                bbox_to_anchor=(0.7, 1.1),
+            )
 
     if strict_layout:
         plt.tight_layout(w_pad=2, h_pad=2, rect=[0.01, 0.01, 1.01, 1])
@@ -1370,7 +1404,6 @@ def eq_group_metrics_point_plot(
         )
 
         if statistical_tests:
-            from matplotlib.lines import Line2D
 
             stat_legend_elements = [
                 Line2D(
