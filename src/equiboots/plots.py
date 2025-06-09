@@ -1243,6 +1243,7 @@ def eq_group_metrics_point_plot(
     y_lim: Optional[Tuple[float, float]] = None,
     leg_cols: int = 3,
     raw_metrics: bool = False,
+    statistical_tests: dict = None,
     **plot_kwargs: Dict[str, Union[str, float]],
 ) -> None:
     """
@@ -1284,6 +1285,21 @@ def eq_group_metrics_point_plot(
 
             x_vals, y_vals = [], []
             groups = list(group_metrics[j].keys())
+            # Create modified group labels for this category based on statistical tests
+            current_group_to_alpha = group_to_alpha.copy()
+            if statistical_tests and cat_name in statistical_tests:
+                stat_tests = statistical_tests[cat_name]
+
+                if stat_tests.get("omnibus") and stat_tests["omnibus"].is_significant:
+                    current_group_to_alpha = {
+                        grp: alph + " *" for grp, alph in current_group_to_alpha.items()
+                    }
+
+                for group in groups:
+                    if group in stat_tests and stat_tests[group].is_significant:
+                        current_group_to_alpha[group] += " ▲"
+
+            current_alpha_to_group = {v: k for k, v in current_group_to_alpha.items()}
 
             group_status, lower, upper = compute_pass_fail(
                 group_metrics, groups, metric, plot_thresholds, raw_metrics
@@ -1292,7 +1308,7 @@ def eq_group_metrics_point_plot(
             for group in group_metrics[j]:
                 val = group_metrics[j][group][metric]
                 if not np.isnan(val):
-                    x_vals.append(group_to_alpha[group])
+                    x_vals.append(current_group_to_alpha[group])
                     y_vals.append(val)
 
             group_colors = (
@@ -1309,7 +1325,7 @@ def eq_group_metrics_point_plot(
                     x=[x],
                     y=[y],
                     ax=ax,
-                    color=group_colors[alpha_to_group[group]],
+                    color=group_colors[current_alpha_to_group[group]],
                     s=100,
                     label=None,
                     **plot_kwargs,
@@ -1319,12 +1335,14 @@ def eq_group_metrics_point_plot(
             ax.set_xlabel("")
             ax.set_xticks(range(len(groups)))
             ax.set_xticklabels(
-                [group_to_alpha[group] for group in groups], rotation=45, ha="right"
+                [current_group_to_alpha[group] for group in groups],
+                rotation=45,
+                ha="right",
             )
 
             for tick_label in ax.get_xticklabels():
                 alpha = tick_label.get_text()
-                group = alpha_to_group[alpha]
+                group = current_alpha_to_group[alpha]
                 if show_pass_fail:
                     color = "green" if group_status[group] == "Pass" else "red"
                 else:
@@ -1351,6 +1369,35 @@ def eq_group_metrics_point_plot(
             fig, all_groups, group_to_alpha, base_colors, show_pass_fail, leg_cols
         )
 
+        if statistical_tests:
+            from matplotlib.lines import Line2D
+
+            stat_legend_elements = [
+                Line2D(
+                    [0],
+                    [0],
+                    marker="*",
+                    color="w",
+                    markerfacecolor="black",
+                    markersize=10,
+                    label="Omnibus test significant",
+                ),
+                Line2D(
+                    [0],
+                    [0],
+                    marker="^",
+                    color="w",
+                    markerfacecolor="black",
+                    markersize=8,
+                    label="Group test significant",
+                ),
+            ]
+            stat_legend = fig.legend(
+                handles=stat_legend_elements,
+                loc="upper right",
+                bbox_to_anchor=(0.7, 1.1),
+            )
+
     if strict_layout:
-        plt.tight_layout(w_pad=2, h_pad=2, rect=[0.01, 0.01, 1.01, 1])
+        plt.tight_layout(w_pad=2, h_pad=4, rect=[0.01, 0.01, 1.01, 1])
     save_or_show_plot(fig, save_path, filename)
