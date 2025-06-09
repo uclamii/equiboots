@@ -610,3 +610,374 @@ def test_overlay_mode_triggers_clear(monkeypatch):
 
     plots.plot_with_layout(data, dummy_func, {}, subplots=True, n_cols=2)
     assert ax.cleared is True
+
+
+class MockTestResult:
+    """Mock object to simulate statistical test results"""
+
+    def __init__(self, is_significant=False):
+        self.is_significant = is_significant
+
+
+def test_eq_group_metrics_plot_with_statistical_tests(monkeypatch):
+    """Test eq_group_metrics_plot with statistical significance markers"""
+    monkeypatch.setattr(plt, "show", lambda: None)
+
+    group_metrics = [
+        {"A": {"Metric1": 0.9, "Metric2": 0.8}, "B": {"Metric1": 1.1, "Metric2": 1.2}},
+        {"A": {"Metric1": 1.0, "Metric2": 0.9}, "B": {"Metric1": 1.2, "Metric2": 1.1}},
+    ]
+
+    # Create statistical tests with some significant results
+    statistical_tests = {
+        "A": {
+            "Metric1": MockTestResult(is_significant=True),
+            "Metric2": MockTestResult(is_significant=False),
+        },
+        "B": {
+            "Metric1": MockTestResult(is_significant=False),
+            "Metric2": MockTestResult(is_significant=True),
+        },
+    }
+
+    plots.eq_group_metrics_plot(
+        group_metrics=group_metrics,
+        metric_cols=["Metric1", "Metric2"],
+        name="test",
+        plot_type="violinplot",
+        statistical_tests=statistical_tests,
+    )
+
+
+def test_eq_group_metrics_plot_with_diff_metrics(monkeypatch):
+    """Test eq_group_metrics_plot handles _diff suffix in metric names"""
+    monkeypatch.setattr(plt, "show", lambda: None)
+
+    group_metrics = [
+        {"A": {"Metric1": 0.9}, "B": {"Metric1": 1.1}},
+        {"A": {"Metric1": 1.0}, "B": {"Metric1": 1.2}},
+    ]
+
+    # Statistical test has _diff suffix which should be stripped
+    statistical_tests = {
+        "A": {
+            "Metric1_diff": MockTestResult(is_significant=True),
+        }
+    }
+
+    plots.eq_group_metrics_plot(
+        group_metrics=group_metrics,
+        metric_cols=["Metric1"],
+        name="test",
+        plot_type="violinplot",
+        statistical_tests=statistical_tests,
+    )
+
+
+def test_eq_group_metrics_plot_statistical_tests_missing_groups(monkeypatch):
+    """Test eq_group_metrics_plot when statistical tests don't cover all groups"""
+    monkeypatch.setattr(plt, "show", lambda: None)
+
+    group_metrics = [
+        {"A": {"Metric1": 0.9}, "B": {"Metric1": 1.1}, "C": {"Metric1": 0.8}},
+    ]
+
+    # Only provide statistical tests for some groups
+    statistical_tests = {
+        "A": {
+            "Metric1": MockTestResult(is_significant=True),
+        }
+        # B and C are missing - should not cause errors
+    }
+
+    plots.eq_group_metrics_plot(
+        group_metrics=group_metrics,
+        metric_cols=["Metric1"],
+        name="test",
+        plot_type="violinplot",
+        statistical_tests=statistical_tests,
+    )
+
+
+def test_eq_group_metrics_plot_statistical_tests_missing_metrics(monkeypatch):
+    """Test eq_group_metrics_plot when statistical tests don't cover all metrics"""
+    monkeypatch.setattr(plt, "show", lambda: None)
+
+    group_metrics = [
+        {"A": {"Metric1": 0.9, "Metric2": 0.8}},
+    ]
+
+    # Only provide statistical tests for some metrics
+    statistical_tests = {
+        "A": {
+            "Metric1": MockTestResult(is_significant=True),
+            # Metric2 is missing - should not cause errors
+        }
+    }
+
+    plots.eq_group_metrics_plot(
+        group_metrics=group_metrics,
+        metric_cols=["Metric1", "Metric2"],
+        name="test",
+        plot_type="violinplot",
+        statistical_tests=statistical_tests,
+    )
+
+
+def test_eq_group_metrics_plot_no_statistical_tests(monkeypatch):
+    """Test eq_group_metrics_plot without statistical tests (baseline)"""
+    monkeypatch.setattr(plt, "show", lambda: None)
+
+    group_metrics = [
+        {"A": {"Metric1": 0.9}, "B": {"Metric1": 1.1}},
+    ]
+
+    plots.eq_group_metrics_plot(
+        group_metrics=group_metrics,
+        metric_cols=["Metric1"],
+        name="test",
+        plot_type="violinplot",
+        statistical_tests=None,
+    )
+
+
+def test_eq_group_metrics_point_plot_with_omnibus_significant(monkeypatch):
+    """Test eq_group_metrics_point_plot with significant omnibus test"""
+    monkeypatch.setattr(plt, "show", lambda: None)
+
+    group_metrics = [
+        {"A": {"Metric1": 0.9}, "B": {"Metric1": 1.1}, "C": {"Metric1": 0.8}},
+    ]
+
+    # Omnibus test is significant - should add * to all group labels
+    statistical_tests = {
+        "Category1": {
+            "omnibus": MockTestResult(is_significant=True),
+            "A": MockTestResult(is_significant=False),
+            "B": MockTestResult(is_significant=False),
+            "C": MockTestResult(is_significant=False),
+        }
+    }
+
+    plots.eq_group_metrics_point_plot(
+        group_metrics=group_metrics,
+        metric_cols=["Metric1"],
+        category_names=["Category1"],
+        statistical_tests=statistical_tests,
+    )
+
+
+def test_eq_group_metrics_point_plot_with_group_significant(monkeypatch):
+    """Test eq_group_metrics_point_plot with significant group-specific tests"""
+    monkeypatch.setattr(plt, "show", lambda: None)
+
+    group_metrics = [
+        {"A": {"Metric1": 0.9}, "B": {"Metric1": 1.1}, "C": {"Metric1": 0.8}},
+    ]
+
+    # Specific groups are significant - should add ▲ to those groups
+    statistical_tests = {
+        "Category1": {
+            "omnibus": MockTestResult(is_significant=False),
+            "A": MockTestResult(is_significant=True),
+            "B": MockTestResult(is_significant=False),
+            "C": MockTestResult(is_significant=True),
+        }
+    }
+
+    plots.eq_group_metrics_point_plot(
+        group_metrics=group_metrics,
+        metric_cols=["Metric1"],
+        category_names=["Category1"],
+        statistical_tests=statistical_tests,
+    )
+
+
+def test_eq_group_metrics_point_plot_with_both_significant(monkeypatch):
+    """Test eq_group_metrics_point_plot with both omnibus and group tests significant"""
+    monkeypatch.setattr(plt, "show", lambda: None)
+
+    group_metrics = [
+        {"A": {"Metric1": 0.9}, "B": {"Metric1": 1.1}},
+    ]
+
+    # Both omnibus and group tests are significant
+    statistical_tests = {
+        "Category1": {
+            "omnibus": MockTestResult(is_significant=True),
+            "A": MockTestResult(is_significant=True),
+            "B": MockTestResult(is_significant=False),
+        }
+    }
+
+    plots.eq_group_metrics_point_plot(
+        group_metrics=group_metrics,
+        metric_cols=["Metric1"],
+        category_names=["Category1"],
+        statistical_tests=statistical_tests,
+    )
+
+
+def test_eq_group_metrics_point_plot_missing_category(monkeypatch):
+    """Test eq_group_metrics_point_plot when statistical tests don't cover all categories"""
+    monkeypatch.setattr(plt, "show", lambda: None)
+
+    group_metrics = [
+        {"A": {"Metric1": 0.9}},
+        {"A": {"Metric1": 1.1}},  # Second category
+    ]
+
+    # Only provide statistical tests for first category
+    statistical_tests = {
+        "Category1": {
+            "omnibus": MockTestResult(is_significant=True),
+            "A": MockTestResult(is_significant=False),
+        }
+        # Category2 is missing - should not cause errors
+    }
+
+    plots.eq_group_metrics_point_plot(
+        group_metrics=group_metrics,
+        metric_cols=["Metric1"],
+        category_names=["Category1", "Category2"],
+        statistical_tests=statistical_tests,
+    )
+
+
+def test_eq_group_metrics_point_plot_no_statistical_tests(monkeypatch):
+    """Test eq_group_metrics_point_plot without statistical tests (baseline)"""
+    monkeypatch.setattr(plt, "show", lambda: None)
+
+    group_metrics = [
+        {"A": {"Metric1": 0.9}, "B": {"Metric1": 1.1}},
+    ]
+
+    plots.eq_group_metrics_point_plot(
+        group_metrics=group_metrics,
+        metric_cols=["Metric1"],
+        category_names=["Category1"],
+        statistical_tests=None,
+    )
+
+
+def test_eq_group_metrics_point_plot_no_omnibus_test(monkeypatch):
+    """Test eq_group_metrics_point_plot when omnibus test is missing"""
+    monkeypatch.setattr(plt, "show", lambda: None)
+
+    group_metrics = [
+        {"A": {"Metric1": 0.9}, "B": {"Metric1": 1.1}},
+    ]
+
+    # No omnibus test provided
+    statistical_tests = {
+        "Category1": {
+            "A": MockTestResult(is_significant=True),
+            "B": MockTestResult(is_significant=False),
+        }
+    }
+
+    plots.eq_group_metrics_point_plot(
+        group_metrics=group_metrics,
+        metric_cols=["Metric1"],
+        category_names=["Category1"],
+        statistical_tests=statistical_tests,
+    )
+
+
+def test_eq_group_metrics_plot_empty_statistical_tests(monkeypatch):
+    """Test eq_group_metrics_plot with empty statistical tests dict"""
+    monkeypatch.setattr(plt, "show", lambda: None)
+
+    group_metrics = [
+        {"A": {"Metric1": 0.9}},
+    ]
+
+    plots.eq_group_metrics_plot(
+        group_metrics=group_metrics,
+        metric_cols=["Metric1"],
+        name="test",
+        plot_type="violinplot",
+        statistical_tests={},  # Empty dict
+    )
+
+
+def test_eq_group_metrics_point_plot_empty_statistical_tests(monkeypatch):
+    """Test eq_group_metrics_point_plot with empty statistical tests dict"""
+    monkeypatch.setattr(plt, "show", lambda: None)
+
+    group_metrics = [
+        {"A": {"Metric1": 0.9}},
+    ]
+
+    plots.eq_group_metrics_point_plot(
+        group_metrics=group_metrics,
+        metric_cols=["Metric1"],
+        category_names=["Category1"],
+        statistical_tests={},  # Empty dict
+    )
+
+
+def test_eq_group_metrics_plot_multiple_metrics_mixed_significance(monkeypatch):
+    """Test eq_group_metrics_plot with multiple metrics having mixed significance"""
+    monkeypatch.setattr(plt, "show", lambda: None)
+
+    group_metrics = [
+        {
+            "A": {"Accuracy": 0.9, "Precision": 0.8, "Recall": 0.7},
+            "B": {"Accuracy": 1.1, "Precision": 1.2, "Recall": 0.9},
+        },
+    ]
+
+    statistical_tests = {
+        "A": {
+            "Accuracy": MockTestResult(is_significant=True),
+            "Precision": MockTestResult(is_significant=False),
+            "Recall": MockTestResult(is_significant=True),
+        },
+        "B": {
+            "Accuracy": MockTestResult(is_significant=False),
+            "Precision": MockTestResult(is_significant=True),
+            "Recall": MockTestResult(is_significant=False),
+        },
+    }
+
+    plots.eq_group_metrics_plot(
+        group_metrics=group_metrics,
+        metric_cols=["Accuracy", "Precision", "Recall"],
+        name="test",
+        plot_type="violinplot",
+        statistical_tests=statistical_tests,
+        max_cols=2,  # Test with grid layout
+    )
+
+
+def test_eq_group_metrics_point_plot_multiple_categories_mixed_significance(
+    monkeypatch,
+):
+    """Test eq_group_metrics_point_plot with multiple categories having mixed significance"""
+    monkeypatch.setattr(plt, "show", lambda: None)
+
+    group_metrics = [
+        {"White": {"Accuracy": 0.9}, "Black": {"Accuracy": 1.1}},  # Race category
+        {"Male": {"Accuracy": 0.8}, "Female": {"Accuracy": 1.2}},  # Gender category
+    ]
+
+    statistical_tests = {
+        "Race": {
+            "omnibus": MockTestResult(is_significant=True),
+            "White": MockTestResult(is_significant=False),
+            "Black": MockTestResult(is_significant=True),
+        },
+        "Gender": {
+            "omnibus": MockTestResult(is_significant=False),
+            "Male": MockTestResult(is_significant=True),
+            "Female": MockTestResult(is_significant=False),
+        },
+    }
+
+    plots.eq_group_metrics_point_plot(
+        group_metrics=group_metrics,
+        metric_cols=["Accuracy"],
+        category_names=["Race", "Gender"],
+        statistical_tests=statistical_tests,
+    )
