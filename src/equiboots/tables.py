@@ -82,6 +82,7 @@ def metrics_table(
                     "Average Precision Score",
                     "ROC AUC",
                     "Prevalence",
+                    "Calibration AUC",
                 ],
                 errors="ignore",
             )
