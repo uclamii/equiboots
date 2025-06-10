@@ -5,6 +5,7 @@ from statsmodels.stats.multitest import multipletests
 from typing import Dict, List, Tuple, Optional, Union, Any
 from dataclasses import dataclass
 from scipy.stats.contingency import association
+import warnings
 
 
 @dataclass
@@ -66,6 +67,9 @@ class StatisticalTester:
             se = sigma
             ci_lower, ci_upper = stats.norm.interval(
                 config["confidence_level"], loc=mu, scale=se
+            )
+            warnings.warn(
+                "Warning: Calculation may not be correct, please increase number of bootstraps"
             )
 
         # Does CI cross zero?

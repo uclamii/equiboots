@@ -124,7 +124,7 @@ def main():
     )
 
     is_significant_table = metrics_table(race_metrics, stat_test_results)
-    is_significant_table
+
     stat_test_results["omnibus"].is_significant
     int_list = np.linspace(0, 100, num=10, dtype=int).tolist()
     eq2 = eqb.EquiBoots(
@@ -159,7 +159,7 @@ def main():
     test_config = {
         "test_type": "bootstrap_test",
         "alpha": 0.05,
-        "adjust_method": "none",
+        "adjust_method": "bonferroni",
         "confidence_level": 0.95,
         "classification_task": "binary_classification",
         "tail_type": "two_tailed",
