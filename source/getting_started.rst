@@ -7,7 +7,7 @@ Welcome to the EquiBoots Documentation!
 ==========================================
 
 .. note::
-   This documentation is for ``equiboots`` version ``0.0.0a3``.
+   This documentation is for ``equiboots`` version ``0.0.0a7``.
 
 EquiBoots is a fairness-aware model evaluation toolkit for auditing performance 
 disparities across demographic groups in machine learning models. It provides robust, 
@@ -20,9 +20,10 @@ The library supports:
 - Fairness diagnostics and disparity metrics
 - Confidence intervals via bootstrapping
 - Customizable and publication-ready visualizations
+- Statistical tests to assess performance differences
 
-EquiBoots is particularly suited for applications in clinical, social, and 
-policy contexts—domains where transparency, bias mitigation, and equitable outcomes 
+EquiBoots is suited for applications in clinical, social, and 
+policy contexts: domains where transparency, bias mitigation, and equitable outcomes 
 are essential for responsible AI/ML deployment.
 
 Project Links
@@ -46,6 +47,7 @@ Additionally, ``equiboots`` depends on the following packages, which will be aut
 - ``scikit-learn``: version ``1.0.2`` or higher, but capped at ``1.5.2``
 - ``scipy``: version ``1.8.0`` or higher, but capped at ``1.15.2``
 - ``seaborn``: version ``0.11.2`` or higher, but capped at ``0.13.2``
+- ``statsmodels``: version ``0.13`` or higher, but capped at ``0.14.4``
 - ``tqdm```: version ``4.66.4`` or higher, but capped below ``4.67.1``
 
 .. _installation:
