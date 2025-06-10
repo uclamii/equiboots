@@ -395,10 +395,6 @@ def setup_plot_environment(
     figsize = figsize or auto_figsize
     fig, axs = plt.subplots(n_rows, n_cols, figsize=figsize, squeeze=False)
 
-    # Default y_lim if not specified
-    if y_lim is None:
-        y_lim = (-2, 4)
-
     return fig, axs, group_to_alpha, alpha_to_group, base_colors, y_lim, n_rows, n_cols
 
 
@@ -1151,17 +1147,17 @@ def eq_group_metrics_plot(
         for group, metrics in statistical_tests.items():
             for metric_key, test_result in metrics.items():
                 ## we have to remove _diff for it to work
-                clean_metric = metric_key.replace("_diff", "")
-                if clean_metric in metric_cols and group in attributes:
-                    significance_map[(group, clean_metric)] = test_result.is_significant
+                if metric_key in metric_cols and group in attributes:
+                    significance_map[(group, metric_key)] = test_result.is_significant
 
     for i, col in enumerate(metric_cols):
         ax = axs[i // n_cols, i % n_cols]
         x_vals, y_vals = [], []
 
-        group_status, lower, upper = compute_pass_fail(
-            group_metrics, attributes, col, plot_thresholds
-        )
+        if show_pass_fail:
+            group_status, lower, upper = compute_pass_fail(
+                group_metrics, attributes, col, plot_thresholds
+            )
 
         for row in group_metrics:
             for attr in attributes:
@@ -1170,14 +1166,13 @@ def eq_group_metrics_plot(
                     x_vals.append(group_to_alpha[attr])
                     y_vals.append(val)
 
-        group_colors = (
-            {
+        if show_pass_fail:
+            group_colors = {
                 attr: "green" if group_status.get(attr) == "Pass" else "red"
                 for attr in attributes
             }
-            if show_pass_fail
-            else base_colors
-        )
+        else:
+            group_colors = base_colors
 
         plot_func = getattr(sns, plot_type, None)
         if not plot_func:
@@ -1216,12 +1211,14 @@ def eq_group_metrics_plot(
             # So our lookup doesn't break
             label_text = tick_label.get_text().replace(" *", "")
             attr = alpha_to_group[label_text]
-            tick_label.set_color(
-                "green"
-                if group_status.get(attr) == "Pass"
-                else "red" if show_pass_fail else base_colors.get(attr, "black")
-            )
-        add_plot_threshold_lines(ax, lower, upper, len(attributes))
+            if show_pass_fail:
+                tick_label.set_color(
+                    "green" if group_status.get(attr) == "Pass" else "red"
+                )
+            else:
+                tick_label.set_color(base_colors.get(attr, "black"))
+        if show_pass_fail:
+            add_plot_threshold_lines(ax, lower, upper, len(attributes))
         ax.set_ylim(y_lim)
         ax.grid(show_grid)
 
