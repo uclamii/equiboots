@@ -74,5 +74,16 @@ def metrics_table(
                             f"{col} ▲" if test_name in col else col
                             for col in metrics_table.columns
                         ]
+            ### Dropping irrelevant columns if doing statistical tests
+            metrics_table = metrics_table.drop(
+                index=[
+                    "Brier Score",
+                    "Log Loss",
+                    "Average Precision Score",
+                    "ROC AUC",
+                    "Prevalence",
+                ],
+                errors="ignore",
+            )
 
         return metrics_table
