@@ -12,7 +12,6 @@ import statsmodels.api as sm
 from scipy.interpolate import interp1d
 from matplotlib.lines import Line2D
 import seaborn as sns
-
 from .metrics import regression_metrics, calibration_auc
 from typing import Dict, List, Optional, Union, Tuple, Set, Callable
 
@@ -406,10 +405,6 @@ def setup_plot_environment(
     _, _, auto_figsize = get_layout(len(metric_cols), n_cols, figsize, strict_layout)
     figsize = figsize or auto_figsize
     fig, axs = plt.subplots(n_rows, n_cols, figsize=figsize, squeeze=False)
-
-    # Default y_lim if not specified
-    if y_lim is None:
-        y_lim = (-2, 4)
 
     return fig, axs, group_to_alpha, alpha_to_group, base_colors, y_lim, n_rows, n_cols
 
@@ -1196,6 +1191,7 @@ def eq_group_metrics_plot(
     show_pass_fail: bool = False,
     leg_cols: int = 6,
     y_lim: Optional[Tuple[float, float]] = None,
+    statistical_tests: dict = None,
     **plot_kwargs: Dict[str, Union[str, float]],
 ) -> None:
     """
@@ -1240,13 +1236,23 @@ def eq_group_metrics_plot(
         )
     )
 
+    ## Initialise signficance checking
+    significance_map = {}
+    if statistical_tests:
+        for group, metrics in statistical_tests.items():
+            for metric_key, test_result in metrics.items():
+                ## we have to remove _diff for it to work
+                if metric_key in metric_cols and group in attributes:
+                    significance_map[(group, metric_key)] = test_result.is_significant
+
     for i, col in enumerate(metric_cols):
         ax = axs[i // n_cols, i % n_cols]
         x_vals, y_vals = [], []
 
-        group_status, lower, upper = compute_pass_fail(
-            group_metrics, attributes, col, plot_thresholds
-        )
+        if show_pass_fail:
+            group_status, lower, upper = compute_pass_fail(
+                group_metrics, attributes, col, plot_thresholds
+            )
 
         for row in group_metrics:
             for attr in attributes:
@@ -1255,14 +1261,13 @@ def eq_group_metrics_plot(
                     x_vals.append(group_to_alpha[attr])
                     y_vals.append(val)
 
-        group_colors = (
-            {
+        if show_pass_fail:
+            group_colors = {
                 attr: "green" if group_status.get(attr) == "Pass" else "red"
                 for attr in attributes
             }
-            if show_pass_fail
-            else base_colors
-        )
+        else:
+            group_colors = base_colors
 
         plot_func = getattr(sns, plot_type, None)
         if not plot_func:
@@ -1288,19 +1293,27 @@ def eq_group_metrics_plot(
             )
 
         ax.set_title(f"{name}_{col}")
+
         ax.set_xlabel("")
         ax.set_xticks(range(len(attributes)))
-        ax.set_xticklabels(
-            [group_to_alpha[attr] for attr in attributes], rotation=0, fontweight="bold"
-        )
+        labels = [
+            group_to_alpha[attr]
+            + (" *" if significance_map.get((attr, col), False) else "")
+            for attr in attributes
+        ]
+        ax.set_xticklabels(labels, rotation=0, fontweight="bold")
         for tick_label in ax.get_xticklabels():
-            attr = alpha_to_group[tick_label.get_text()]
-            tick_label.set_color(
-                "green"
-                if group_status.get(attr) == "Pass"
-                else "red" if show_pass_fail else base_colors.get(attr, "black")
-            )
-        add_plot_threshold_lines(ax, lower, upper, len(attributes))
+            # So our lookup doesn't break
+            label_text = tick_label.get_text().replace(" *", "")
+            attr = alpha_to_group[label_text]
+            if show_pass_fail:
+                tick_label.set_color(
+                    "green" if group_status.get(attr) == "Pass" else "red"
+                )
+            else:
+                tick_label.set_color(base_colors.get(attr, "black"))
+        if show_pass_fail:
+            add_plot_threshold_lines(ax, lower, upper, len(attributes))
         ax.set_ylim(y_lim)
         ax.grid(show_grid)
 
@@ -1311,6 +1324,24 @@ def eq_group_metrics_plot(
         create_legend(
             fig, attributes, group_to_alpha, base_colors, show_pass_fail, leg_cols
         )
+
+        if statistical_tests:
+            stat_legend_elements = [
+                Line2D(
+                    [0],
+                    [0],
+                    marker="*",
+                    color="w",
+                    markerfacecolor="black",
+                    markersize=10,
+                    label="Statistically Signficanct Difference",
+                ),
+            ]
+            stat_legend = fig.legend(
+                handles=stat_legend_elements,
+                loc="upper right",
+                bbox_to_anchor=(0.7, 1.1),
+            )
 
     if strict_layout:
         plt.tight_layout(w_pad=2, h_pad=2, rect=[0.01, 0.01, 1.01, 1])
@@ -1338,6 +1369,7 @@ def eq_group_metrics_point_plot(
     y_lim: Optional[Tuple[float, float]] = None,
     leg_cols: int = 3,
     raw_metrics: bool = False,
+    statistical_tests: dict = None,
     **plot_kwargs: Dict[str, Union[str, float]],
 ) -> None:
     """
@@ -1379,6 +1411,21 @@ def eq_group_metrics_point_plot(
 
             x_vals, y_vals = [], []
             groups = list(group_metrics[j].keys())
+            # Create modified group labels for this category based on statistical tests
+            current_group_to_alpha = group_to_alpha.copy()
+            if statistical_tests and cat_name in statistical_tests:
+                stat_tests = statistical_tests[cat_name]
+
+                if stat_tests.get("omnibus") and stat_tests["omnibus"].is_significant:
+                    current_group_to_alpha = {
+                        grp: alph + " *" for grp, alph in current_group_to_alpha.items()
+                    }
+
+                for group in groups:
+                    if group in stat_tests and stat_tests[group].is_significant:
+                        current_group_to_alpha[group] += " ▲"
+
+            current_alpha_to_group = {v: k for k, v in current_group_to_alpha.items()}
 
             group_status, lower, upper = compute_pass_fail(
                 group_metrics, groups, metric, plot_thresholds, raw_metrics
@@ -1387,7 +1434,7 @@ def eq_group_metrics_point_plot(
             for group in group_metrics[j]:
                 val = group_metrics[j][group][metric]
                 if not np.isnan(val):
-                    x_vals.append(group_to_alpha[group])
+                    x_vals.append(current_group_to_alpha[group])
                     y_vals.append(val)
 
             group_colors = (
@@ -1404,7 +1451,7 @@ def eq_group_metrics_point_plot(
                     x=[x],
                     y=[y],
                     ax=ax,
-                    color=group_colors[alpha_to_group[group]],
+                    color=group_colors[current_alpha_to_group[group]],
                     s=100,
                     label=None,
                     **plot_kwargs,
@@ -1414,12 +1461,14 @@ def eq_group_metrics_point_plot(
             ax.set_xlabel("")
             ax.set_xticks(range(len(groups)))
             ax.set_xticklabels(
-                [group_to_alpha[group] for group in groups], rotation=45, ha="right"
+                [current_group_to_alpha[group] for group in groups],
+                rotation=45,
+                ha="right",
             )
 
             for tick_label in ax.get_xticklabels():
                 alpha = tick_label.get_text()
-                group = alpha_to_group[alpha]
+                group = current_alpha_to_group[alpha]
                 if show_pass_fail:
                     color = "green" if group_status[group] == "Pass" else "red"
                 else:
@@ -1446,6 +1495,34 @@ def eq_group_metrics_point_plot(
             fig, all_groups, group_to_alpha, base_colors, show_pass_fail, leg_cols
         )
 
+        if statistical_tests:
+
+            stat_legend_elements = [
+                Line2D(
+                    [0],
+                    [0],
+                    marker="*",
+                    color="w",
+                    markerfacecolor="black",
+                    markersize=10,
+                    label="Omnibus test significant",
+                ),
+                Line2D(
+                    [0],
+                    [0],
+                    marker="^",
+                    color="w",
+                    markerfacecolor="black",
+                    markersize=8,
+                    label="Group test significant",
+                ),
+            ]
+            stat_legend = fig.legend(
+                handles=stat_legend_elements,
+                loc="upper right",
+                bbox_to_anchor=(0.7, 1.1),
+            )
+
     if strict_layout:
-        plt.tight_layout(w_pad=2, h_pad=2, rect=[0.01, 0.01, 1.01, 1])
+        plt.tight_layout(w_pad=2, h_pad=4, rect=[0.01, 0.01, 1.01, 1])
     save_or_show_plot(fig, save_path, filename)
