@@ -2,6 +2,7 @@ import pandas as pd
 import numpy as np
 import os
 import sys
+import typer
 
 # Add path to import EquiBoots
 script_path = os.path.abspath("../py_scripts")
@@ -83,92 +84,100 @@ def generate_biased_synthetic_data(
     return y_true, y_prob, y_pred, race, sex
 
 
-y_true, y_prob, y_pred, race, sex = generate_biased_synthetic_data(
-    n_samples=1000,
-    bias_strength="moderate",  # Try 'mild', 'moderate', or 'strong'
-    random_seed=42,
-)
-
-# Create fairness DataFrame
-fairness_df = pd.DataFrame(
-    data=np.concatenate((race, sex), axis=1), columns=["race", "sex"]
-)
+app = typer.Typer()
 
 
-# Initialize and process groups
-eq = eqb.EquiBoots(
-    y_true=y_true,
-    y_prob=y_prob,
-    y_pred=y_pred,
-    fairness_df=fairness_df,
-    fairness_vars=["race", "sex"],
-)
-eq.grouper(groupings_vars=["race", "sex"])
-sliced_race_data = eq.slicer("race")
-race_metrics = eq.get_metrics(sliced_race_data)
+@app.command()
+def main():
+    y_true, y_prob, y_pred, race, sex = generate_biased_synthetic_data(
+        n_samples=1000,
+        bias_strength="moderate",  # Try 'mild', 'moderate', or 'strong'
+        random_seed=42,
+    )
 
-test_config = {
-    "test_type": "chi_square",
-    "alpha": 0.05,
-    "adjust_method": "bonferroni",
-    "confidence_level": 0.95,
-    "classification_task": "binary_classification",
-}
-stat_test_results = eq.analyze_statistical_significance(
-    race_metrics, "race", test_config
-)
+    # Create fairness DataFrame
+    fairness_df = pd.DataFrame(
+        data=np.concatenate((race, sex), axis=1), columns=["race", "sex"]
+    )
 
-is_significant_table = metrics_table(race_metrics, stat_test_results)
-is_significant_table
-stat_test_results["omnibus"].is_significant
-int_list = np.linspace(0, 100, num=10, dtype=int).tolist()
-eq2 = eqb.EquiBoots(
-    y_true,
-    y_pred,
-    fairness_df,
-    ["race", "sex"],
-    y_prob,
-    seeds=int_list,
-    reference_groups=["white", "M"],
-    task="binary_classification",
-    bootstrap_flag=True,
-    num_bootstraps=1000,
-    boot_sample_size=1000,
-    balanced=True,  # False is stratified, True is balanced
-    # stratify_by_outcome=True,
-)
+    # Initialize and process groups
+    eq = eqb.EquiBoots(
+        y_true=y_true,
+        y_prob=y_prob,
+        y_pred=y_pred,
+        fairness_df=fairness_df,
+        fairness_vars=["race", "sex"],
+    )
+    eq.grouper(groupings_vars=["race", "sex"])
+    sliced_race_data = eq.slicer("race")
+    race_metrics = eq.get_metrics(sliced_race_data)
 
-# Set seeds
-eq2.set_fix_seeds(int_list)
-print("seeds", eq2.seeds)
+    test_config = {
+        "test_type": "chi_square",
+        "alpha": 0.05,
+        "adjust_method": "bonferroni",
+        "confidence_level": 0.95,
+        "classification_task": "binary_classification",
+    }
+    stat_test_results = eq.analyze_statistical_significance(
+        race_metrics, "race", test_config
+    )
 
-eq2.grouper(groupings_vars=["race", "sex"])
+    is_significant_table = metrics_table(race_metrics, stat_test_results)
+    is_significant_table
+    stat_test_results["omnibus"].is_significant
+    int_list = np.linspace(0, 100, num=10, dtype=int).tolist()
+    eq2 = eqb.EquiBoots(
+        y_true,
+        y_pred,
+        fairness_df,
+        ["race", "sex"],
+        y_prob,
+        seeds=int_list,
+        reference_groups=["white", "M"],
+        task="binary_classification",
+        bootstrap_flag=True,
+        num_bootstraps=1000,
+        boot_sample_size=1000,
+        balanced=True,  # False is stratified, True is balanced
+        # stratify_by_outcome=True,
+    )
 
-boots_race_data = eq2.slicer("race")
-race_metrics = eq2.get_metrics(boots_race_data)
-dispa = eq2.calculate_disparities(race_metrics, "race")
-diffs = eq2.calculate_differences(race_metrics, "race")
+    # Set seeds
+    eq2.set_fix_seeds(int_list)
+    print("seeds", eq2.seeds)
 
-metrics_boot = ["Accuracy_diff", "Precision_diff"]
+    eq2.grouper(groupings_vars=["race", "sex"])
+
+    boots_race_data = eq2.slicer("race")
+    race_metrics = eq2.get_metrics(boots_race_data)
+    dispa = eq2.calculate_disparities(race_metrics, "race")
+    diffs = eq2.calculate_differences(race_metrics, "race")
+
+    metrics_boot = ["Accuracy_diff", "Precision_diff"]
+
+    test_config = {
+        "test_type": "bootstrap_test",
+        "alpha": 0.05,
+        "adjust_method": "none",
+        "confidence_level": 0.95,
+        "classification_task": "binary_classification",
+        "tail_type": "two_tailed",
+        "metrics": metrics_boot,
+    }
+
+    stat_test_results = eq.analyze_statistical_significance(
+        race_metrics, "race", test_config, diffs
+    )
+    metrics_table(
+        race_metrics,
+        statistical_tests=stat_test_results,
+        differences=diffs,
+        reference_group="white",
+    )
+
+    print(stat_test_results)
 
 
-test_config = {
-    "test_type": "bootstrap_test",
-    "alpha": 0.05,
-    "adjust_method": "bonferroni",
-    "confidence_level": 0.95,
-    "classification_task": "binary_classification",
-    "tail_type": "two_tailed",
-    "metrics": metrics_boot,
-}
-
-stat_test_results = eq.analyze_statistical_significance(
-    race_metrics, "race", test_config, diffs
-)
-stat_test_results
-metrics_table(
-    race_metrics,
-    statistical_tests=stat_test_results,
-    differences=diffs,
-    reference_group="white",
-)
+if __name__ == "__main__":
+    app()
