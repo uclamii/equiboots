@@ -1,6 +1,5 @@
 [![Downloads](https://pepy.tech/badge/equiboots)](https://pepy.tech/project/equiboots) [![PyPI](https://img.shields.io/pypi/v/equiboots.svg)](https://pypi.org/project/equiboots/) [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://opensource.org/licenses/Apache-2.0) [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.15086941.svg)](https://doi.org/10.5281/zenodo.15086941)
 
-
 The `equiboots` library is a fairness-aware model evaluation toolkit designed to audit performance disparities across demographic groups. It provides robust, bootstrapped metrics for binary, multi-class, and multi-label classification, as well as regression models. The library supports group-wise performance slicing, fairness diagnostics, and customizable visualizations to support equitable AI/ML development.
 
 `equiboots` is particularly useful in clinical, social, and policy domains where transparency, bias mitigation, and outcome fairness are critical for responsible deployment.
@@ -17,12 +16,12 @@ Before installing `equiboots`, ensure your system meets the following requiremen
 
 The following dependencies will be automatically installed with `equiboots`:
 
-- `matplotlib>=3.5.3, <=3.10.1`  
-- `numpy>=1.21.6, <=2.2.4`  
-- `pandas>=1.3.5, <=2.2.3`  
-- `scikit-learn>=1.0.2, <=1.5.2`  
-- `scipy>=1.8.0, <=1.15.2`  
-- `seaborn>=0.11.2, <=0.13.2`  
+- `matplotlib>=3.5.3, <=3.10.1`
+- `numpy>=1.21.6, <=2.2.4`
+- `pandas>=1.3.5, <=2.2.3`
+- `scikit-learn>=1.0.2, <=1.5.2`
+- `scipy>=1.8.0, <=1.15.2`
+- `seaborn>=0.11.2, <=0.13.2`
 - `statsmodels>=0.13, <=0.14.4`
 - `tqdm>=4.66.4, <=4.67.1`
 
@@ -37,7 +36,6 @@ pip install equiboots
 ## 📄 Official Documentation
 
 https://uclamii.github.io/equiboots
-
 
 ## 🌐 Author Website
 
@@ -61,7 +59,7 @@ If you use `equiboots` in your research or projects, please consider citing it.
   month        = mar,
   year         = 2025,
   publisher    = {Zenodo},
-  version      = {0.0.0a6},
+  version      = {0.0.0a7},
   doi          = {10.5281/zenodo.15086941},
   url          = {https://doi.org/10.5281/zenodo.15086941}
 }
@@ -74,4 +72,3 @@ If you have any questions or issues with `equiboots`, please open an issue on th
 ## Acknowledgements
 
 This work was supported by the UCLA Medical Informatics Institute (MII) and the Clinical and Translational Science Institute (CTSI). Special thanks to Dr. Alex Bui for his invaluable guidance and support, and to Panayiotis Petousis, PhD, for his contributions to this codebase.
-
