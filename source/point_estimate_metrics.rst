@@ -23,7 +23,7 @@ For bootstrapped metrics and confidence intervals, refer to the
 Supported Metrics
 -------------------
 
-For classification tasks (binary, multi-class, and multi-label), the following metrics are supported:
+For classification tasks, the following metrics are supported:
 
 - Accuracy, Precision, Recall, F1-score
 

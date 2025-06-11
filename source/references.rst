@@ -1,4 +1,3 @@
-.. _target-link:
 
 References
 ===============
