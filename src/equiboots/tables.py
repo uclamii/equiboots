@@ -8,6 +8,7 @@ def metrics_table(
 
     ### check if group_differences is a string
     ### if it is a string then this is a bootstrap table
+
     if isinstance(differences, list):
 
         mean_differences = {}
@@ -44,9 +45,9 @@ def metrics_table(
                                 and metric in statistical_tests[group]
                                 and statistical_tests[group][metric].is_significant
                             ):
-                                group_means[metric] = f"{mean_value:.6f} *"
+                                group_means[metric] = f"{mean_value:.3f} *"
                             else:
-                                group_means[metric] = mean_value
+                                group_means[metric] = f"{mean_value:.3f}"
                         else:
                             group_means[metric] = mean_value
                     else:
@@ -86,5 +87,7 @@ def metrics_table(
                 ],
                 errors="ignore",
             )
+
+        metrics_table.round(3)
 
         return metrics_table
