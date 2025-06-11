@@ -6,12 +6,6 @@
 Welcome to EquiBoots Documentation!
 ===============================================
 
-
-.. Model Metrics documentation master file, created by
-   sphinx-quickstart on Sun Feb 16 11:29:04 2025.
-   You can adapt this file completely to your liking, but it should at least
-   contain the root `toctree` directive.
-
 .. _target-link:
 
 Table of Contents
@@ -25,6 +19,19 @@ Table of Contents
 
 .. toctree::
    :maxdepth: 4
+   :caption: Point Estimate Metrics
+
+   point_estimate_metrics
+
+.. toctree::
+   :maxdepth: 4
+   :caption: Bootstrapped Metrics
+
+   bootstrapped_metrics
+
+
+.. toctree::
+   :maxdepth: 4
    :caption: About EquiBoots
 
    acknowledgements
@@ -34,4 +41,3 @@ Table of Contents
    references
 
 
-   
