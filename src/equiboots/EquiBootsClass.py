@@ -354,7 +354,8 @@ class EquiBoots:
     def get_metrics(self, sliced_dict) -> dict:
         """Calculate metrics for each group based on the task type."""
         if self.bootstrap_flag:
-            return [self.get_groups_metrics(sliced) for sliced in sliced_dict]
+            print("Calculating metrics for each bootstrap:")
+            return [self.get_groups_metrics(sliced) for sliced in tqdm(sliced_dict)]
         else:
             return self.get_groups_metrics(sliced_dict)
 
