@@ -1,6 +1,6 @@
 [![Downloads](https://pepy.tech/badge/equiboots)](https://pepy.tech/project/equiboots) [![PyPI](https://img.shields.io/pypi/v/equiboots.svg)](https://pypi.org/project/equiboots/) [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://opensource.org/licenses/Apache-2.0) [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.15086941.svg)](https://doi.org/10.5281/zenodo.15086941)
 
-<picture><img src="https://raw.githubusercontent.com/uclamii/equiboots/refs/heads/main/logo/EquiBoots.png" width="500" alt="My Logo"/></picture>
+<picture><img src="https://raw.githubusercontent.com/uclamii/equiboots/refs/heads/main/logo/EquiBoots.png" width="300" alt="My Logo"/></picture>
 
 The `equiboots` library is a fairness-aware model evaluation toolkit designed to audit performance disparities across demographic groups. It provides robust, bootstrapped metrics for binary, multi-class, and multi-label classification, as well as regression models. The library supports group-wise performance slicing, fairness diagnostics, and customizable visualizations to support equitable AI/ML development.
 
@@ -54,17 +54,18 @@ If you use `equiboots` in your research or projects, please consider citing it.
 
 ```bibtex
 @software{shpaner_2025_15086941,
-  author       = {Shpaner, Leonid and
-                  Funnell, Arthur and
-                  Rahrooh, Al and
-                  Petousis, Panayiotis},
-  title        = {EquiBoots},
-  month        = mar,
-  year         = 2025,
-  publisher    = {Zenodo},
-  version      = {0.0.0a4},
-  doi          = {10.5281/zenodo.15086941},
-  url          = {https://doi.org/10.5281/zenodo.15086941}
+   author       = {Shpaner, Leonid and
+                   Funnell, Arthur and
+                   Petousis, Panayiotis and
+                   Rahrooh, Al and
+                   Beam, Colin},
+   title        = {EquiBoots},
+   month        = mar,
+   year         = 2025,
+   publisher    = {Zenodo},
+   version      = {0.0.0a9},
+   doi          = {10.5281/zenodo.15086941},
+   url          = {https://doi.org/10.5281/zenodo.15086941}
 }
 ```
 
@@ -76,171 +77,205 @@ If you have any questions or issues with `equiboots`, please open an issue on th
 
 This work was supported by the UCLA Medical Informatics Institute (MII) and the Clinical and Translational Science Institute (CTSI). Special thanks to Dr. Alex Bui for his invaluable guidance and support, and to Panayiotis Petousis, PhD, for his contributions to this codebase.
 
-# StatisticalTester
+---
 
-The `StatisticalTester` class provides a comprehensive suite of statistical tests for analyzing differences between groups in machine learning metrics. It supports various statistical tests and multiple comparison adjustments.
+# Sample Use Cases
 
-## Features
+After training a model and preparing predictions, EquiBoots can be used to evaluate how your model performs across different demographic groups. The most basic step in this process is calculating point estimates. These are performance metrics for each group without resampling or bootstrapping.
 
-- Multiple statistical test implementations
-- Support for different types of data (continuous, discrete)
-- Multiple comparison adjustments
-- Effect size calculations
-- Confidence interval estimation
-- Flexible configuration options
-- Support for both reference group and all-group comparisons
+EquiBoots supports the computation of group-specific and overall point estimates for performance metrics across classification and regression tasks. These estimates form the basis for fairness auditing by revealing how models perform across different subpopulations or sensitive attributes.
 
-## Available Statistical Tests
+This section demonstrates how to compute group-wise performance metrics using model outputs and fairness variables from the Adult Income dataset [1].
 
-1. **Mann-Whitney U Test**
-   - Non-parametric test for comparing two independent samples
-   - Suitable for ordinal or continuous data
-   - Robust to non-normal distributions
-   - Effect size: Rank-biserial correlation
+**Step 1. Import library**
 
-2. **Welch's t-test**
-   - Parametric test for comparing two independent samples
-   - Handles unequal variances
-   - Assumes approximately normal distributions
-   - Effect size: Cohen's d
-   - Confidence intervals: Parametric
-
-3. **Kolmogorov-Smirnov Test**
-   - Non-parametric test for comparing distributions
-   - Tests for differences in shape and location
-   - Suitable for continuous data
-   - Effect size: Maximum distance between CDFs
-
-4. **Permutation Test**
-   - Non-parametric test using resampling
-   - Makes minimal assumptions about data distribution
-   - Provides confidence intervals from null distribution
-   - Effect size: Mean difference
-   - Confidence intervals: Bootstrap-based
-
-5. **Wilcoxon Signed-Rank Test**
-   - Non-parametric test for paired samples
-   - Suitable for ordinal or continuous data
-   - Handles non-normal distributions
-   - Effect size: Rank-biserial correlation
-
-## Multiple Comparison Adjustments
-
-1. **Bonferroni Correction**
-   - Conservative adjustment method
-   - Controls family-wise error rate
-   - Suitable for small number of comparisons
-
-2. **Benjamini-Hochberg FDR**
-   - Less conservative than Bonferroni
-   - Controls false discovery rate
-   - Suitable for large number of comparisons
-
-3. **Holm-Bonferroni Method**
-   - Step-down procedure
-   - More powerful than Bonferroni
-   - Controls family-wise error rate
-
-## Usage Examples
-
-### Reference Group Comparison
 ```python
-from equiboots.StatisticalTester import StatisticalTester
+import equiboots as eqb
+```
 
-# Initialize the tester
-tester = StatisticalTester()
+**Step 2. Initialize the class**
 
-# Example data
-metrics_data = {
-    'group1': {'metric1': 0.8, 'metric2': 0.6},
-    'group2': {'metric1': 0.9, 'metric2': 0.7},
-    'group3': {'metric1': 0.85, 'metric2': 0.65}
-}
+```python
+# get predictions and true values
+y_pred = model.predict(X_test)
+y_prob = model.predict_proba(X_test)[:,1]
+y_test = y_test.to_numpy()
 
-# Perform tests against reference group
-results = tester.analyze_metrics(
-    metrics_data,
-    reference_group='group1',
-    test_config={
-        "test_type": "permutation",
-        "alpha": 0.05,
-        "bootstrap_iterations": 1000,
-        "confidence_level": 0.95
-    }
+X_test[['race', 'sex']] = X_test[['race', 'sex']].astype(str)
+
+
+# Create fairness DataFrame
+fairness_df = X_test[['race', 'sex']].reset_index()
+
+eq = eqb.EquiBoots(
+    y_true=y_test,
+    y_prob=y_prob,
+    y_pred=y_pred,
+    fairness_df=fairness_df,
+    fairness_vars=["race", "sex"],
+)
+eq.grouper(groupings_vars=["race", "sex"])
+```
+
+**Step 3. Slice the data**
+
+```python
+sliced_race_data = eq.slicer("race")
+race_metrics = eq.get_metrics(sliced_race_data)
+
+sliced_sex_data = eq.slicer("sex")
+sex_metrics = eq.get_metrics(sliced_sex_data)
+```
+
+## On a model's operating point (point estimates)
+
+### ROC AUC
+
+```python
+# ROC curves
+eqb.eq_plot_group_curves(
+    sliced_race_data,
+    curve_type="roc",
+    title="ROC AUC by Race Group",
+    figsize=(7, 7),
+    decimal_places=2,
+    subplots=False,
+    exclude_groups=["Amer-Indian-Eskimo", "Other"]
 )
 ```
 
-### All Group Comparisons
-```python
-# Perform tests between all groups
-all_results = tester.analyze_all_group_comparisons(
-    metrics_data,
-    test_config={
-        "test_type": "mann_whitney",
-        "alpha": 0.05,
-        "adjust_method": "bonferroni"  # Important for multiple comparisons
-    }
-)
+![alt text](image.png)
 
-# Access results for specific group pair
-group1_vs_group2 = all_results['group1']['group2']
-print(f"Metric1 comparison: {group1_vs_group2['metric1'].p_value}")
+## Using Bootstrap estimates
+
+**Step 1. Initialize the class**
+
+```python
+  # setting fixed seed for reproducibility
+  # Alternatively, seeds can be set after initialization
+  int_list = np.linspace(0, 100, num=10, dtype=int).tolist()
+
+  eq2 = eqb.EquiBoots(
+      y_true=y_test,
+      y_pred=y_pred,
+      y_prob=y_prob,
+      fairness_df=fairness_df,
+      fairness_vars= ["race"],
+      seeds=int_list,
+      reference_groups=["White"],
+      task="binary_classification",
+      bootstrap_flag=True,
+      num_bootstraps=5001,
+      boot_sample_size=1000,
+      group_min_size=150, # any group with samples below this number will be ignored
+      balanced=False,  # False is stratified (i.e., maintaining groups proportions), True is balanced (equal proportions)
+      stratify_by_outcome=False, # True maintain initial dataset outcome proportions per group
+  )
+
+  # Set seeds after initialization
+  eq2.set_fix_seeds(int_list)
+  print("seeds", eq2.seeds)
+
+  # group bootstraps by grouping variables (e.g., race)
+  eq2.grouper(groupings_vars=["race"])
+
+  # slice by variable and assign to a variable
+  # race related bootstraps
+  boots_race_data = eq2.slicer("race")
 ```
 
-## Configuration Options
 
-The statistical tests accept a configuration dictionary with the following options:
+**Step 2. Calculate differences**
 
 ```python
-config = {
-    "test_type": "permutation",       # Type of test to perform
-    "alpha": 0.05,                    # Significance level
-    "alternative": "two-sided",       # Alternative hypothesis
-    "bootstrap_iterations": 1000,     # Number of bootstrap samples
-    "confidence_level": 0.95,         # Confidence level for intervals
-    "adjust_method": "none",          # Multiple comparison adjustment
+diffs = eq2.calculate_differences(race_metrics, "race")
+```
+
+**Step 3. Calculate statistical significance**
+
+```python
+# metrics to perform a statistical test
+metrics_boot = ['Accuracy_diff', 'Precision_diff', 'Recall_diff', 'F1_Score_diff',
+       'Specificity_diff', 'TP_Rate_diff', 'FP_Rate_diff', 'FN_Rate_diff',
+       'TN_Rate_diff', 'Prevalence_diff', 'Predicted_Prevalence_diff',
+       'ROC_AUC_diff', 'Average_Precision_Score_diff', 'Log_Loss_diff',
+       'Brier_Score_diff', 'Calibration_AUC_diff']
+
+# configuration dictionary to provide parameters around statistical testing
+test_config = {
+    "test_type": "bootstrap_test",
+    "alpha": 0.05,
+    "adjust_method": "bonferroni",
+    "confidence_level": 0.95,
+    "classification_task": "binary_classification",
+    "tail_type": "two_tailed",
+    "metrics": metrics_boot,
 }
+
+stat_test_results = eq.analyze_statistical_significance(
+    metric_dict=race_metrics, # pass variable sliced metrics
+    var_name="race", # variable name
+    test_config=test_config, # configuration
+    differences=diffs # the differences of each race group
+)
 ```
 
-## Effect Size Measures
+### Table of statistical significance
 
-- Cohen's d for parametric tests
-- Rank-biserial correlation for non-parametric tests
-- Maximum distance between CDFs for KS test
-- Mean difference for permutation test
+```python
+stat_metrics_table_diff = metrics_table(
+    race_metrics,
+    statistical_tests=stat_test_results,
+    differences=diffs,
+    reference_group="White",
+)
+```
 
-## Confidence Intervals
+| Metric                           | Asian-Pac-Islander | Black     |
+|----------------------------------|-------------------:|----------:|
+| Accuracy_diff                    |             -0.050 |    0.070 * |
+| Precision_diff                   |              0.016 |    0.141 * |
+| Recall_diff                      |             -0.119 |   -0.111   |
+| F1_Score_diff                    |             -0.080 |   -0.050   |
+| Specificity_diff                 |             -0.002 |    0.056 * |
+| TP_Rate_diff                     |             -0.119 |   -0.111   |
+| FP_Rate_diff                     |              0.002 |   -0.056 * |
+| FN_Rate_diff                     |              0.119 |    0.111   |
+| TN_Rate_diff                     |             -0.002 |    0.056 * |
+| Prevalence_diff                  |              0.035 |   -0.122 * |
+| Predicted_Prevalence_diff        |             -0.016 |   -0.133 * |
+| ROC_AUC_diff                     |             -0.041 |    0.035   |
+| Average_Precision_Score_diff     |             -0.044 |   -0.005   |
+| Log_Loss_diff                    |              0.113 |   -0.131 * |
+| Brier_Score_diff                 |              0.036 |   -0.043 * |
+| Calibration_AUC_diff             |              0.215 * |   0.148 * |
 
-- Bootstrap-based confidence intervals for permutation tests
-- Parametric confidence intervals for t-tests
-- Null distribution-based intervals for permutation tests
+### Plot statistical signficance between the differences of metrics
 
-## Best Practices
+*Note: This section plots the metrics for each group against each other. Statistical tests are used to determine whether these differences are statistically significant. Statistical signficance is shown with an asterix (*)*
 
-1. **Test Selection**
-   - Use parametric tests for normally distributed data
-   - Use non-parametric tests for skewed or ordinal data
-   - Consider sample size when choosing tests
-   - Use permutation tests for robust comparisons
+```python
+eqb.eq_group_metrics_plot(
+    group_metrics=diffs,
+    metric_cols=metrics_boot,
+    name="race",
+    categories="all",
+    figsize=(20, 10),
+    plot_type="violinplot",
+    color_by_group=True,
+    show_grid=True,
+    max_cols=6,
+    strict_layout=True,
+    save_path="./images",
+    show_pass_fail=False,
+    statistical_tests=stat_test_results
+)
+```
 
-2. **Multiple Comparisons**
-   - Use appropriate adjustment methods based on the number of comparisons
-   - Consider the trade-off between power and type I error control
-   - Document the adjustment method used
-   - When comparing all groups, use more conservative adjustments (e.g., Bonferroni)
+![alt text](image-2.png)
 
-3. **Effect Size Interpretation**
-   - Report effect sizes along with p-values
-   - Use standardized effect sizes for comparability
-   - Consider practical significance alongside statistical significance
 
-4. **Assumptions**
-   - Check test assumptions before application
-   - Use robust tests when assumptions are violated
-   - Document any deviations from standard assumptions
+## Reference
 
-5. **All-Group Comparisons**
-   - Use when you need to understand relationships between all groups
-   - Be aware of increased multiple comparison burden
-   - Consider using more conservative alpha levels
-   - Document all significant findings, not just those against reference
+1. Kohavi, R. (1996). *Census Income*. UCI Machine Learning Repository. https://doi.org/10.24432/C5GP7S.
+
