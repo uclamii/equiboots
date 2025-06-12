@@ -329,16 +329,19 @@ def plot_with_layout(
 
 
 def add_plot_threshold_lines(
-    ax: plt.Axes, lower: float, upper: float, xmax: float
+    ax: plt.Axes,
+    lower: float,
+    upper: float,
+    xmax: float,
+    show_reference: bool = True,
 ) -> None:
-    """Add disparity threshold lines to the plot."""
-    ax.hlines(
-        [lower, 1.0, upper],
-        xmin=-0.5,
-        xmax=xmax + 0.5,
-        ls=":",
-        colors=["red", "black", "red"],
-    )
+    """Add threshold lines to the plot, optionally showing y=1 reference line."""
+    y_values = [lower, upper]
+    colors = ["red", "red"]
+    if show_reference:
+        y_values.insert(1, 1.0)
+        colors.insert(1, "black")
+    ax.hlines(y_values, xmin=-0.5, xmax=xmax + 0.5, ls=":", colors=colors)
     ax.set_xlim(-0.5, xmax + 0.5)
 
 
@@ -1370,6 +1373,8 @@ def eq_group_metrics_point_plot(
     leg_cols: int = 3,
     raw_metrics: bool = False,
     statistical_tests: dict = None,
+    show_reference: bool = True,
+    y_lims: Optional[Dict[Tuple[int, int], Tuple[float, float]]] = None,
     **plot_kwargs: Dict[str, Union[str, float]],
 ) -> None:
     """
@@ -1386,7 +1391,8 @@ def eq_group_metrics_point_plot(
     leg_cols        : int              - no. of columns in legend
     raw_metrics     : bool             - Treat metrics as raw; not metric ratios
     """
-    all_groups = sorted({group for groups in group_metrics for group in groups})
+    # Determine all unique group names
+    all_groups = sorted(set().union(*(gm.keys() for gm in group_metrics)))
 
     # Shared setup
     n_cols = len(category_names)
@@ -1480,9 +1486,12 @@ def eq_group_metrics_point_plot(
             else:
                 ax.set_ylabel("")
 
-            ax.set_ylim(y_lim)
+            if y_lims and (i, j) in y_lims:
+                ax.set_ylim(y_lims[(i, j)])
+            else:
+                ax.set_ylim(y_lim)
             ax.grid(show_grid)
-            add_plot_threshold_lines(ax, lower, upper, len(groups))
+            add_plot_threshold_lines(ax, lower, upper, len(groups), show_reference)
             ax.set_xlim(-0.5, len(groups) - 0.5)
 
     for row_idx in range(len(metric_cols)):
