@@ -19,6 +19,12 @@ Table of Contents
 
 .. toctree::
    :maxdepth: 4
+   :caption: EquiBoots Class
+
+   equiboots_class
+
+.. toctree::
+   :maxdepth: 4
    :caption: Point Estimate Metrics
 
    point_estimate_metrics
