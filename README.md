@@ -56,9 +56,9 @@ If you use `equiboots` in your research or projects, please consider citing it.
 @software{shpaner_2025_15086941,
    author       = {Shpaner, Leonid and
                    Funnell, Arthur and
-                   Petousis, Panayiotis and
                    Rahrooh, Al and
-                   Beam, Colin},
+                   Beam, Colin and
+                   Petousis, Panayiotis},
    title        = {EquiBoots},
    month        = mar,
    year         = 2025,
