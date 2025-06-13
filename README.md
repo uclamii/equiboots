@@ -1,6 +1,6 @@
 [![Downloads](https://pepy.tech/badge/equiboots)](https://pepy.tech/project/equiboots) [![PyPI](https://img.shields.io/pypi/v/equiboots.svg)](https://pypi.org/project/equiboots/) [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://opensource.org/licenses/Apache-2.0) [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.15086941.svg)](https://doi.org/10.5281/zenodo.15086941)
 
-<img src="https://raw.githubusercontent.com/uclamii/equiboots/refs/heads/main/logo/EquiBoots.png" width="300" alt="My Logo"/>
+<picture><img src="https://raw.githubusercontent.com/uclamii/equiboots/refs/heads/main/logo/EquiBoots.png" width="300" alt="My Logo"/></picture>
 
 The `equiboots` library is a fairness-aware model evaluation toolkit designed to audit performance disparities across demographic groups. It provides robust, bootstrapped metrics for binary, multi-class, and multi-label classification, as well as regression models. The library supports group-wise performance slicing, fairness diagnostics, and customizable visualizations to support equitable AI/ML development.
 
