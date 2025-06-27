@@ -12,7 +12,7 @@ import statsmodels.api as sm
 from scipy.interpolate import interp1d
 from matplotlib.lines import Line2D
 import seaborn as sns
-from .metrics import regression_metrics, calibration_auc
+from .metrics import regression_metrics, calibration_auc, area_trap
 from typing import Dict, List, Optional, Union, Tuple, Set, Callable
 
 ################################################################################
@@ -631,6 +631,7 @@ def _plot_group_curve_ax(
     single_group: bool = False,
     show_grid: bool = True,
     lowess: float = 0,
+    lowess_kwargs: Optional[Dict[str, Union[str, float]]] = None,
     shade_area: bool = False,
 ) -> None:
     y_true = data[group]["y_true"]
@@ -641,6 +642,7 @@ def _plot_group_curve_ax(
 
     curve_kwargs = curve_kwargs or {"color": color}
     line_kwargs = line_kwargs or DEFAULT_LINE_KWARGS
+    lowess_kwargs = lowess_kwargs or {}
 
     if curve_type == "roc":
         fpr, tpr, _ = roc_curve(y_true, y_prob)
@@ -721,18 +723,36 @@ def _plot_group_curve_ax(
 
     #############  Common plotting
     ax.plot(x, y, label=label, **curve_kwargs)
-    if curve_type == "calibration":
-        ax.scatter(x, y, color=curve_kwargs.get("color", "black"), zorder=5)
-        if lowess:
-            smoothed = sm.nonparametric.lowess(y, x, frac=lowess)
-            ax.plot(
-                smoothed[:, 0],
-                smoothed[:, 1],
-                color=curve_kwargs.get("color", "black"),
-                linestyle=":",
-                linewidth=1.5,
-            )
+    if lowess:
+        # compute LOWESS smoothed curve
+        smoothed = sm.nonparametric.lowess(y, x, frac=lowess)
+        x_s, y_s = smoothed[:, 0], smoothed[:, 1]
 
+        # reuse your helpers to measure area
+        lowess_auc = calibration_auc(x_s, y_s)
+
+        # build the style for LOWESS: prefer lowess_kwargs → curve_kwargs → hard defaults
+        smooth_kwargs = {
+            "color": lowess_kwargs.get("color", curve_kwargs.get("color", "black")),
+            "linestyle": lowess_kwargs.get(
+                "linestyle", curve_kwargs.get("linestyle", ":")
+            ),
+            "linewidth": lowess_kwargs.get(
+                "linewidth",
+                lowess_kwargs.get("linewidth", curve_kwargs.get("linewidth", 1.5)),
+            ),
+        }
+        # merge in any other valid plot keys the user passed to lowess_kwargs
+        for k, v in lowess_kwargs.items():
+            if k not in smooth_kwargs and k in VALID_PLOT_KWARGS:
+                smooth_kwargs[k] = v
+
+        ax.plot(
+            smoothed[:, 0],
+            smoothed[:, 1],
+            label=f"LOWESS (AUC={lowess_auc:.3f})",
+            **smooth_kwargs,
+        )
     if curve_type != "pr":
         ax.plot(*ref_line, **line_kwargs)
 
@@ -778,6 +798,7 @@ def eq_plot_group_curves(
     exclude_groups: Union[int, str, List[str], Set[str]] = 0,
     show_grid: bool = True,
     lowess: float = 0,
+    lowess_kwargs: Optional[Dict[str, Union[str, float]]] = None,
     shade_area: bool = False,
 ) -> None:
     """
@@ -835,6 +856,7 @@ def eq_plot_group_curves(
             single_group=bool(group),
             show_grid=show_grid,
             lowess=lowess,
+            lowess_kwargs=lowess_kwargs,
             shade_area=shade_area,
         )
 
