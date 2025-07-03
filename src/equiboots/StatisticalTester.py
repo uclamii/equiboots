@@ -5,6 +5,7 @@ from statsmodels.stats.multitest import multipletests
 from typing import Dict, List, Tuple, Optional, Union, Any
 from dataclasses import dataclass
 from scipy.stats.contingency import association
+import warnings
 
 
 @dataclass
@@ -67,6 +68,9 @@ class StatisticalTester:
             ci_lower, ci_upper = stats.norm.interval(
                 config["confidence_level"], loc=mu, scale=se
             )
+            warnings.warn(
+                "Warning: Calculation may not be correct, please increase number of bootstraps"
+            )
 
         # Does CI cross zero?
         if ci_lower <= 0 <= ci_upper:
@@ -74,7 +78,13 @@ class StatisticalTester:
         else:
             is_significant = True
 
-        p_value = self.calc_p_value_bootstrap(data, config)
+        if is_normal:
+            p_value = self.calc_p_value_bootstrap(data, config)
+        else:
+            mu_0 = 0  # Null hypothesis value
+            z = (mu - mu_0) / sigma
+            p_value = 2 * (1 - stats.norm.cdf(abs(z)))
+
         ### effect size is set as zero if the pooled std is 0
         ### this could actually mean effect size is inf
         # effect_size = self.cohens_d(data)
