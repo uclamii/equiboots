@@ -610,3 +610,53 @@ def test_overlay_mode_triggers_clear(monkeypatch):
 
     plots.plot_with_layout(data, dummy_func, {}, subplots=True, n_cols=2)
     assert ax.cleared is True
+
+
+def test_legend_removed_on_old_seaborn(monkeypatch):
+    import matplotlib.pyplot as plt
+    from src.equiboots import plots
+
+    # force the "old" branch
+    monkeypatch.setattr(plots, "SEABORN_OLD", True)
+    monkeypatch.setattr(plt, "show", lambda: None)
+
+    fig, ax = plt.subplots()
+    group_metrics = [{"A": {"M": 1.0}}]
+    plots.eq_group_metrics_plot(
+        group_metrics=group_metrics,
+        metric_cols=["M"],
+        name="test",
+        plot_type="boxplot",
+        categories=["A"],
+    )
+    # on old seaborn we removed the auto‐drawn legend
+    assert ax.get_legend() is None
+
+
+def test_legend_suppressed_on_new_seaborn(monkeypatch):
+    import matplotlib.pyplot as plt
+    from src.equiboots import plots
+
+    # simulate seaborn >=0.13.2
+    monkeypatch.setattr(plots, "SEABORN_OLD", False)
+
+    # override boxplot so it accepts legend=False
+    def dummy_boxplot(
+        ax=None, *, x=None, y=None, hue=None, palette=None, legend=None, **kw
+    ):
+        return ax
+
+    monkeypatch.setattr(plots.sns, "boxplot", dummy_boxplot)
+
+    monkeypatch.setattr(plt, "show", lambda: None)
+    fig, ax = plt.subplots()
+    group_metrics = [{"A": {"M": 1.0}}]
+    plots.eq_group_metrics_plot(
+        group_metrics=group_metrics,
+        metric_cols=["M"],
+        name="test",
+        plot_type="boxplot",
+        categories=["A"],
+    )
+    # legend=False suppressed any legend
+    assert ax.get_legend() is None
