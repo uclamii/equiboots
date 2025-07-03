@@ -8,12 +8,12 @@ from sklearn.metrics import (
     brier_score_loss,
 )
 from sklearn.calibration import calibration_curve
+import statsmodels.api as sm
 from scipy.interpolate import interp1d
 from matplotlib.lines import Line2D
 import seaborn as sns
-
-from .metrics import regression_metrics
 from packaging import version
+from .metrics import regression_metrics, calibration_auc, area_trap
 from typing import Dict, List, Optional, Union, Tuple, Set, Callable
 
 SEABORN_OLD = version.parse(sns.__version__) < version.parse("0.13.2")
@@ -236,6 +236,7 @@ def plot_with_layout(
     color_by_group: bool = True,
     exclude_groups: Union[int, str, List[str], Set[str]] = 0,
     show_grid: bool = True,
+    y_lim: Optional[Tuple[float, float]] = None,
 ) -> None:
     """
     Master plotting wrapper that handles 3 layout modes:
@@ -271,6 +272,9 @@ def plot_with_layout(
             **plot_kwargs,
             overlay_mode=False,
         )
+        if y_lim is not None:
+            ax.set_ylim(y_lim)
+
         ax.set_title(f"{title} ({group})")
         fig.tight_layout()
         save_or_show_plot(fig, save_path, f"{filename}_{group}")
@@ -296,8 +300,11 @@ def plot_with_layout(
                 **plot_kwargs,
                 overlay_mode=False,
             )
+            if y_lim is not None:
+                axes[i].set_ylim(y_lim)
         for j in range(i + 1, len(axes)):  # Hide unused subplots
             axes[j].axis("off")
+
         fig.suptitle(title)
         plt.tight_layout(rect=[0, 0, 1, 0.95])
     else:  # ---- Mode 3: overlay
@@ -315,6 +322,9 @@ def plot_with_layout(
         ax.legend(**DEFAULT_LEGEND_KWARGS)
         fig.tight_layout(rect=[0, 0, 1, 0.97])
 
+        if y_lim is not None:
+            ax.set_ylim(y_lim)
+
     if show_grid:
         plt.grid(linestyle=":")
 
@@ -322,16 +332,19 @@ def plot_with_layout(
 
 
 def add_plot_threshold_lines(
-    ax: plt.Axes, lower: float, upper: float, xmax: float
+    ax: plt.Axes,
+    lower: float,
+    upper: float,
+    xmax: float,
+    show_reference: bool = True,
 ) -> None:
-    """Add disparity threshold lines to the plot."""
-    ax.hlines(
-        [lower, 1.0, upper],
-        xmin=-0.5,
-        xmax=xmax + 0.5,
-        ls=":",
-        colors=["red", "black", "red"],
-    )
+    """Add threshold lines to the plot, optionally showing y=1 reference line."""
+    y_values = [lower, upper]
+    colors = ["red", "red"]
+    if show_reference:
+        y_values.insert(1, 1.0)
+        colors.insert(1, "black")
+    ax.hlines(y_values, xmin=-0.5, xmax=xmax + 0.5, ls=":", colors=colors)
     ax.set_xlim(-0.5, xmax + 0.5)
 
 
@@ -398,10 +411,6 @@ def setup_plot_environment(
     _, _, auto_figsize = get_layout(len(metric_cols), n_cols, figsize, strict_layout)
     figsize = figsize or auto_figsize
     fig, axs = plt.subplots(n_rows, n_cols, figsize=figsize, squeeze=False)
-
-    # Default y_lim if not specified
-    if y_lim is None:
-        y_lim = (-2, 4)
 
     return fig, axs, group_to_alpha, alpha_to_group, base_colors, y_lim, n_rows, n_cols
 
@@ -624,19 +633,10 @@ def _plot_group_curve_ax(
     is_subplot: bool = False,
     single_group: bool = False,
     show_grid: bool = True,
+    lowess: float = 0,
+    lowess_kwargs: Optional[Dict[str, Union[str, float]]] = None,
+    shade_area: bool = False,
 ) -> None:
-    """
-    Plot a single ROC, PR, or calibration curve for a group.
-
-    label_mode : str
-        - 'full': includes group name, count, pos/neg breakdown, metric
-        - 'simple': just shows AUC/Brier
-    is_subplot : bool
-        Indicates whether this axis is part of a subplot grid
-    single_group : bool
-        If this is a dedicated single-group plot
-    """
-
     y_true = data[group]["y_true"]
     y_prob = data[group]["y_prob"]
     total = len(y_true)
@@ -645,6 +645,7 @@ def _plot_group_curve_ax(
 
     curve_kwargs = curve_kwargs or {"color": color}
     line_kwargs = line_kwargs or DEFAULT_LINE_KWARGS
+    lowess_kwargs = lowess_kwargs or {}
 
     if curve_type == "roc":
         fpr, tpr, _ = roc_curve(y_true, y_prob)
@@ -653,6 +654,15 @@ def _plot_group_curve_ax(
         x_label, y_label = "False Positive Rate", "True Positive Rate"
         ref_line = ([0, 1], [0, 1])
         prefix = "AUC"
+
+        if label_mode == "simple":
+            label = f"{prefix} = {score:.{decimal_places}f}"
+        else:
+            label = (
+                f"{prefix} for {group} = {score:.{decimal_places}f}, "
+                f"Count: {total:,}, Pos: {positives:,}, Neg: {negatives:,}"
+            )
+
     elif curve_type == "pr":
         precision, recall, _ = precision_recall_curve(y_true, y_prob)
         score = auc(recall, precision)
@@ -660,48 +670,113 @@ def _plot_group_curve_ax(
         x_label, y_label = "Recall", "Precision"
         ref_line = ([0, 1], [positives / total] * 2)
         prefix = "AUCPR"
+
+        if label_mode == "simple":
+            label = f"{prefix} = {score:.{decimal_places}f}"
+        else:
+            label = (
+                f"{prefix} for {group} = {score:.{decimal_places}f}, "
+                f"Count: {total:,}, Pos: {positives:,}, Neg: {negatives:,}"
+            )
+
     elif curve_type == "calibration":
-        y, x = calibration_curve(y_true, y_prob, n_bins=n_bins)
-        score = brier_score_loss(y_true, y_prob)
+        # 1) get binned calibration
+        frac_pos, mean_pred = calibration_curve(y_true, y_prob, n_bins=n_bins)
+        # 2) compute Brier for reference
+        brier = brier_score_loss(y_true, y_prob)
+
+        # compute calibration‐curve AUC via helper
+        cal_auc = calibration_auc(mean_pred, frac_pos)
+
+        # 4) assign plotting vars
+        x, y = mean_pred, frac_pos
         x_label, y_label = "Mean Predicted Value", "Fraction of Positives"
         ref_line = ([0, 1], [0, 1])
-        prefix = "Brier score"
+
+        # 5) custom label
+        if label_mode == "simple":
+            label = (
+                f"Cal AUC = {cal_auc:.{decimal_places}f}, "
+                f"Brier = {brier:.{decimal_places}f}, "
+                f"Count = {total:,}"
+            )
+
+        else:
+            label = (
+                f"Cal AUC for {group} = {cal_auc:.{decimal_places}f}, "
+                f"Brier = {brier:.{decimal_places}f}, "
+                f"Count: {total:,}"
+            )
+        if shade_area:
+            # 6) shade the area between the curve and the diagonal;
+            #    first include the endpoints so the shading covers 0-1
+            x_shade = np.concatenate(([0.0], x, [1.0]))
+            y_shade = np.concatenate(([0.0], y, [1.0]))
+            ax.fill_between(
+                x_shade,
+                y_shade,
+                x_shade,  # the 45 degree line is y = x
+                color=curve_kwargs.get("color", "gray"),
+                alpha=0.2,
+                label="_nolegend_",
+            )
+
     else:
         raise ValueError("Unsupported curve_type")
 
-    # Use the label_mode directly as passed from eq_plot_group_curves
-    label = (
-        f"{prefix} = {score:.{decimal_places}f}"
-        if label_mode == "simple"
-        else (
-            f"{prefix} for {group} = {score:.{decimal_places}f}, "
-            f"Count: {total:,}, Pos: {positives:,}, Neg: {negatives:,}"
-        )
-    )
-
+    #############  Common plotting
     ax.plot(x, y, label=label, **curve_kwargs)
-    if curve_type == "calibration":
-        ax.scatter(x, y, color=curve_kwargs.get("color", "black"), zorder=5)
+    if lowess:
+        # compute LOWESS smoothed curve
+        smoothed = sm.nonparametric.lowess(y, x, frac=lowess)
+        x_s, y_s = smoothed[:, 0], smoothed[:, 1]
+
+        # reuse your helpers to measure area
+        lowess_auc = calibration_auc(x_s, y_s)
+
+        # build the style for LOWESS: prefer lowess_kwargs → curve_kwargs → hard defaults
+        smooth_kwargs = {
+            "color": lowess_kwargs.get("color", curve_kwargs.get("color", "black")),
+            "linestyle": lowess_kwargs.get(
+                "linestyle", curve_kwargs.get("linestyle", ":")
+            ),
+            "linewidth": lowess_kwargs.get(
+                "linewidth",
+                lowess_kwargs.get("linewidth", curve_kwargs.get("linewidth", 1.5)),
+            ),
+        }
+        # merge in any other valid plot keys the user passed to lowess_kwargs
+        for k, v in lowess_kwargs.items():
+            if k not in smooth_kwargs and k in VALID_PLOT_KWARGS:
+                smooth_kwargs[k] = v
+
+        ax.plot(
+            smoothed[:, 0],
+            smoothed[:, 1],
+            label=f"LOWESS (AUC={lowess_auc:.3f})",
+            **smooth_kwargs,
+        )
     if curve_type != "pr":
         ax.plot(*ref_line, **line_kwargs)
+
     if title:
         ax.set_title(title)
     ax.set_xlabel(x_label)
     ax.set_ylabel(y_label)
+
     if show_legend:
-        # Adjust legend position based on curve type and subplot/single group status
+        # choose legend location per curve type & mode
         if is_subplot or single_group:
-            if curve_type == "roc":
-                legend_kwargs = {"loc": "lower right"}
-            elif curve_type == "pr":
-                legend_kwargs = {"loc": "upper right"}
-            elif curve_type == "calibration":
-                legend_kwargs = {"loc": "lower right"}
-            else:
-                legend_kwargs = {"loc": "best"}
+            loc = {
+                "roc": "lower right",
+                "pr": "upper right",
+                "calibration": "lower right",
+            }.get(curve_type, "best")
+            legend_kwargs = {"loc": loc}
         else:
             legend_kwargs = DEFAULT_LEGEND_KWARGS
         ax.legend(**legend_kwargs)
+
     ax.grid(show_grid)
     ax.tick_params(axis="both")
 
@@ -725,6 +800,9 @@ def eq_plot_group_curves(
     color_by_group: bool = True,
     exclude_groups: Union[int, str, List[str], Set[str]] = 0,
     show_grid: bool = True,
+    lowess: float = 0,
+    lowess_kwargs: Optional[Dict[str, Union[str, float]]] = None,
+    shade_area: bool = False,
 ) -> None:
     """
     Plot ROC, PR, or calibration curves by group.
@@ -780,6 +858,9 @@ def eq_plot_group_curves(
             is_subplot=subplots,
             single_group=bool(group),
             show_grid=show_grid,
+            lowess=lowess,
+            lowess_kwargs=lowess_kwargs,
+            shade_area=shade_area,
         )
 
     plot_with_layout(
@@ -901,18 +982,50 @@ def _plot_bootstrapped_curve_ax(
         np.percentile(aucs, [2.5, 97.5]) if aucs else (float("nan"), float("nan"))
     )
 
+    # non‐calibration AUCs (ROC/PR)
+    aucs = (
+        [np.trapz(y, grid_x) for y in y_array if not np.isnan(y).all()]
+        if label_prefix != "CAL"
+        else []
+    )
+    mean_auc = np.mean(aucs) if aucs else float("nan")
+    low_auc, high_auc = (
+        np.percentile(aucs, [2.5, 97.5]) if aucs else (float("nan"), float("nan"))
+    )
+
     # Construct legend label depending on curve type
+
     if label_prefix == "CAL" and brier_scores:
-        scores = brier_scores.get(group, [])
-        mean_brier = np.mean(scores) if scores else float("nan")
-        lower_brier, upper_brier = (
-            np.percentile(scores, [2.5, 97.5])
-            if scores
+        # … existing Brier logic …
+        b_scores = brier_scores.get(group, [])
+        mean_b = np.mean(b_scores) if b_scores else float("nan")
+        low_b, high_b = (
+            np.percentile(b_scores, [2.5, 97.5])
+            if b_scores
             else (float("nan"), float("nan"))
         )
-        label = f"{group} (Mean Brier = {mean_brier:.3f} [{lower_brier:.3f}, {upper_brier:.3f}])"
+
+        # compute Cal-AUC *only* on fully populated bootstrap curves
+        cal_aucs = []
+        for y_row in y_array:
+            if not np.isnan(y_row).any():  # drop rows with any NaNs
+                cal_aucs.append(calibration_auc(grid_x, y_row))
+
+        if cal_aucs:
+            mean_c = np.mean(cal_aucs)
+            low_c, high_c = np.percentile(cal_aucs, [2.5, 97.5])
+        else:
+            mean_c = low_c = high_c = float("nan")
+
+        label = (
+            f"{group}\n"
+            f"(Mean Cal AUC = {mean_c:.3f} [{low_c:.3f},{high_c:.3f}];\n"
+            f"Mean Brier = {mean_b:.3f} [{low_b:.3f},{high_b:.3f}])"
+        )
     else:
-        label = f"{group} ({label_prefix} = {mean_auc:.2f} [{lower_auc:.2f}, {upper_auc:.2f}])"
+        label = (
+            f"{group} ({label_prefix} = {mean_auc:.2f} [{low_auc:.2f},{high_auc:.2f}])"
+        )
 
     # Set default plotting styles
     curve_kwargs = curve_kwargs or {"color": "#1f77b4"}
@@ -988,6 +1101,7 @@ def eq_plot_bootstrapped_group_curves(
     color_by_group: bool = True,
     exclude_groups: Union[int, str, List[str], Set[str]] = 0,
     show_grid: bool = True,
+    y_lim: Optional[Tuple[float, float]] = None,
 ) -> None:
     """
     Plot bootstrapped curves by group.
@@ -1077,6 +1191,7 @@ def eq_plot_bootstrapped_group_curves(
         color_by_group=color_by_group,
         exclude_groups=exclude_groups,
         show_grid=show_grid,
+        y_lim=y_lim,
     )
 
 
@@ -1104,6 +1219,7 @@ def eq_group_metrics_plot(
     show_pass_fail: bool = False,
     leg_cols: int = 6,
     y_lim: Optional[Tuple[float, float]] = None,
+    statistical_tests: dict = None,
     **plot_kwargs: Dict[str, Union[str, float]],
 ) -> None:
     """
@@ -1148,13 +1264,23 @@ def eq_group_metrics_plot(
         )
     )
 
+    ## Initialise signficance checking
+    significance_map = {}
+    if statistical_tests:
+        for group, metrics in statistical_tests.items():
+            for metric_key, test_result in metrics.items():
+                ## we have to remove _diff for it to work
+                if metric_key in metric_cols and group in attributes:
+                    significance_map[(group, metric_key)] = test_result.is_significant
+
     for i, col in enumerate(metric_cols):
         ax = axs[i // n_cols, i % n_cols]
         x_vals, y_vals = [], []
 
-        group_status, lower, upper = compute_pass_fail(
-            group_metrics, attributes, col, plot_thresholds
-        )
+        if show_pass_fail:
+            group_status, lower, upper = compute_pass_fail(
+                group_metrics, attributes, col, plot_thresholds
+            )
 
         for row in group_metrics:
             for attr in attributes:
@@ -1163,14 +1289,13 @@ def eq_group_metrics_plot(
                     x_vals.append(group_to_alpha[attr])
                     y_vals.append(val)
 
-        group_colors = (
-            {
+        if show_pass_fail:
+            group_colors = {
                 attr: "green" if group_status.get(attr) == "Pass" else "red"
                 for attr in attributes
             }
-            if show_pass_fail
-            else base_colors
-        )
+        else:
+            group_colors = base_colors
 
         plot_func = getattr(sns, plot_type, None)
         if not plot_func:
@@ -1207,19 +1332,27 @@ def eq_group_metrics_plot(
                 lg.remove()
 
         ax.set_title(f"{name}_{col}")
+
         ax.set_xlabel("")
         ax.set_xticks(range(len(attributes)))
-        ax.set_xticklabels(
-            [group_to_alpha[attr] for attr in attributes], rotation=0, fontweight="bold"
-        )
+        labels = [
+            group_to_alpha[attr]
+            + (" *" if significance_map.get((attr, col), False) else "")
+            for attr in attributes
+        ]
+        ax.set_xticklabels(labels, rotation=0, fontweight="bold")
         for tick_label in ax.get_xticklabels():
-            attr = alpha_to_group[tick_label.get_text()]
-            tick_label.set_color(
-                "green"
-                if group_status.get(attr) == "Pass"
-                else "red" if show_pass_fail else base_colors.get(attr, "black")
-            )
-        add_plot_threshold_lines(ax, lower, upper, len(attributes))
+            # So our lookup doesn't break
+            label_text = tick_label.get_text().replace(" *", "")
+            attr = alpha_to_group[label_text]
+            if show_pass_fail:
+                tick_label.set_color(
+                    "green" if group_status.get(attr) == "Pass" else "red"
+                )
+            else:
+                tick_label.set_color(base_colors.get(attr, "black"))
+        if show_pass_fail:
+            add_plot_threshold_lines(ax, lower, upper, len(attributes))
         ax.set_ylim(y_lim)
         ax.grid(show_grid)
 
@@ -1230,6 +1363,24 @@ def eq_group_metrics_plot(
         create_legend(
             fig, attributes, group_to_alpha, base_colors, show_pass_fail, leg_cols
         )
+
+        if statistical_tests:
+            stat_legend_elements = [
+                Line2D(
+                    [0],
+                    [0],
+                    marker="*",
+                    color="w",
+                    markerfacecolor="black",
+                    markersize=10,
+                    label="Statistically Signficanct Difference",
+                ),
+            ]
+            stat_legend = fig.legend(
+                handles=stat_legend_elements,
+                loc="upper right",
+                bbox_to_anchor=(0.7, 1.1),
+            )
 
     if strict_layout:
         plt.tight_layout(w_pad=2, h_pad=2, rect=[0.01, 0.01, 1.01, 1])
@@ -1257,6 +1408,9 @@ def eq_group_metrics_point_plot(
     y_lim: Optional[Tuple[float, float]] = None,
     leg_cols: int = 3,
     raw_metrics: bool = False,
+    statistical_tests: dict = None,
+    show_reference: bool = True,
+    y_lims: Optional[Dict[Tuple[int, int], Tuple[float, float]]] = None,
     **plot_kwargs: Dict[str, Union[str, float]],
 ) -> None:
     """
@@ -1273,7 +1427,8 @@ def eq_group_metrics_point_plot(
     leg_cols        : int              - no. of columns in legend
     raw_metrics     : bool             - Treat metrics as raw; not metric ratios
     """
-    all_groups = sorted({group for groups in group_metrics for group in groups})
+    # Determine all unique group names
+    all_groups = sorted(set().union(*(gm.keys() for gm in group_metrics)))
 
     # Shared setup
     n_cols = len(category_names)
@@ -1298,6 +1453,21 @@ def eq_group_metrics_point_plot(
 
             x_vals, y_vals = [], []
             groups = list(group_metrics[j].keys())
+            # Create modified group labels for this category based on statistical tests
+            current_group_to_alpha = group_to_alpha.copy()
+            if statistical_tests and cat_name in statistical_tests:
+                stat_tests = statistical_tests[cat_name]
+
+                if stat_tests.get("omnibus") and stat_tests["omnibus"].is_significant:
+                    current_group_to_alpha = {
+                        grp: alph + " *" for grp, alph in current_group_to_alpha.items()
+                    }
+
+                for group in groups:
+                    if group in stat_tests and stat_tests[group].is_significant:
+                        current_group_to_alpha[group] += " ▲"
+
+            current_alpha_to_group = {v: k for k, v in current_group_to_alpha.items()}
 
             group_status, lower, upper = compute_pass_fail(
                 group_metrics, groups, metric, plot_thresholds, raw_metrics
@@ -1306,7 +1476,7 @@ def eq_group_metrics_point_plot(
             for group in group_metrics[j]:
                 val = group_metrics[j][group][metric]
                 if not np.isnan(val):
-                    x_vals.append(group_to_alpha[group])
+                    x_vals.append(current_group_to_alpha[group])
                     y_vals.append(val)
 
             group_colors = (
@@ -1323,7 +1493,7 @@ def eq_group_metrics_point_plot(
                     x=[x],
                     y=[y],
                     ax=ax,
-                    color=group_colors[alpha_to_group[group]],
+                    color=group_colors[current_alpha_to_group[group]],
                     s=100,
                     label=None,
                     **plot_kwargs,
@@ -1333,12 +1503,14 @@ def eq_group_metrics_point_plot(
             ax.set_xlabel("")
             ax.set_xticks(range(len(groups)))
             ax.set_xticklabels(
-                [group_to_alpha[group] for group in groups], rotation=45, ha="right"
+                [current_group_to_alpha[group] for group in groups],
+                rotation=45,
+                ha="right",
             )
 
             for tick_label in ax.get_xticklabels():
                 alpha = tick_label.get_text()
-                group = alpha_to_group[alpha]
+                group = current_alpha_to_group[alpha]
                 if show_pass_fail:
                     color = "green" if group_status[group] == "Pass" else "red"
                 else:
@@ -1350,9 +1522,12 @@ def eq_group_metrics_point_plot(
             else:
                 ax.set_ylabel("")
 
-            ax.set_ylim(y_lim)
+            if y_lims and (i, j) in y_lims:
+                ax.set_ylim(y_lims[(i, j)])
+            else:
+                ax.set_ylim(y_lim)
             ax.grid(show_grid)
-            add_plot_threshold_lines(ax, lower, upper, len(groups))
+            add_plot_threshold_lines(ax, lower, upper, len(groups), show_reference)
             ax.set_xlim(-0.5, len(groups) - 0.5)
 
     for row_idx in range(len(metric_cols)):
@@ -1365,6 +1540,34 @@ def eq_group_metrics_point_plot(
             fig, all_groups, group_to_alpha, base_colors, show_pass_fail, leg_cols
         )
 
+        if statistical_tests:
+
+            stat_legend_elements = [
+                Line2D(
+                    [0],
+                    [0],
+                    marker="*",
+                    color="w",
+                    markerfacecolor="black",
+                    markersize=10,
+                    label="Omnibus test significant",
+                ),
+                Line2D(
+                    [0],
+                    [0],
+                    marker="^",
+                    color="w",
+                    markerfacecolor="black",
+                    markersize=8,
+                    label="Group test significant",
+                ),
+            ]
+            stat_legend = fig.legend(
+                handles=stat_legend_elements,
+                loc="upper right",
+                bbox_to_anchor=(0.7, 1.1),
+            )
+
     if strict_layout:
-        plt.tight_layout(w_pad=2, h_pad=2, rect=[0.01, 0.01, 1.01, 1])
+        plt.tight_layout(w_pad=2, h_pad=4, rect=[0.01, 0.01, 1.01, 1])
     save_or_show_plot(fig, save_path, filename)

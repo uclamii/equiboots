@@ -18,10 +18,10 @@ class EquiBoots:
     def __init__(
         self,
         y_true: np.array,
-        y_prob: np.array,
         y_pred: np.array,
         fairness_df: pd.DataFrame,
         fairness_vars: list,
+        y_prob: np.array = None,
         seeds: list = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
         reference_groups: list = None,
         task: str = "binary_classification",
@@ -354,7 +354,8 @@ class EquiBoots:
     def get_metrics(self, sliced_dict) -> dict:
         """Calculate metrics for each group based on the task type."""
         if self.bootstrap_flag:
-            return [self.get_groups_metrics(sliced) for sliced in sliced_dict]
+            print("Calculating metrics for each bootstrap:")
+            return [self.get_groups_metrics(sliced) for sliced in tqdm(sliced_dict)]
         else:
             return self.get_groups_metrics(sliced_dict)
 
