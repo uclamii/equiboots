@@ -636,6 +636,7 @@ def _plot_group_curve_ax(
     lowess: float = 0,
     lowess_kwargs: Optional[Dict[str, Union[str, float]]] = None,
     shade_area: bool = False,
+    hist: bool = (False,),
 ) -> None:
     y_true = data[group]["y_true"]
     y_prob = data[group]["y_prob"]
@@ -690,7 +691,7 @@ def _plot_group_curve_ax(
 
         # 4) assign plotting vars
         x, y = mean_pred, frac_pos
-        x_label, y_label = "Mean Predicted Value", "Fraction of Positives"
+        x_label, y_label = "Mean Predicted Probability", "Fraction of Positives"
         ref_line = ([0, 1], [0, 1])
 
         # 5) custom label
@@ -720,6 +721,25 @@ def _plot_group_curve_ax(
                 alpha=0.2,
                 label="_nolegend_",
             )
+
+        # --- draw inset histogram under the curve if requested ---
+        # HISTOGRAM‐ONLY MODE: if requested, skip calibration curve
+        if hist:
+            ax.clear()
+            # pick the exact same color the curve would have used
+            hist_color = curve_kwargs.get("color", color)
+            ax.hist(
+                y_prob,
+                bins=n_bins,
+                range=(0, 1),
+                color=hist_color,
+                edgecolor="black",
+            )
+            ax.set_title(str(group))
+            ax.set_xlabel("Mean Predicted Probability")
+            ax.set_ylabel("Count")
+            ax.grid(False)
+            return
 
     else:
         raise ValueError("Unsupported curve_type")
@@ -803,6 +823,7 @@ def eq_plot_group_curves(
     lowess: float = 0,
     lowess_kwargs: Optional[Dict[str, Union[str, float]]] = None,
     shade_area: bool = False,
+    plot_hist: bool = False,
 ) -> None:
     """
     Plot ROC, PR, or calibration curves by group.
@@ -838,6 +859,9 @@ def eq_plot_group_curves(
         raise ValueError("Cannot use subplots=True when a specific group is selected.")
     valid_data = _filter_groups(data, exclude_groups)
 
+    if plot_hist:
+        subplots = True
+
     def curve_plot(ax, data, group_iter, color, overlay_mode=False):
         # In overlay mode (subplots=False, group=None), use "full" label mode
         # In subplot or single-group mode, use "simple" label mode
@@ -861,6 +885,7 @@ def eq_plot_group_curves(
             lowess=lowess,
             lowess_kwargs=lowess_kwargs,
             shade_area=shade_area,
+            hist=plot_hist,
         )
 
     plot_with_layout(
