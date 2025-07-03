@@ -721,6 +721,15 @@ def _plot_group_curve_ax(
                 alpha=0.2,
                 label="_nolegend_",
             )
+        # 7) draw a circle on each binned calibration point
+        ax.scatter(
+            x,
+            y,
+            marker="o",
+            s=40,
+            facecolor=curve_kwargs.get("color", color),
+            zorder=5,
+        )
 
         # --- draw inset histogram under the curve if requested ---
         # HISTOGRAM‐ONLY MODE: if requested, skip calibration curve
