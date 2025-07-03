@@ -13,7 +13,10 @@ from matplotlib.lines import Line2D
 import seaborn as sns
 
 from .metrics import regression_metrics
+from packaging import version
 from typing import Dict, List, Optional, Union, Tuple, Set, Callable
+
+SEABORN_OLD = version.parse(sns.__version__) < version.parse("0.13.2")
 
 ################################################################################
 # Shared Utilities
@@ -1174,23 +1177,34 @@ def eq_group_metrics_plot(
             raise ValueError(
                 f"Unsupported plot_type: '{plot_type}'. Must be a valid seaborn plot type."
             )
+
+        ## assemble common args
+        plot_args = dict(
+            ax=ax,
+            x=x_vals,
+            y=y_vals,
+            hue=x_vals,
+            palette={group_to_alpha[attr]: group_colors[attr] for attr in attributes},
+        )
+        ## only pass legend=False on newer seaborn
+        if not SEABORN_OLD:
+            plot_args["legend"] = False
+
         try:
-            plot_func(
-                ax=ax,
-                x=x_vals,
-                y=y_vals,
-                hue=x_vals,
-                palette={
-                    group_to_alpha[attr]: group_colors[attr] for attr in attributes
-                },
-                legend=False,
-                **plot_kwargs,
-            )
-        except Exception as e:
-            raise ValueError(
-                f"Failed to plot with {plot_type}: {str(e)}. "
-                f" Ensure the plot type supports x, y, hue, palette, and ax parameters."
-            )
+            plot_func(**plot_args, **plot_kwargs)
+        except TypeError as e:
+            ## fallback for old seaborn which does not accept legend kwarg
+            if SEABORN_OLD and "legend" in str(e):
+                plot_args.pop("legend", None)
+                plot_func(**plot_args, **plot_kwargs)
+            else:
+                raise ValueError(f"Failed to plot with {plot_type}: {e}")
+
+        ## strip out the auto‐drawn legend on old seaborn
+        if SEABORN_OLD:
+            lg = ax.get_legend()
+            if lg:
+                lg.remove()
 
         ax.set_title(f"{name}_{col}")
         ax.set_xlabel("")
