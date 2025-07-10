@@ -661,6 +661,7 @@ def test_legend_suppressed_on_new_seaborn(monkeypatch):
     # legend=False suppressed any legend
     assert ax.get_legend() is None
 
+
 class MockTestResult:
     """Mock object to simulate statistical test results"""
 
@@ -1030,3 +1031,78 @@ def test_eq_group_metrics_point_plot_multiple_categories_mixed_significance(
         category_names=["Race", "Gender"],
         statistical_tests=statistical_tests,
     )
+
+
+def make_simple_data(n=50):
+    """Helper: two groups A/B with random balanced labels & scores."""
+    rng = np.random.RandomState(0)
+    return {
+        "A": {"y_true": rng.randint(0, 2, size=n), "y_prob": rng.rand(n)},
+        "B": {"y_true": rng.randint(0, 2, size=n), "y_prob": rng.rand(n)},
+    }
+
+
+def test_eq_plot_group_curves_forces_subplot_histograms(monkeypatch):
+    data = make_simple_data()
+    # stub get_layout → 1 row × 2 cols
+    monkeypatch.setattr(
+        plots, "get_layout", lambda n_items, n_cols, figsize: (1, 2, (6, 3))
+    )
+    captured = []
+    monkeypatch.setattr(
+        plots, "save_or_show_plot", lambda fig, *a, **k: captured.append(fig)
+    )
+
+    # Even though subplots=False, plot_hist=True must override it
+    plots.eq_plot_group_curves(
+        data,
+        curve_type="calibration",
+        n_bins=7,
+        plot_hist=True,
+        subplots=False,
+    )
+
+    assert len(captured) == 1
+    fig = captured[0]
+    axes = fig.get_axes()
+    # Two groups → two subplots
+    assert len(axes) == 2
+
+    # Each axis should have 7 bars and correct labels
+    for ax in axes:
+        bars = ax.patches
+        assert len(bars) == 7
+        assert ax.get_xlabel() == "Mean Predicted Probability"
+        assert ax.get_ylabel() == "Count"
+
+
+def test_eq_plot_group_curves_histogram_colors_follow_curve_kwgs(monkeypatch):
+    data = make_simple_data()
+    # custom per‐group colors
+    curve_kwgs = {"A": {"color": "red"}, "B": {"color": "lime"}}
+    monkeypatch.setattr(
+        plots, "get_layout", lambda n_items, n_cols, figsize: (1, 2, (6, 3))
+    )
+    captured = []
+    monkeypatch.setattr(
+        plots, "save_or_show_plot", lambda fig, *a, **k: captured.append(fig)
+    )
+
+    plots.eq_plot_group_curves(
+        data,
+        curve_type="calibration",
+        n_bins=5,
+        plot_hist=True,
+        curve_kwgs=curve_kwgs,
+    )
+
+    fig = captured[0]
+    axA, axB = fig.get_axes()
+
+    # all bars in A are red (1,0,0)
+    for bar in axA.patches:
+        assert bar.get_facecolor()[:3] == pytest.approx((1, 0, 0), rel=1e-3)
+
+    # all bars in B are lime ~(0,1,0)
+    for bar in axB.patches:
+        assert bar.get_facecolor()[:3] == pytest.approx((0, 1, 0), rel=1e-3)
