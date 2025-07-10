@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "equiboots"
-version = "0.0.0a9"
+version = "0.0.0a10"
 description = "A Python library for fairness-aware model evaluation, bias auditing, and performance visualization, supporting classification and regression models with robust analytics across demographic groups."
 readme = { file = "README_min.md", content-type = "text/markdown" }
 authors = [
@@ -32,9 +32,9 @@ classifiers = [
 
 [project.urls]
 "Author Website" = "https://www.mii.ucla.edu/"
-"Documentation" = "https://uclamii.github.io/model_tuner"
-"Zenodo Archive" = "https://zenodo.org/doi/10.5281/zenodo.12727322"
-"Source Code" = "https://github.com/uclamii/model_tuner/"
+"Documentation" = "https://uclamii.github.io/equiboots_docs"
+"Zenodo Archive" = "https://zenodo.org/doi/10.5281/zenodo.15086941"
+"Source Code" = "https://github.com/uclamii/equiboots"
 
 [tool.setuptools.packages.find]
 where = ["src"]
