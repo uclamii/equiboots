@@ -1624,6 +1624,8 @@ def plot_effect_sizes(
     title="Effect Sizes by Group",
     figsize=(8, 6),
     rotation=0,
+    save_path=None,
+    filename="effect_sizes",
 ):
     stat_results_keys = stat_test_results.keys()
     effect_sizes = [
@@ -1656,12 +1658,15 @@ def plot_effect_sizes(
     plt.axhline(y=0.6, color="red", linestyle="--", label="Medium effect size <= 0.6")
     plt.plot([], [], color="red", linestyle="--", label="Large effect size > 0.6")
 
-    # Add a legend
+    # Add a legend and grid
     plt.legend()
-
-    # Add a grid
     plt.grid(axis="y", linestyle="--")
 
     plt.xticks(rotation=rotation, ha="right")
     plt.tight_layout()
+
+    # save or show
+    fig = plt.gcf()
+    if save_path:
+        fig.savefig(os.path.join(save_path, f"{filename}.png"), bbox_inches="tight")
     plt.show()
