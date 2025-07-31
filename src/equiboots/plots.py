@@ -1605,3 +1605,63 @@ def eq_group_metrics_point_plot(
     if strict_layout:
         plt.tight_layout(w_pad=2, h_pad=4, rect=[0.01, 0.01, 1.01, 1])
     save_or_show_plot(fig, save_path, filename)
+
+
+################################################################################
+############################ Effect Size Plots #################################
+
+## EquiBoots also calculates effect size when we are dealing with point
+# estimates. In this case we can see the effect size for all of the results is
+# low (under 0.2) with the highest being 0.11. This indicates that although
+# statistical signficance was found it is not necessary a strong finding.
+################################################################################
+
+
+def plot_effect_sizes(
+    stat_test_results,
+    xlabel="Category",
+    ylabel="Effect size",
+    title="Effect Sizes by Group",
+    figsize=(8, 6),
+    rotation=0,
+):
+    stat_results_keys = stat_test_results.keys()
+    effect_sizes = [
+        result.effect_size if result.effect_size else 0
+        for _, result in stat_test_results.items()
+    ]
+
+    plt.figure(figsize=figsize)
+    # Create the bar chart
+    bars = plt.bar(stat_results_keys, effect_sizes)
+
+    # Add value labels on top of each bar
+    for bar in bars:
+        yval = bar.get_height()
+        plt.text(
+            bar.get_x() + bar.get_width() / 2,
+            yval + 0.01,
+            round(yval, 2),
+            ha="center",
+            va="bottom",
+        )  # Adjust vertical position (0.01) as needed
+
+    # Add labels and title
+    plt.xlabel(xlabel)
+    plt.ylabel(ylabel)
+    plt.title(title)
+
+    # Add horizontal lines for effect size ranges
+    plt.axhline(y=0.2, color="red", linestyle="--", label="Small effect size <= 0.2")
+    plt.axhline(y=0.6, color="red", linestyle="--", label="Medium effect size <= 0.6")
+    plt.plot([], [], color="red", linestyle="--", label="Large effect size > 0.6")
+
+    # Add a legend
+    plt.legend()
+
+    # Add a grid
+    plt.grid(axis="y", linestyle="--")
+
+    plt.xticks(rotation=rotation, ha="right")
+    plt.tight_layout()
+    plt.show()

@@ -1106,3 +1106,58 @@ def test_eq_plot_group_curves_histogram_colors_follow_curve_kwgs(monkeypatch):
     # all bars in B are lime ~(0,1,0)
     for bar in axB.patches:
         assert bar.get_facecolor()[:3] == pytest.approx((0, 1, 0), rel=1e-3)
+
+
+class DummyResult:
+    def __init__(self, effect_size):
+        self.effect_size = effect_size
+
+
+def test_plot_effect_sizes_bars_and_legend(monkeypatch):
+    # 1) Prevent actual pop-up
+    monkeypatch.setattr(plt, "show", lambda *args, **kwargs: None)
+
+    # 2) Build a simple dict of DummyResult
+    data = {
+        "A": DummyResult(0.1),
+        "B": DummyResult(0.5),
+        "C": DummyResult(None),  # should become 0.0
+    }
+
+    # 3) Call your plot
+    plots.plot_effect_sizes(
+        data,
+        xlabel="My X",
+        ylabel="My Y",
+        title="My Title",
+        figsize=(4, 3),
+        rotation=30,
+    )
+
+    # 4) Inspect the axes
+    fig = plt.gcf()
+    ax = fig.axes[0]
+
+    # a) Bars count
+    bars = ax.patches
+    assert len(bars) == 3
+    heights = [b.get_height() for b in bars]
+    assert heights == pytest.approx([0.1, 0.5, 0.0])
+
+    # b) xtick labels match keys
+    labels = [t.get_text() for t in ax.get_xticklabels()]
+    assert labels == ["A", "B", "C"]
+
+    # c) threshold lines at y=0.2 & y=0.6
+    # lines are in ax.lines, the first two should be the horizontals
+    hlines = [(ln.get_ydata()[0], ln.get_linestyle()) for ln in ax.lines[:2]]
+    assert (0.2, "--") in hlines
+    assert (0.6, "--") in hlines
+
+    # d) legend entries
+    leg_texts = [t.get_text() for t in ax.get_legend().get_texts()]
+    assert leg_texts == [
+        "Small effect size <= 0.2",
+        "Medium effect size <= 0.6",
+        "Large effect size > 0.6",
+    ]
