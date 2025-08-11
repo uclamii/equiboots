@@ -153,6 +153,7 @@ plots/
 
 # image dirs
 images/
+**/image_path_png/
 **/images/
 imgs/
 **/imgs/
