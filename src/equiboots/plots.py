@@ -1005,17 +1005,6 @@ def _plot_bootstrapped_curve_ax(
     mean_y = np.nanmean(y_array, axis=0)
     lower, upper = np.nanpercentile(y_array, [2.5, 97.5], axis=0)
 
-    # Calculate AUC summary stats if not calibration
-    aucs = (
-        [np.trapz(y, grid_x) for y in y_array if not np.isnan(y).all()]
-        if label_prefix != "CAL"
-        else []
-    )
-    mean_auc = np.mean(aucs) if aucs else float("nan")
-    lower_auc, upper_auc = (
-        np.percentile(aucs, [2.5, 97.5]) if aucs else (float("nan"), float("nan"))
-    )
-
     # non‐calibration AUCs (ROC/PR)
     aucs = (
         [np.trapz(y, grid_x) for y in y_array if not np.isnan(y).all()]
@@ -1604,4 +1593,81 @@ def eq_group_metrics_point_plot(
 
     if strict_layout:
         plt.tight_layout(w_pad=2, h_pad=4, rect=[0.01, 0.01, 1.01, 1])
+    save_or_show_plot(fig, save_path, filename)
+
+
+def eq_plot_bootstrap_forest(
+    boot_sliced_data: List[Dict[str, Dict[str, np.ndarray]]],
+    curve_type: str = "roc",
+    reference_group: Optional[str] = None,
+    common_grid: np.ndarray = np.linspace(0, 1, 100),
+    figsize: Tuple[float, float] = (6, 4),
+    save_path: Optional[str] = None,
+    filename: str = "bootstrap_forest",
+    dpi: int = 100,
+) -> None:
+    """
+    Create a forest plot of mean AUC, AUCPR or Brier score with 95% CI for each
+    group, and draw a dotted line through `reference_group` if provided.
+    """
+    valid_types = ["roc", "pr", "calibration"]
+    if curve_type not in valid_types:
+        raise ValueError(f"curve_type must be one of {valid_types}")
+
+    # build summary stats per group
+    summary: Dict[str, Tuple[float, float, float]] = {}
+    if curve_type == "calibration":
+        # Brier‐score bootstrap
+        boot_scores: Dict[str, List[float]] = {}
+        for sample in boot_sliced_data:
+            for grp, data in sample.items():
+                score = brier_score_loss(data["y_true"], data["y_prob"])
+                boot_scores.setdefault(grp, []).append(score)
+        for grp, scores in boot_scores.items():
+            mean = float(np.mean(scores))
+            lo, hi = np.percentile(scores, [2.5, 97.5])
+            summary[grp] = (mean, lo, hi)
+    else:
+        # ROC/AUCPR bootstrap
+        interp_data, grid_x = interpolate_bootstrapped_curves(
+            boot_sliced_data, common_grid, curve_type
+        )
+        for grp, curves in interp_data.items():
+            vals = [c for c in curves if not np.isnan(c).all()]
+            aucs = [np.trapz(y, grid_x) for y in vals]
+            mean = float(np.mean(aucs))
+            lo, hi = np.percentile(aucs, [2.5, 97.5])
+            summary[grp] = (mean, lo, hi)
+
+    # prepare plotting
+    groups = list(summary.keys())
+    y_pos = np.arange(len(groups))
+    means = [summary[g][0] for g in groups]
+    errs_lo = [summary[g][0] - summary[g][1] for g in groups]
+    errs_hi = [summary[g][2] - summary[g][0] for g in groups]
+
+    fig, ax = plt.subplots(figsize=figsize, dpi=dpi)
+    ax.errorbar(
+        means,
+        y_pos,
+        xerr=[errs_lo, errs_hi],
+        fmt="o",
+        capsize=4,
+        color="black",
+    )
+    ax.set_yticks(y_pos)
+    ax.set_yticklabels(groups)
+
+    label_map = {"roc": "AUC ROC", "pr": "AUCPR", "calibration": "Brier score"}
+    metric = label_map[curve_type]
+    ax.set_xlabel(f"Mean {metric} with 95% CI")
+    ax.set_title(f"Forest plot of {metric}")
+    ax.invert_yaxis()
+
+    # draw the reference‐group line
+    if reference_group and (reference_group in summary):
+        ref_mean = summary[reference_group][0]
+        ax.axvline(ref_mean, linestyle=":", color="gray")
+
+    plt.tight_layout()
     save_or_show_plot(fig, save_path, filename)
