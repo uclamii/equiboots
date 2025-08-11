@@ -1672,6 +1672,7 @@ def eq_plot_bootstrap_forest(
     plt.tight_layout()
     save_or_show_plot(fig, save_path, filename)
 
+
 ################################################################################
 ############################ Effect Size Plots #################################
 
@@ -1692,6 +1693,11 @@ def plot_effect_sizes(
     save_path=None,
     filename="effect_sizes",
 ):
+    """
+    Bar chart of effect sizes by group.
+    Expects a mapping of labels to objects with .effect_size. Bars are annotated,
+    horizontal guides mark 0.2 and 0.6, and a PNG is saved if `save_path` is provided.
+    """
     stat_results_keys = stat_test_results.keys()
     effect_sizes = [
         result.effect_size if result.effect_size else 0
