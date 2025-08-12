@@ -1596,6 +1596,71 @@ def eq_group_metrics_point_plot(
     save_or_show_plot(fig, save_path, filename)
 
 
+def eq_plot_metrics_forest(
+    group_metrics: Dict[str, Dict[str, float]],
+    metric_name: str,
+    reference_group: Optional[str] = None,
+    figsize: Tuple[float, float] = (6, 4),
+    save_path: Optional[str] = None,
+    filename: str = "points_forest",
+    sort_groups: bool = True,
+    ascending: bool = True,
+    title: str = None,
+) -> None:
+    """
+    Create a forest plot of point estimates for a specific metric across groups.
+    """
+
+    valid_groups = {
+        group: metrics
+        for group, metrics in group_metrics.items()
+        if metric_name in metrics and not np.isnan(metrics[metric_name])
+    }
+
+    if not valid_groups:
+        raise ValueError(f"No valid data found for metric '{metric_name}'")
+
+    if reference_group and reference_group not in valid_groups:
+        raise ValueError(
+            f"Reference group '{reference_group}' not found in valid groups: {list(valid_groups.keys())}"
+        )
+
+    # Extract metric values
+    groups = list(valid_groups.keys())
+    values = [valid_groups[group][metric_name] for group in groups]
+
+    # Sort groups by metric value if requested
+    if sort_groups:
+        sorted_pairs = sorted(
+            zip(groups, values), key=lambda x: x[1], reverse=not ascending
+        )
+        groups, values = zip(*sorted_pairs)
+        groups, values = list(groups), list(values)
+
+    y_pos = np.arange(len(groups))
+
+    fig, ax = plt.subplots(figsize=figsize)
+    ax.scatter(values, y_pos, s=64, color="black", zorder=3)
+    ax.set_yticks(y_pos)
+    ax.set_yticklabels(groups)
+    ax.invert_yaxis()
+
+    ax.set_xlabel(f"{metric_name}")
+    if title is None:
+        ax.set_title(f"Forest Plot: {metric_name} by Group")
+    else:
+        ax.set_title(title)
+
+    ax.grid(True, alpha=0.3, zorder=1)
+
+    if reference_group:
+        ref_value = valid_groups[reference_group][metric_name]
+        ax.axvline(ref_value, linestyle=":", color="gray", alpha=0.8, zorder=2)
+
+    plt.tight_layout()
+    save_or_show_plot(fig, save_path, filename)
+
+
 def eq_plot_bootstrap_forest(
     boot_sliced_data: List[Dict[str, Dict[str, np.ndarray]]],
     curve_type: str = "roc",
