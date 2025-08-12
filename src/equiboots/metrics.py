@@ -175,6 +175,53 @@ def multi_class_classification_metrics(
     return metrics
 
 
+def calculate_bootstrap_stats(
+    group_boot_metrics: List[Dict], metric: str
+) -> pd.DataFrame:
+    """
+    Calculate mean and 95% CI for a specific metric across all groups and bootstrap samples.
+
+    Parameters:
+    group_boot_metrics: List of nested dictionaries containing bootstrap samples
+    metric: String name of the metric to analyze (e.g., 'Accuracy', 'Precision')
+
+    Returns:
+    DataFrame with columns: group, mean, ci_lower, ci_upper, std
+    """
+
+    # Get all group names from first sample
+    groups = list(group_boot_metrics[0].keys())
+
+    results = []
+
+    for group in groups:
+        # Extract all values for this metric and group across bootstrap samples
+        values = []
+        for sample in group_boot_metrics:
+            if group in sample and metric in sample[group]:
+                values.append(sample[group][metric])
+
+        if values:  # If we have data for this group
+            values = np.array(values)
+            mean_val = np.mean(values)
+            std_val = np.std(values)
+            ci_lower = np.percentile(values, 2.5)
+            ci_upper = np.percentile(values, 97.5)
+
+            results.append(
+                {
+                    "group": group,
+                    "mean": mean_val,
+                    "ci_lower": ci_lower,
+                    "ci_upper": ci_upper,
+                    "std": std_val,
+                    "n_samples": len(values),
+                }
+            )
+
+    return pd.DataFrame(results)
+
+
 def multi_label_classification_metrics(
     y_true: np.ndarray,
     y_pred: np.ndarray,

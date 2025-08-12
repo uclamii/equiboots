@@ -13,8 +13,9 @@ from scipy.interpolate import interp1d
 from matplotlib.lines import Line2D
 import seaborn as sns
 from packaging import version
-from .metrics import regression_metrics, calibration_auc, area_trap
+from .metrics import regression_metrics, calibration_auc, calculate_bootstrap_stats
 from typing import Dict, List, Optional, Union, Tuple, Set, Callable
+
 
 SEABORN_OLD = version.parse(sns.__version__) < version.parse("0.13.2")
 
@@ -1664,10 +1665,28 @@ def eq_plot_metrics_forest(
 
     if reference_group:
         ref_value = valid_groups[reference_group][metric_name]
-        ax.axvline(ref_value, linestyle=":", color="gray", alpha=0.8, zorder=2)
+        ax.axvline(
+            x=ref_value,
+            color="red",
+            linestyle="--",
+            alpha=0.7,
+            label=f"Ref. group",
+        )
 
     if statistical_tests:
         legend_elements = []
+
+        legend_elements.append(
+            Line2D(
+                [0],
+                [0],
+                linestyle="--",
+                color="red",
+                markerfacecolor="black",
+                markersize=8,
+                label="Ref. group",
+            )
+        )
 
         if (
             statistical_tests.get("omnibus")
@@ -1715,77 +1734,117 @@ def eq_plot_metrics_forest(
 
 
 def eq_plot_bootstrap_forest(
-    boot_sliced_data: List[Dict[str, Dict[str, np.ndarray]]],
-    curve_type: str = "roc",
+    group_boot_metrics: List[Dict[str, Dict[str, np.ndarray]]],
+    metric: str = "Accuracy",
     reference_group: Optional[str] = None,
-    common_grid: np.ndarray = np.linspace(0, 1, 100),
     figsize: Tuple[float, float] = (6, 4),
     save_path: Optional[str] = None,
     filename: str = "bootstrap_forest",
-    dpi: int = 100,
+    title: str = None,
+    statistical_tests: Optional[Dict[str, Dict[str, bool]]] = None,
 ) -> None:
     """
-    Create a forest plot of mean AUC, AUCPR or Brier score with 95% CI for each
+    Create a forest plot of any bootstrap metric with 95% CI for each
     group, and draw a dotted line through `reference_group` if provided.
+    Adds asterisks to group names with significant differences.
     """
-    valid_types = ["roc", "pr", "calibration"]
-    if curve_type not in valid_types:
-        raise ValueError(f"curve_type must be one of {valid_types}")
+    # Calculate mean and 95% CI for each metric per group
+    bootstrap_metrics = calculate_bootstrap_stats(group_boot_metrics, metric)
+    fig, ax = plt.subplots(figsize=figsize)
 
-    # build summary stats per group
-    summary: Dict[str, Tuple[float, float, float]] = {}
-    if curve_type == "calibration":
-        # Brier‐score bootstrap
-        boot_scores: Dict[str, List[float]] = {}
-        for sample in boot_sliced_data:
-            for grp, data in sample.items():
-                score = brier_score_loss(data["y_true"], data["y_prob"])
-                boot_scores.setdefault(grp, []).append(score)
-        for grp, scores in boot_scores.items():
-            mean = float(np.mean(scores))
-            lo, hi = np.percentile(scores, [2.5, 97.5])
-            summary[grp] = (mean, lo, hi)
+    # Sort groups for consistent ordering (optional)
+    stats_df = bootstrap_metrics.sort_values("mean", ascending=True)
+    y_pos = np.arange(len(stats_df))
+
+    # Prepare group labels with significance indicators
+    group_labels = []
+    has_significant = False
+    if statistical_tests:
+        metric_diff_key = f"{metric}_diff"
+        for group in stats_df["group"]:
+            if (
+                group in statistical_tests
+                and metric_diff_key in statistical_tests[group]
+                and statistical_tests[group][metric_diff_key].is_significant
+            ):
+                group_labels.append(f"{group}  $\\mathbf{{*}}$")
+                has_significant = True
+            else:
+                group_labels.append(group)
     else:
-        # ROC/AUCPR bootstrap
-        interp_data, grid_x = interpolate_bootstrapped_curves(
-            boot_sliced_data, common_grid, curve_type
+        group_labels = stats_df["group"].tolist()
+
+    for i, (_, row) in enumerate(stats_df.iterrows()):
+        ax.plot(
+            [row["ci_lower"], row["ci_upper"]], [i, i], "k-", linewidth=2, alpha=0.7
         )
-        for grp, curves in interp_data.items():
-            vals = [c for c in curves if not np.isnan(c).all()]
-            aucs = [np.trapz(y, grid_x) for y in vals]
-            mean = float(np.mean(aucs))
-            lo, hi = np.percentile(aucs, [2.5, 97.5])
-            summary[grp] = (mean, lo, hi)
+        ax.plot(
+            [row["ci_lower"], row["ci_lower"]],
+            [i - 0.1, i + 0.1],
+            "k-",
+            linewidth=2,
+            alpha=0.7,
+        )
+        ax.plot(
+            [row["ci_upper"], row["ci_upper"]],
+            [i - 0.1, i + 0.1],
+            "k-",
+            linewidth=2,
+            alpha=0.7,
+        )
 
-    # prepare plotting
-    groups = list(summary.keys())
-    y_pos = np.arange(len(groups))
-    means = [summary[g][0] for g in groups]
-    errs_lo = [summary[g][0] - summary[g][1] for g in groups]
-    errs_hi = [summary[g][2] - summary[g][0] for g in groups]
+    # Plot means as dots
+    colors = ["black" for group in stats_df["group"]]
+    ax.scatter(stats_df["mean"], y_pos, color=colors, s=75, zorder=5, alpha=0.8)
 
-    fig, ax = plt.subplots(figsize=figsize, dpi=dpi)
-    ax.errorbar(
-        means,
-        y_pos,
-        xerr=[errs_lo, errs_hi],
-        fmt="o",
-        capsize=4,
-        color="black",
-    )
+    # Add reference line if specified
+    if reference_group and reference_group in stats_df["group"].values:
+        ref_mean = stats_df[stats_df["group"] == reference_group]["mean"].iloc[0]
+        ax.axvline(
+            x=ref_mean,
+            color="red",
+            linestyle="--",
+            alpha=0.7,
+            label=f"Ref. group",
+        )
+
+    # Customize plot
     ax.set_yticks(y_pos)
-    ax.set_yticklabels(groups)
+    ax.set_yticklabels(group_labels)  # Use labels with asterisks
+    ax.set_xlabel(f"{metric} (95% CI)")
+    ax.set_ylabel("Groups")
 
-    label_map = {"roc": "AUC ROC", "pr": "AUCPR", "calibration": "Brier score"}
-    metric = label_map[curve_type]
-    ax.set_xlabel(f"Mean {metric} with 95% CI")
-    ax.set_title(f"Forest plot of {metric}")
-    ax.invert_yaxis()
+    if title is None:
+        title = f"Forest Plot: {metric} by Group"
+    ax.set_title(title)
 
-    # draw the reference‐group line
-    if reference_group and (reference_group in summary):
-        ref_mean = summary[reference_group][0]
-        ax.axvline(ref_mean, linestyle=":", color="gray")
+    # Add grid
+    ax.grid(True, alpha=0.3, axis="x")
+
+    # Add legends
+    legend_elements = []
+    if reference_group:
+        legend_elements.append(
+            plt.Line2D(
+                [0], [0], color="red", linestyle="--", alpha=0.7, label="Ref. group"
+            )
+        )
+    if has_significant:
+        legend_elements.append(
+            Line2D(
+                [0],
+                [0],
+                marker="*",
+                color="w",
+                markerfacecolor="black",
+                markersize=10,
+                label="Omnibus test significant",
+                linestyle="None",
+            )
+        )
+
+    if legend_elements:
+        ax.legend(handles=legend_elements)
 
     plt.tight_layout()
     save_or_show_plot(fig, save_path, filename)
