@@ -1606,11 +1606,11 @@ def eq_plot_metrics_forest(
     sort_groups: bool = True,
     ascending: bool = True,
     title: str = None,
+    statistical_tests: Optional[Dict[str, bool]] = None,
 ) -> None:
     """
     Create a forest plot of point estimates for a specific metric across groups.
     """
-
     valid_groups = {
         group: metrics
         for group, metrics in group_metrics.items()
@@ -1625,11 +1625,21 @@ def eq_plot_metrics_forest(
             f"Reference group '{reference_group}' not found in valid groups: {list(valid_groups.keys())}"
         )
 
-    # Extract metric values
     groups = list(valid_groups.keys())
     values = [valid_groups[group][metric_name] for group in groups]
 
-    # Sort groups by metric value if requested
+    # Add statistical significance markers
+    if statistical_tests:
+        for group in groups:
+            if group in statistical_tests and statistical_tests[group].is_significant:
+                groups[groups.index(group)] += " ▲"
+
+        if (
+            statistical_tests.get("omnibus")
+            and statistical_tests["omnibus"].is_significant
+        ):
+            groups = [f"{group} *" for group in groups]
+
     if sort_groups:
         sorted_pairs = sorted(
             zip(groups, values), key=lambda x: x[1], reverse=not ascending
@@ -1638,14 +1648,13 @@ def eq_plot_metrics_forest(
         groups, values = list(groups), list(values)
 
     y_pos = np.arange(len(groups))
-
     fig, ax = plt.subplots(figsize=figsize)
     ax.scatter(values, y_pos, s=64, color="black", zorder=3)
     ax.set_yticks(y_pos)
     ax.set_yticklabels(groups)
     ax.invert_yaxis()
-
     ax.set_xlabel(f"{metric_name}")
+
     if title is None:
         ax.set_title(f"Forest Plot: {metric_name} by Group")
     else:
@@ -1656,6 +1665,50 @@ def eq_plot_metrics_forest(
     if reference_group:
         ref_value = valid_groups[reference_group][metric_name]
         ax.axvline(ref_value, linestyle=":", color="gray", alpha=0.8, zorder=2)
+
+    if statistical_tests:
+        legend_elements = []
+
+        if (
+            statistical_tests.get("omnibus")
+            and statistical_tests["omnibus"].is_significant
+        ):
+            legend_elements.append(
+                Line2D(
+                    [0],
+                    [0],
+                    marker="*",
+                    color="w",
+                    markerfacecolor="black",
+                    markersize=10,
+                    label="Omnibus test significant",
+                    linestyle="None",
+                )
+            )
+
+        original_groups = list(valid_groups.keys())
+        group_tests_significant = any(
+            group in statistical_tests and statistical_tests[group].is_significant
+            for group in original_groups
+        )
+
+        if group_tests_significant:
+            legend_elements.append(
+                Line2D(
+                    [0],
+                    [0],
+                    marker="^",
+                    color="w",
+                    markerfacecolor="black",
+                    markersize=8,
+                    label="Group test significant",
+                    linestyle="None",
+                )
+            )
+
+        # Add legend if there are elements to show
+        if legend_elements:
+            ax.legend(handles=legend_elements, loc="best")
 
     plt.tight_layout()
     save_or_show_plot(fig, save_path, filename)
