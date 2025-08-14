@@ -1776,7 +1776,11 @@ def eq_plot_bootstrap_forest(
 
     for i, (_, row) in enumerate(stats_df.iterrows()):
         ax.plot(
-            [row["ci_lower"], row["ci_upper"]], [i, i], "k-", linewidth=2, alpha=0.7
+            [row["ci_lower"], row["ci_upper"]],
+            [i, i],
+            "k-",
+            linewidth=2,
+            alpha=0.7,
         )
         ax.plot(
             [row["ci_lower"], row["ci_lower"]],
@@ -1826,7 +1830,12 @@ def eq_plot_bootstrap_forest(
     if reference_group:
         legend_elements.append(
             plt.Line2D(
-                [0], [0], color="red", linestyle="--", alpha=0.7, label="Ref. group"
+                [0],
+                [0],
+                color="red",
+                linestyle="--",
+                alpha=0.7,
+                label="Ref. group",
             )
         )
     if has_significant:
