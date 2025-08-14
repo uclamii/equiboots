@@ -21,9 +21,9 @@ transparency, bias mitigation, and outcome fairness are critical for responsible
 deployment.
 
 PyPI: https://pypi.org/project/equiboots  
-Documentation: https://uclamii.github.io/equiboots/
+Documentation: https://uclamii.github.io/equiboots_docs/
 
-Version: 0.0.1a
+Version: 0.0.1a1
 """
 
 
@@ -31,9 +31,11 @@ Version: 0.0.1a
 __doc__ = detailed_doc
 
 
-__version__ = "0.0.1a"
-__author__ = "Leonid Shpaner, Arthur Funnell, Al Rahrooh, Panayiotis Petousis"
-__email__ = "lshpaner@ucla.edu; alafunnell@gmail.com; arahrooh@ucla.edu; pp89@ucla.edu"
+__version__ = "0.0.1a1"
+__author__ = (
+    "Leonid Shpaner, Arthur Funnell, Panayiotis Petousis, Al Rahrooh, Colin Beam"
+)
+__email__ = "lshpaner@ucla.edu; alafunnell@gmail.com; pp89@ucla.edu; arahrooh@ucla.edu; CBeam@mednet.ucla.edu"
 
 
 # Define the custom help function
