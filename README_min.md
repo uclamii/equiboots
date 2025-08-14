@@ -65,7 +65,7 @@ If you use `equiboots` in your research or projects, please consider citing it.
    month        = mar,
    year         = 2025,
    publisher    = {Zenodo},
-   version      = {0.0.1a},
+   version      = {0.0.1a1},
    doi          = {10.5281/zenodo.15086941},
    url          = {https://doi.org/10.5281/zenodo.15086941}
 }
