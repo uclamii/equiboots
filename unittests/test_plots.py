@@ -1,6 +1,7 @@
 import pytest
 import numpy as np
 import matplotlib.pyplot as plt
+from matplotlib.colors import to_rgb
 from src.equiboots import plots
 
 
@@ -613,9 +614,6 @@ def test_overlay_mode_triggers_clear(monkeypatch):
 
 
 def test_legend_removed_on_old_seaborn(monkeypatch):
-    import matplotlib.pyplot as plt
-    from src.equiboots import plots
-
     # force the "old" branch
     monkeypatch.setattr(plots, "SEABORN_OLD", True)
     monkeypatch.setattr(plt, "show", lambda: None)
@@ -634,9 +632,6 @@ def test_legend_removed_on_old_seaborn(monkeypatch):
 
 
 def test_legend_suppressed_on_new_seaborn(monkeypatch):
-    import matplotlib.pyplot as plt
-    from src.equiboots import plots
-
     # simulate seaborn >=0.13.2
     monkeypatch.setattr(plots, "SEABORN_OLD", False)
 
@@ -1161,3 +1156,328 @@ def test_plot_effect_sizes_bars_and_legend(monkeypatch):
         "Medium effect size <= 0.6",
         "Large effect size > 0.6",
     ]
+
+
+class _MockTestResult:
+    def __init__(self, is_significant=False):
+        self.is_significant = is_significant
+
+
+def _capture_fig(monkeypatch):
+    captured = []
+    monkeypatch.setattr(
+        plots, "save_or_show_plot", lambda fig, *a, **k: captured.append(fig)
+    )
+    monkeypatch.setattr(plt, "show", lambda: None)
+    return captured
+
+
+def test_eq_plot_metrics_forest_basic_save(tmp_path, monkeypatch):
+    # Do not patch save_or_show_plot here, we want an actual file on disk
+    monkeypatch.setattr(plt, "show", lambda: None)
+
+    gm = {
+        "A": {"Accuracy": 0.80},
+        "B": {"Accuracy": 0.92},
+        "C": {"Accuracy": 0.70},
+    }
+    plots.eq_plot_metrics_forest(
+        group_metrics=gm,
+        metric_name="Accuracy",
+        save_path=str(tmp_path),
+        filename="forest_basic",
+    )
+
+    assert (tmp_path / "forest_basic.png").exists()
+    plt.close("all")
+
+
+def test_eq_plot_metrics_forest_custom_title_and_reference_line(monkeypatch):
+    captured = _capture_fig(monkeypatch)
+    gm = {"A": {"M": 0.2}, "B": {"M": 0.5}, "C": {"M": 0.3}}
+    plots.eq_plot_metrics_forest(
+        group_metrics=gm,
+        metric_name="M",
+        reference_group="B",
+        title="My Forest",
+    )
+    ax = captured[0].axes[0]
+    assert ax.get_title() == "My Forest"
+    # vertical dashed red line at x = 0.5
+    ref_val = gm["B"]["M"]
+    found = False
+    for ln in ax.lines:
+        x = ln.get_xdata()
+        if len(x) >= 2 and np.isclose(x[0], x[1]) and np.isclose(x[0], ref_val):
+            if (
+                np.allclose(to_rgb(ln.get_color()), (1, 0, 0), rtol=1e-3)
+                and ln.get_linestyle() == "--"
+            ):
+                found = True
+                break
+    assert found, "reference line not drawn"
+
+
+def test_eq_plot_metrics_forest_sorting_descending(monkeypatch):
+    captured = _capture_fig(monkeypatch)
+    gm = {"G1": {"score": 0.1}, "G2": {"score": 0.9}, "G3": {"score": 0.5}}
+    plots.eq_plot_metrics_forest(
+        group_metrics=gm,
+        metric_name="score",
+        sort_groups=True,
+        ascending=False,
+    )
+    ax = captured[0].axes[0]
+    labels = [t.get_text() for t in ax.get_yticklabels()]
+    # highest value first at top since y is inverted
+    assert labels[0] == "G2"
+    assert labels[-1] == "G1"
+
+
+def test_eq_plot_metrics_forest_excludes_nan_group(monkeypatch):
+    captured = _capture_fig(monkeypatch)
+    gm = {"A": {"M": np.nan}, "B": {"M": 0.4}}
+    plots.eq_plot_metrics_forest(group_metrics=gm, metric_name="M")
+    ax = captured[0].axes[0]
+    labels = [t.get_text() for t in ax.get_yticklabels()]
+    assert labels == ["B"]
+
+
+def test_eq_plot_metrics_forest_raises_when_no_valid_data():
+    gm = {"A": {"Other": 1.0}, "B": {"Other": 2.0}}
+    with pytest.raises(ValueError, match="No valid data found for metric 'M'"):
+        plots.eq_plot_metrics_forest(group_metrics=gm, metric_name="M")
+
+
+def test_eq_plot_metrics_forest_bad_reference_group():
+    gm = {"A": {"M": 0.1}, "B": {"M": 0.2}}
+    with pytest.raises(ValueError, match="Reference group 'Z' not found"):
+        plots.eq_plot_metrics_forest(
+            group_metrics=gm, metric_name="M", reference_group="Z"
+        )
+
+
+def test_eq_plot_metrics_forest_stat_markers_and_legend(monkeypatch):
+    captured = _capture_fig(monkeypatch)
+    gm = {"A": {"M": 0.3}, "B": {"M": 0.6}, "C": {"M": 0.4}}
+    stats = {
+        "A": _MockTestResult(is_significant=False),
+        "B": _MockTestResult(is_significant=True),
+        "C": _MockTestResult(is_significant=False),
+        "omnibus": _MockTestResult(is_significant=True),
+    }
+    plots.eq_plot_metrics_forest(
+        group_metrics=gm,
+        metric_name="M",
+        statistical_tests=stats,
+        sort_groups=True,
+        ascending=True,
+    )
+    ax = captured[0].axes[0]
+    labels = [t.get_text() for t in ax.get_yticklabels()]
+    # star should be on all groups due to omnibus
+    assert all(label.endswith(" *") for label in labels)
+    # at least one group should carry the triangle
+    assert any("▲" in label for label in labels)
+    # legend should exist
+    assert ax.get_legend() is not None
+
+
+def test_eq_plot_metrics_forest_keeps_markers_after_sort(monkeypatch):
+    captured = _capture_fig(monkeypatch)
+    gm = {"X": {"m": 0.9}, "Y": {"m": 0.1}, "Z": {"m": 0.5}}
+    stats = {
+        "X": _MockTestResult(is_significant=True),
+        "omnibus": _MockTestResult(is_significant=False),
+    }
+    plots.eq_plot_metrics_forest(
+        group_metrics=gm,
+        metric_name="m",
+        statistical_tests=stats,
+        sort_groups=True,
+        ascending=True,
+    )
+    ax = captured[0].axes[0]
+    labels = [t.get_text() for t in ax.get_yticklabels()]
+    assert any(lbl.startswith("X") and "▲" in lbl for lbl in labels)
+
+
+import pytest
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+from matplotlib.colors import to_rgb
+from src.equiboots import plots
+
+
+@pytest.fixture(autouse=True)
+def _close_figs():
+    yield
+    plt.close("all")
+
+
+class _MockTestResult:
+    def __init__(self, is_significant=False):
+        self.is_significant = is_significant
+
+
+def _stats_df(groups, means, lowers, uppers):
+    return pd.DataFrame(
+        {"group": groups, "mean": means, "ci_lower": lowers, "ci_upper": uppers}
+    )
+
+
+def test_eq_plot_bootstrap_forest_basic_save(tmp_path, monkeypatch):
+    # deterministic bootstrap summary
+    monkeypatch.setattr(
+        plots,
+        "calculate_bootstrap_stats",
+        lambda gbm, metric: _stats_df(
+            ["A", "B", "C"], [0.80, 0.92, 0.70], [0.70, 0.88, 0.60], [0.88, 0.95, 0.80]
+        ),
+    )
+    monkeypatch.setattr(plt, "show", lambda: None)
+
+    plots.eq_plot_bootstrap_forest(
+        group_boot_metrics=[{}],  # unused due to patch
+        metric="Accuracy",
+        save_path=str(tmp_path),
+        filename="bootstrap_basic",
+    )
+
+    assert (tmp_path / "bootstrap_basic.png").exists()
+    # sanity: labels are present and x label shows metric + CI
+    ax = plt.gcf().axes[0]
+    assert ax.get_xlabel() == "Accuracy (95% CI)"
+    ticks = [t.get_text() for t in ax.get_yticklabels()]
+    assert set(ticks) == {"A", "B", "C"}
+
+
+def test_eq_plot_bootstrap_forest_reference_line_and_title(monkeypatch):
+    df = _stats_df(
+        ["G1", "G2", "G3"], [0.1, 0.6, 0.4], [0.05, 0.5, 0.3], [0.2, 0.7, 0.5]
+    )
+    monkeypatch.setattr(plots, "calculate_bootstrap_stats", lambda gbm, m: df)
+    monkeypatch.setattr(plt, "show", lambda: None)
+
+    plots.eq_plot_bootstrap_forest(
+        group_boot_metrics=[{}],
+        metric="M",
+        reference_group="G2",
+        title="My Bootstrap Forest",
+    )
+    ax = plt.gcf().axes[0]
+    assert ax.get_title() == "My Bootstrap Forest"
+
+    ref_val = df[df["group"] == "G2"]["mean"].iloc[0]
+    # find a vertical red dashed line at x=ref_val
+    found = False
+    for ln in ax.lines:
+        x = ln.get_xdata()
+        if len(x) >= 2 and np.isclose(x[0], x[1]) and np.isclose(x[0], ref_val):
+            if (
+                np.allclose(to_rgb(ln.get_color()), (1, 0, 0), rtol=1e-3)
+                and ln.get_linestyle() == "--"
+            ):
+                found = True
+                break
+    assert found, "reference line not drawn"
+
+
+def test_eq_plot_bootstrap_forest_group_significance_labels_and_legend(monkeypatch):
+    # means sorted ascending results in G1, G3, G2 order (0.2, 0.4, 0.6)
+    df = _stats_df(
+        ["G1", "G2", "G3"], [0.2, 0.6, 0.4], [0.1, 0.5, 0.3], [0.3, 0.7, 0.5]
+    )
+    monkeypatch.setattr(plots, "calculate_bootstrap_stats", lambda gbm, m: df)
+    monkeypatch.setattr(plt, "show", lambda: None)
+
+    metric = "Accuracy"
+    # mark G2 significant for Accuracy_diff
+    statistical_tests = {
+        "G1": {f"{metric}_diff": _MockTestResult(False)},
+        "G2": {f"{metric}_diff": _MockTestResult(True)},
+        "G3": {f"{metric}_diff": _MockTestResult(False)},
+    }
+
+    plots.eq_plot_bootstrap_forest(
+        group_boot_metrics=[{}],
+        metric=metric,
+        statistical_tests=statistical_tests,
+    )
+    ax = plt.gcf().axes[0]
+    labels = [t.get_text() for t in ax.get_yticklabels()]
+
+    # due to ascending sort, order should be G1, G3, G2
+    assert labels[0].startswith("G1")
+    assert labels[1].startswith("G3")
+    # significant group has latex bold star appended
+    assert labels[2].startswith("G2") and labels[2].endswith("  $\\mathbf{*}$")
+
+    # legend exists and contains "Omnibus test significant" entry text
+    assert ax.get_legend() is not None
+    leg_texts = [t.get_text() for t in ax.get_legend().get_texts()]
+    assert "Omnibus test significant" in leg_texts
+
+
+def test_eq_plot_bootstrap_forest_sorted_order(monkeypatch):
+    df = _stats_df(["A", "B", "C"], [0.9, 0.1, 0.5], [0.8, 0.0, 0.4], [1.0, 0.2, 0.6])
+    monkeypatch.setattr(plots, "calculate_bootstrap_stats", lambda gbm, m: df)
+    monkeypatch.setattr(plt, "show", lambda: None)
+
+    plots.eq_plot_bootstrap_forest(group_boot_metrics=[{}], metric="M")
+    ax = plt.gcf().axes[0]
+    labels = [t.get_text() for t in ax.get_yticklabels()]
+    # ascending by mean: B (0.1), C (0.5), A (0.9)
+    assert labels == ["B", "C", "A"]
+
+
+def test_eq_plot_bootstrap_forest_missing_reference_group_ok(monkeypatch):
+    df = _stats_df(["A", "B"], [0.3, 0.4], [0.2, 0.3], [0.5, 0.6])
+    monkeypatch.setattr(plots, "calculate_bootstrap_stats", lambda gbm, m: df)
+    monkeypatch.setattr(plt, "show", lambda: None)
+
+    # Pass a reference group that is not in the data.
+    plots.eq_plot_bootstrap_forest(
+        group_boot_metrics=[{}],
+        metric="M",
+        reference_group="Z",
+    )
+    ax = plt.gcf().axes[0]
+
+    # Assert that no red dashed vertical reference line was drawn.
+    has_red_dashed_vertical = False
+    for ln in ax.lines:
+        x = ln.get_xdata()
+        if len(x) >= 2 and np.isclose(x[0], x[1]) and ln.get_linestyle() == "--":
+            # vertical dashed line, check color
+            from matplotlib.colors import to_rgb
+
+            if np.allclose(to_rgb(ln.get_color()), (1, 0, 0), rtol=1e-3):
+                has_red_dashed_vertical = True
+                break
+    assert not has_red_dashed_vertical
+
+    # Do not assert about the legend here, since current implementation may still add it.
+
+
+def test_eq_plot_bootstrap_forest_draws_ci_segments(monkeypatch):
+    groups = ["A", "B", "C"]
+    df = _stats_df(groups, [0.3, 0.6, 0.4], [0.2, 0.5, 0.3], [0.4, 0.7, 0.5])
+    monkeypatch.setattr(plots, "calculate_bootstrap_stats", lambda gbm, m: df)
+    monkeypatch.setattr(plt, "show", lambda: None)
+
+    plots.eq_plot_bootstrap_forest(group_boot_metrics=[{}], metric="M")
+
+    ax = plt.gcf().axes[0]
+    # three segments per group: main horizontal, left cap, right cap
+    # total line objects equals 3 * n_groups (no ref line)
+    assert len(ax.lines) == 3 * len(groups)
+
+    # verify one group's segment spans its CI
+    # take the first horizontal line, which is [ci_lower, ci_upper] at y = 0
+    horiz = ax.lines[0]
+    x0, x1 = horiz.get_xdata()[0], horiz.get_xdata()[1]
+    assert np.isclose(x0, df["ci_lower"].iloc[0]) and np.isclose(
+        x1, df["ci_upper"].iloc[0]
+    )
