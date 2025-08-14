@@ -1,3 +1,4 @@
+import pytest
 import pandas as pd
 import numpy as np
 from sklearn.preprocessing import MultiLabelBinarizer
@@ -11,6 +12,7 @@ from src.equiboots.metrics import (
     regression_metrics,
     metrics_dataframe,
     mean_squared_error,
+    calculate_bootstrap_stats,
 )
 
 
@@ -149,3 +151,101 @@ def test_root_mean_squared_error_equivalence():
     assert np.isclose(
         expected_rmse, actual_rmse
     ), "RMSE fallback does not match expected output"
+
+
+def test_calculate_bootstrap_stats_basic():
+    rng = np.random.RandomState(0)
+    n = 100
+
+    # Build 100 bootstrap samples, each with A and B
+    samples = []
+    a_vals = rng.beta(2, 5, size=n)  # deterministic given seed
+    b_vals = rng.beta(5, 2, size=n)
+    for i in range(n):
+        samples.append(
+            {
+                "A": {"Accuracy": float(a_vals[i])},
+                "B": {"Accuracy": float(b_vals[i])},
+            }
+        )
+
+    df = calculate_bootstrap_stats(samples, metric="Accuracy")
+
+    # Expect rows for both groups
+    assert set(df["group"]) == {"A", "B"}
+    # Compute expected stats with numpy for robustness
+    exp = {
+        "A": {
+            "mean": float(np.mean(a_vals)),
+            "std": float(np.std(a_vals)),
+            "lo": float(np.percentile(a_vals, 2.5)),
+            "hi": float(np.percentile(a_vals, 97.5)),
+            "n": len(a_vals),
+        },
+        "B": {
+            "mean": float(np.mean(b_vals)),
+            "std": float(np.std(b_vals)),
+            "lo": float(np.percentile(b_vals, 2.5)),
+            "hi": float(np.percentile(b_vals, 97.5)),
+            "n": len(b_vals),
+        },
+    }
+    for _, row in df.iterrows():
+        g = row["group"]
+        assert row["n_samples"] == exp[g]["n"]
+        assert row["mean"] == pytest.approx(exp[g]["mean"], rel=1e-12)
+        assert row["std"] == pytest.approx(exp[g]["std"], rel=1e-12)
+        assert row["ci_lower"] == pytest.approx(exp[g]["lo"], rel=1e-12)
+        assert row["ci_upper"] == pytest.approx(exp[g]["hi"], rel=1e-12)
+
+
+def test_calculate_bootstrap_stats_handles_missing_metric_entries():
+    # 5 samples where group B is missing the metric in two of them
+    samples = [
+        {"A": {"Accuracy": 0.8}, "B": {"Accuracy": 0.7}},
+        {"A": {"Accuracy": 0.9}},  # B missing
+        {"A": {"Accuracy": 0.85}, "B": {"Accuracy": 0.65}},
+        {"A": {"Accuracy": 0.80}},  # B missing
+        {"A": {"Accuracy": 0.95}, "B": {"Accuracy": 0.75}},
+    ]
+    df = calculate_bootstrap_stats(samples, metric="Accuracy").set_index("group")
+
+    # A should have 5 samples, B should have 3
+    assert df.loc["A", "n_samples"] == 5
+    assert df.loc["B", "n_samples"] == 3
+
+    a_vals = np.array([0.8, 0.9, 0.85, 0.80, 0.95])
+    b_vals = np.array([0.7, 0.65, 0.75])
+
+    assert df.loc["A", "mean"] == pytest.approx(np.mean(a_vals))
+    assert df.loc["B", "mean"] == pytest.approx(np.mean(b_vals))
+    assert df.loc["A", "std"] == pytest.approx(np.std(a_vals))
+    assert df.loc["B", "std"] == pytest.approx(np.std(b_vals))
+    assert df.loc["A", "ci_lower"] == pytest.approx(np.percentile(a_vals, 2.5))
+    assert df.loc["B", "ci_lower"] == pytest.approx(np.percentile(b_vals, 2.5))
+    assert df.loc["A", "ci_upper"] == pytest.approx(np.percentile(a_vals, 97.5))
+    assert df.loc["B", "ci_upper"] == pytest.approx(np.percentile(b_vals, 97.5))
+
+
+def test_calculate_bootstrap_stats_ignores_groups_not_in_first_sample():
+    # First sample has only A. Later samples introduce B, which should be ignored.
+    samples = [
+        {"A": {"Accuracy": 0.8}},  # first sample defines group set
+        {"A": {"Accuracy": 0.9}, "B": {"Accuracy": 0.7}},
+        {"A": {"Accuracy": 0.85}, "B": {"Accuracy": 0.75}},
+    ]
+    df = calculate_bootstrap_stats(samples, metric="Accuracy")
+    assert set(df["group"]) == {"A"}  # B not included by design
+
+
+def test_calculate_bootstrap_stats_empty_input_raises():
+    with pytest.raises(IndexError):
+        calculate_bootstrap_stats([], metric="Accuracy")
+
+
+def test_calculate_bootstrap_stats_metric_missing_everywhere_returns_empty_df():
+    # Group exists but requested metric not present in any sample
+    samples = [{"A": {"Precision": 0.9}}, {"A": {"Precision": 0.8}}]
+    out = calculate_bootstrap_stats(samples, metric="Accuracy")
+    assert isinstance(out, pd.DataFrame)
+    assert out.empty
