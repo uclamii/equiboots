@@ -33,9 +33,9 @@ __doc__ = detailed_doc
 
 __version__ = "0.0.1a1"
 __author__ = (
-    "Leonid Shpaner, Arthur Funnell, Panayiotis Petousis, Al Rahrooh, Colin Beam"
+    "Leonid Shpaner, Arthur Funnell, Al Rahrooh, Colin Beam, Panayiotis Petousis"
 )
-__email__ = "lshpaner@ucla.edu; alafunnell@gmail.com; pp89@ucla.edu; arahrooh@ucla.edu; CBeam@mednet.ucla.edu"
+__email__ = "lshpaner@ucla.edu; alafunnell@gmail.com; arahrooh@ucla.edu; CBeam@mednet.ucla.edu; pp89@ucla.edu"
 
 
 # Define the custom help function
