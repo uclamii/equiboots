@@ -516,6 +516,9 @@ def find_group_thresholds(
 def grouped_threshold_predict(
     y_prob, group_labels, group_thresholds, default_threshold=0.5
 ):
+    """
+    Convert predicted probabilities to class labels using a threshold per group.
+    """
     predictions = np.zeros_like(
         y_prob, dtype=int
     )  # Initialize array of 0s for predicted labels
