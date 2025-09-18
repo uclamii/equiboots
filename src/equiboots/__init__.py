@@ -1,5 +1,6 @@
 from .EquiBootsClass import *
 from .metrics import *
+from .healer import *
 from .plots import *
 from .logo import *
 
