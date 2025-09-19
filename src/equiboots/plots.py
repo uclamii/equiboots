@@ -1919,7 +1919,7 @@ def plot_effect_sizes(
     plt.legend()
     plt.grid(axis="y", linestyle="--")
 
-    plt.xticks(rotation=rotation, ha="right")
+    plt.xticks(rotation=rotation, ha="center")
     plt.tight_layout()
 
     # save or show
