@@ -65,7 +65,7 @@ If you use `equiboots` in your research or projects, please consider citing it.
    month        = mar,
    year         = 2025,
    publisher    = {Zenodo},
-   version      = {0.0.1a1},
+   version      = {0.0.1a2},
    doi          = {10.5281/zenodo.15086941},
    url          = {https://doi.org/10.5281/zenodo.15086941}
 }
@@ -77,4 +77,5 @@ If you have any questions or issues with `equiboots`, please open an issue on th
 
 ## Acknowledgements
 
-This work was supported by the UCLA Medical Informatics Institute (MII) and the Clinical and Translational Science Institute (CTSI). Special thanks to Alex Bui, PhD, for his invaluable guidance and support. Many thanks to David Elashoff, PhD, and Sitaram Vangala, M.S., for their statistical consultation.
+This work was supported by the UCLA Medical Informatics Institute (MII) and the Clinical and Translational Science Institute (CTSI). Special thanks to Alex Bui, PhD, for his invaluable guidance and support. Many thanks to David Elashoff, PhD, and Sitaram Vangala, M.S., for their statistical consultation. Thanks to Jayleen Mendoza for her contribution to model healing.
+
