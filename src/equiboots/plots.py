@@ -1876,6 +1876,7 @@ def plot_effect_sizes(
     title="Effect Sizes by Group",
     figsize=(8, 6),
     rotation=0,
+    legend_loc="best",
     save_path=None,
     filename="effect_sizes",
 ):
@@ -1916,10 +1917,12 @@ def plot_effect_sizes(
     plt.plot([], [], color="red", linestyle="--", label="Large effect size > 0.6")
 
     # Add a legend and grid
-    plt.legend()
+    plt.legend(loc=legend_loc)
     plt.grid(axis="y", linestyle="--")
 
-    plt.xticks(rotation=rotation, ha="center")
+    # decide horizontal alignment based on rotation
+    ha = "center" if rotation == 0 else "right"
+    plt.xticks(rotation=rotation, ha=ha)
     plt.tight_layout()
 
     # save or show
