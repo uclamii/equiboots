@@ -3,7 +3,7 @@ import numpy as np
 
 
 def metrics_table(
-    metrics, statistical_tests=None, differences=None, reference_group=None
+    metrics, statistical_tests=None, differences=None, reference_group=None, decimal_places=3
 ):
 
     ### check if group_differences is a string
@@ -45,9 +45,9 @@ def metrics_table(
                                 and metric in statistical_tests[group]
                                 and statistical_tests[group][metric].is_significant
                             ):
-                                group_means[metric] = f"{mean_value:.3f} *"
+                                group_means[metric] = f"{mean_value:.{decimal_places}f} *"
                             else:
-                                group_means[metric] = f"{mean_value:.3f}"
+                                group_means[metric] = f"{mean_value:.{decimal_places}f}"
                         else:
                             group_means[metric] = mean_value
                     else:
