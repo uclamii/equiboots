@@ -1,6 +1,7 @@
 from .EquiBootsClass import *
 from .metrics import *
 from .plots import *
+from .healer import *
 from .logo import *
 
 import sys
@@ -23,7 +24,7 @@ deployment.
 PyPI: https://pypi.org/project/equiboots  
 Documentation: https://uclamii.github.io/equiboots_docs/
 
-Version: 0.0.1a4
+Version: 0.0.1a5
 """
 
 
@@ -31,7 +32,7 @@ Version: 0.0.1a4
 __doc__ = detailed_doc
 
 
-__version__ = "0.0.1a4"
+__version__ = "0.0.1a5"
 __author__ = (
     "Leonid Shpaner, Arthur Funnell, Al Rahrooh, Colin Beam, Panayiotis Petousis"
 )
