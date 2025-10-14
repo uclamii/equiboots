@@ -1397,7 +1397,7 @@ def eq_group_metrics_plot(
                     color="w",
                     markerfacecolor="black",
                     markersize=10,
-                    label="Statistically Signficanct Difference",
+                    label="Statistically Significant Difference",
                 ),
             ]
             stat_legend = fig.legend(
