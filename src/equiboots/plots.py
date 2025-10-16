@@ -1605,9 +1605,11 @@ def eq_plot_metrics_forest(
     save_path: Optional[str] = None,
     filename: str = "points_forest",
     sort_groups: bool = True,
+    sort_alphabetically: bool = False,
     ascending: bool = True,
     title: str = None,
     statistical_tests: Optional[Dict[str, bool]] = None,
+    x_lim: Optional[Tuple[float, float]] = None,
 ) -> None:
     """
     Create a forest plot of point estimates for a specific metric across groups.
@@ -1648,6 +1650,12 @@ def eq_plot_metrics_forest(
         groups, values = zip(*sorted_pairs)
         groups, values = list(groups), list(values)
 
+    # Optional alphabetical sorting
+    if sort_alphabetically:
+        sorted_pairs = sorted(zip(groups, values), key=lambda x: x[0])
+        groups, values = zip(*sorted_pairs)
+        groups, values = list(groups), list(values)
+
     y_pos = np.arange(len(groups))
     fig, ax = plt.subplots(figsize=figsize)
     ax.scatter(values, y_pos, s=64, color="black", zorder=3)
@@ -1672,6 +1680,9 @@ def eq_plot_metrics_forest(
             alpha=0.7,
             label=f"Ref. group",
         )
+
+    if x_lim is not None:
+        ax.set_xlim(x_lim)
 
     if statistical_tests:
         legend_elements = []
