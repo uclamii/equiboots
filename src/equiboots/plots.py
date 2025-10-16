@@ -761,7 +761,7 @@ def _plot_group_curve_ax(
         smoothed = sm.nonparametric.lowess(y, x, frac=lowess)
         x_s, y_s = smoothed[:, 0], smoothed[:, 1]
 
-        # reuse your helpers to measure area
+        # reuse helpers to measure area
         lowess_auc = calibration_auc(x_s, y_s)
 
         # build the style for LOWESS: prefer lowess_kwargs → curve_kwargs → hard defaults
@@ -1397,7 +1397,7 @@ def eq_group_metrics_plot(
                     color="w",
                     markerfacecolor="black",
                     markersize=10,
-                    label="Statistically Signficanct Difference",
+                    label="Statistically Significant Difference",
                 ),
             ]
             stat_legend = fig.legend(
@@ -1605,9 +1605,11 @@ def eq_plot_metrics_forest(
     save_path: Optional[str] = None,
     filename: str = "points_forest",
     sort_groups: bool = True,
+    sort_alphabetically: bool = False,
     ascending: bool = True,
     title: str = None,
     statistical_tests: Optional[Dict[str, bool]] = None,
+    x_lim: Optional[Tuple[float, float]] = None,
 ) -> None:
     """
     Create a forest plot of point estimates for a specific metric across groups.
@@ -1648,6 +1650,12 @@ def eq_plot_metrics_forest(
         groups, values = zip(*sorted_pairs)
         groups, values = list(groups), list(values)
 
+    # Optional alphabetical sorting
+    if sort_alphabetically:
+        sorted_pairs = sorted(zip(groups, values), key=lambda x: x[0])
+        groups, values = zip(*sorted_pairs)
+        groups, values = list(groups), list(values)
+
     y_pos = np.arange(len(groups))
     fig, ax = plt.subplots(figsize=figsize)
     ax.scatter(values, y_pos, s=64, color="black", zorder=3)
@@ -1672,6 +1680,9 @@ def eq_plot_metrics_forest(
             alpha=0.7,
             label=f"Ref. group",
         )
+
+    if x_lim is not None:
+        ax.set_xlim(x_lim)
 
     if statistical_tests:
         legend_elements = []
@@ -1742,6 +1753,8 @@ def eq_plot_bootstrap_forest(
     filename: str = "bootstrap_forest",
     title: str = None,
     statistical_tests: Optional[Dict[str, Dict[str, bool]]] = None,
+    x_lim: Optional[Tuple[float, float]] = None,
+    sort_alphabetically: bool = False,
 ) -> None:
     """
     Create a forest plot of any bootstrap metric with 95% CI for each
@@ -1753,7 +1766,12 @@ def eq_plot_bootstrap_forest(
     fig, ax = plt.subplots(figsize=figsize)
 
     # Sort groups for consistent ordering (optional)
-    stats_df = bootstrap_metrics.sort_values("mean", ascending=True)
+    # Sorting logic
+    if sort_alphabetically:
+        stats_df = bootstrap_metrics.sort_values("group", ascending=True)
+    else:
+        stats_df = bootstrap_metrics.sort_values("mean", ascending=True)
+
     y_pos = np.arange(len(stats_df))
 
     # Prepare group labels with significance indicators
@@ -1854,6 +1872,9 @@ def eq_plot_bootstrap_forest(
 
     if legend_elements:
         ax.legend(handles=legend_elements)
+
+    if x_lim is not None:
+        ax.set_xlim(x_lim)
 
     plt.tight_layout()
     save_or_show_plot(fig, save_path, filename)
