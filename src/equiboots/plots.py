@@ -761,7 +761,7 @@ def _plot_group_curve_ax(
         smoothed = sm.nonparametric.lowess(y, x, frac=lowess)
         x_s, y_s = smoothed[:, 0], smoothed[:, 1]
 
-        # reuse your helpers to measure area
+        # reuse helpers to measure area
         lowess_auc = calibration_auc(x_s, y_s)
 
         # build the style for LOWESS: prefer lowess_kwargs → curve_kwargs → hard defaults
@@ -1753,6 +1753,8 @@ def eq_plot_bootstrap_forest(
     filename: str = "bootstrap_forest",
     title: str = None,
     statistical_tests: Optional[Dict[str, Dict[str, bool]]] = None,
+    x_lim: Optional[Tuple[float, float]] = None,
+    sort_alphabetically: bool = False,
 ) -> None:
     """
     Create a forest plot of any bootstrap metric with 95% CI for each
@@ -1764,7 +1766,12 @@ def eq_plot_bootstrap_forest(
     fig, ax = plt.subplots(figsize=figsize)
 
     # Sort groups for consistent ordering (optional)
-    stats_df = bootstrap_metrics.sort_values("mean", ascending=True)
+    # Sorting logic
+    if sort_alphabetically:
+        stats_df = bootstrap_metrics.sort_values("group", ascending=True)
+    else:
+        stats_df = bootstrap_metrics.sort_values("mean", ascending=True)
+
     y_pos = np.arange(len(stats_df))
 
     # Prepare group labels with significance indicators
@@ -1865,6 +1872,9 @@ def eq_plot_bootstrap_forest(
 
     if legend_elements:
         ax.legend(handles=legend_elements)
+
+    if x_lim is not None:
+        ax.set_xlim(x_lim)
 
     plt.tight_layout()
     save_or_show_plot(fig, save_path, filename)
