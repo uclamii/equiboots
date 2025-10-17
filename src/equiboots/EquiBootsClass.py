@@ -8,6 +8,7 @@ from .metrics import (
     binary_classification_metrics,
     multi_label_classification_metrics,
     regression_metrics,
+    get_custom_metrics
 )
 from .StatisticalTester import StatisticalTester, StatTestResult
 from typing import Optional, Dict, Any, List
@@ -351,54 +352,44 @@ class EquiBoots:
 
         return data
 
-    def get_metrics(self, sliced_dict) -> dict:
+    def get_metrics(self, sliced_dict, metric_list: Optional[List[str]] = None) -> dict:
         """Calculate metrics for each group based on the task type."""
         if self.bootstrap_flag:
             print("Calculating metrics for each bootstrap:")
-            return [self.get_groups_metrics(sliced) for sliced in tqdm(sliced_dict)]
+            return [self.get_groups_metrics(sliced, metric_list) for sliced in tqdm(sliced_dict)]
         else:
-            return self.get_groups_metrics(sliced_dict)
+            return self.get_groups_metrics(sliced_dict, metric_list)
 
-    def get_groups_metrics(self, sliced_dict: dict) -> dict:
-        """Calculate metrics for each group based on the task type."""
+    def get_groups_metrics(self, sliced_dict: dict, metric_list: Optional[List[str]] = None) -> dict:
+        """Calculate metrics for each group based on the task type or a custom list."""
         sliced_dict_metrics = {}
 
         for group, data in sliced_dict.items():
+            y_true = data["y_true"]
+            y_pred = data["y_pred"]
+            y_prob = data.get("y_prob", None)
 
-            if self.task == "binary_classification":
-                y_true = data["y_true"]
-                y_prob = data["y_prob"]
-                y_pred = data["y_pred"]
-                metrics = binary_classification_metrics(
-                    y_true,
-                    y_pred,
-                    y_prob,
-                )
-            elif self.task == "multi_class_classification":
-                y_true = data["y_true"]
-                y_prob = data["y_prob"]
-                y_pred = data["y_pred"]
-                n_classes = len(np.unique(np.concatenate([y_true, y_pred])))
-                metrics = multi_class_classification_metrics(
-                    y_true, y_pred, y_prob, n_classes
-                )
-            elif self.task == "multi_label_classification":
-                y_true = data["y_true"]
-                y_prob = data["y_prob"]
-                y_pred = data["y_pred"]
-                metrics = multi_label_classification_metrics(
-                    y_true,
-                    y_pred,
-                    y_prob,
-                )
-            elif self.task == "regression":
-                y_true = data["y_true"]
-                y_pred = data["y_pred"]
-                metrics = regression_metrics(y_true, y_pred)
+            if metric_list is not None:
+                # Only compute the requested metrics, using get_scorer pattern
+                metrics = get_custom_metrics(y_true, y_pred, metric_list, y_prob)
+            else:
+                # Fall back to your existing task-specific metric sets
+                if self.task == "binary_classification":
+                    metrics = binary_classification_metrics(y_true, y_pred, y_prob)
+                elif self.task == "multi_class_classification":
+                    n_classes = len(np.unique(np.concatenate([y_true, y_pred])))
+                    metrics = multi_class_classification_metrics(y_true, y_pred, y_prob, n_classes)
+                elif self.task == "multi_label_classification":
+                    metrics = multi_label_classification_metrics(y_true, y_pred, y_prob)
+                elif self.task == "regression":
+                    metrics = regression_metrics(y_true, y_pred)
+                else:
+                    raise ValueError(f"Unknown task type: {self.task}")
 
             sliced_dict_metrics[group] = metrics
 
         return sliced_dict_metrics
+
 
     def calculate_disparities(self, metric_dict, var_name: str) -> dict:
         """Calculate disparities metrics for each group based on the task type."""
