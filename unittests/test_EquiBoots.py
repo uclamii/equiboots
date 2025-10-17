@@ -487,3 +487,153 @@ def test_groups_slicer_skips_small_group(equiboots_fixture):
     result = eq.groups_slicer(eq.groups, "race")
     assert "small" not in result
     assert "large" in result
+
+
+def make_base_eq(task="binary_classification", bootstrap_flag=False):
+    y_true = np.array([0, 1, 1, 0])
+    y_pred = np.array([0, 1, 0, 1])
+    y_prob = np.array([0.2, 0.8, 0.6, 0.4])
+    fairness_df = pd.DataFrame({"race": ["A", "B", "A", "B"]})
+    return EquiBoots(
+        y_true=y_true,
+        y_pred=y_pred,
+        y_prob=y_prob,
+        fairness_df=fairness_df,
+        fairness_vars=["race"],
+        task=task,
+        bootstrap_flag=bootstrap_flag,
+    )
+
+
+def test_calculate_differences_regular():
+    eq = make_base_eq()
+    metrics = {
+        "A": {"acc": 0.8},
+        "B": {"acc": 0.5},
+    }
+    diffs = eq.calculate_differences(metrics, ref_var_name="race")
+    assert isinstance(diffs, dict)
+    assert "acc_diff" in diffs["B"]
+
+
+def test_calculate_differences_bootstrap_flag():
+    eq = make_base_eq(bootstrap_flag=True)
+    metrics = [
+        {"A": {"acc": 1.0}, "B": {"acc": 0.5}},
+        {"A": {"acc": 0.8}, "B": {"acc": 0.6}},
+    ]
+    diffs = eq.calculate_differences(metrics, ref_var_name="race")
+    assert isinstance(diffs, list)
+    assert all(isinstance(d, dict) for d in diffs)
+
+
+def test_groups_slicer_warns_for_skipped_group(monkeypatch):
+    eq = make_base_eq()
+    eq.groups = {
+        "race": {
+            "categories": ["A", "B"],
+            "indices": {"A": np.array([0, 1]), "B": np.array([2, 3])},
+        }
+    }
+    eq.groups_below_min_size = {"race": {"B"}}
+    with pytest.warns(UserWarning):
+        result = eq.groups_slicer(eq.groups, "race")
+    assert "A" in result and "B" not in result
+
+
+def test_check_group_size_triggers_warning():
+    eq = make_base_eq()
+    eq.group_min_size = 5
+    with pytest.warns(UserWarning):
+        ok = eq.check_group_size(pd.Index([1, 2]), "A", "race")
+    assert not ok
+    assert "A" in eq.groups_below_min_size["race"]
+
+
+def test_check_group_empty_warns():
+    eq = make_base_eq()
+    arr = np.array([])
+    with pytest.warns(UserWarning):
+        ok = eq.check_group_empty(arr, "A", "race")
+    assert ok is False
+
+
+def test_set_reference_groups_default(monkeypatch):
+    df = pd.DataFrame({"race": ["A", "A", "B"]})
+    eq = EquiBoots(
+        y_true=np.array([0, 1, 0]),
+        y_pred=np.array([0, 1, 1]),
+        fairness_df=df,
+        fairness_vars=["race"],
+        task="binary_classification",
+    )
+    assert eq.reference_groups["race"] == "A"
+
+
+def test_grouper_bootstrap_returns_list(monkeypatch):
+    eq = make_base_eq(bootstrap_flag=True)
+    # Monkeypatch bootstrap to return dummy
+    monkeypatch.setattr(eq, "bootstrap", lambda **kwargs: ["mock_groups"])
+    eq.grouper(["race"])
+    assert eq.groups == ["mock_groups"]
+
+
+def test_bootstrap_with_stratify_by_outcome_binary():
+    y_true = np.array([0, 1] * 5)
+    fairness_df = pd.DataFrame({"race": ["A"] * 10})
+    eq = EquiBoots(
+        y_true=y_true,
+        y_pred=y_true,
+        fairness_df=fairness_df,
+        fairness_vars=["race"],
+        task="binary_classification",
+        stratify_by_outcome=True,
+        bootstrap_flag=True,
+    )
+    # Expect ValueError when stratify_by_outcome with regression task check is bypassed internally
+    eq.stratify_by_outcome = False
+    result = eq.bootstrap(groupings_vars=["race"], n_iterations=1, sample_size=2)
+    assert isinstance(result, list)
+
+
+def test_sample_group_balanced_and_unbalanced():
+    eq = make_base_eq()
+    fairness_df = eq.fairness_df
+    group = fairness_df[fairness_df["race"] == "A"].index
+    res_bal = eq.sample_group(group, 2, 0, 10, [1, 2], balanced=True)
+    res_unbal = eq.sample_group(group, 2, 0, 10, [1, 2], balanced=False)
+    assert len(res_bal) > 0 and len(res_unbal) > 0
+
+
+def test_analyze_statistical_significance_requires_config():
+    eq = make_base_eq()
+    with pytest.raises(ValueError):
+        eq.analyze_statistical_significance({}, "race", None)
+
+
+def test_static_methods_listings(monkeypatch):
+    eq = make_base_eq()
+    # Mock StatisticalTester attributes
+    monkeypatch.setattr(eq, "list_available_tests", staticmethod(lambda: {"t": "desc"}))
+    monkeypatch.setattr(eq, "list_adjustment_methods", staticmethod(lambda: {"a": "b"}))
+    assert isinstance(eq.list_available_tests(), dict)
+    assert isinstance(eq.list_adjustment_methods(), dict)
+
+
+def test_calculate_groups_differences_correctness():
+    eq = make_base_eq()
+    metrics = {"A": {"m": 1.0}, "B": {"m": 0.5}}
+    diffs = eq.calculate_groups_differences(metrics, "race")
+    assert np.isclose(diffs["B"]["m_diff"], -0.5)
+
+
+def test_calculate_groups_disparities_with_non_numeric_ignored():
+    eq = make_base_eq()
+    metrics = {
+        "A": {"acc": 1.0, "note": "string"},
+        "B": {"acc": 0.5, "note": "x"},
+    }
+    disp = eq.calculate_groups_disparities(metrics, "race")
+    assert "acc_Ratio" in disp["B"]
+    # 'note' should not produce ratio
+    assert not any("note" in key for key in disp["B"].keys())

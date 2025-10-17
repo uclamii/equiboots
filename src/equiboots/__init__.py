@@ -2,6 +2,7 @@ from .EquiBootsClass import *
 from .metrics import *
 from .plots import *
 from .healer import *
+from .tables import *
 from .logo import *
 
 import sys
