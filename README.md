@@ -271,7 +271,7 @@ eqb.eq_group_metrics_plot(
 )
 ```
 
-![alt text](image-2.png)
+![](<img width="1990" height="1186" alt="image" src="https://github.com/user-attachments/assets/792a1bee-ed46-47f5-9236-a63c4abd286a" />)
 
 
 ## Reference
