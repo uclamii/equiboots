@@ -370,10 +370,8 @@ class EquiBoots:
             y_prob = data.get("y_prob", None)
 
             if metric_list is not None:
-                # Only compute the requested metrics, using get_scorer pattern
                 metrics = get_custom_metrics(y_true, y_pred, metric_list, y_prob)
             else:
-                # Fall back to your existing task-specific metric sets
                 if self.task == "binary_classification":
                     metrics = binary_classification_metrics(y_true, y_pred, y_prob)
                 elif self.task == "multi_class_classification":
