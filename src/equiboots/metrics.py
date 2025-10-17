@@ -123,22 +123,9 @@ def _score_with_scorer(
                 f"Metric '{metric_name}' requires probabilities (y_proba)."
             )
         y_score = y_proba
-        # Common convenience: for binary probs shaped (n,2), use positive class
         if y_proba.ndim == 2 and y_proba.shape[1] == 2:
             y_score = y_proba[:, 1]
         score = score_func(y_true, y_score, **kwargs)
-
-    elif needs_threshold:
-        # Many threshold-based metrics can use either decision_function or proba;
-        # we'll prefer y_proba if given, else fall back to y_pred (rarely ideal,
-        # but keeps it permissive for custom pipelines).
-        if y_proba is not None:
-            y_score = y_proba
-            if y_proba.ndim == 2 and y_proba.shape[1] == 2:
-                y_score = y_proba[:, 1]
-            score = score_func(y_true, y_score, **kwargs)
-        else:
-            score = score_func(y_true, y_pred, **kwargs)
 
     else:
         # Pure label-based metrics (accuracy, precision, recall, f1, etc.)
