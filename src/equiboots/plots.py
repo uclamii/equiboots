@@ -1355,8 +1355,8 @@ def eq_group_metrics_plot(
             if lg:
                 lg.remove()
 
-        ax.set_title(f"{name}_{col}")
-
+        metric_cols_clean = [col.replace("_", " ") for col in metric_cols]
+        ax.set_title(f"{name.capitalize()}: {metric_cols_clean[i]}")
         ax.set_xlabel("")
         ax.set_xticks(range(len(attributes)))
         labels = [
