@@ -14,7 +14,7 @@ from matplotlib.lines import Line2D
 import seaborn as sns
 from packaging import version
 from .metrics import regression_metrics, calibration_auc, calculate_bootstrap_stats
-from typing import Dict, List, Optional, Union, Tuple, Set, Callable
+from typing import Dict, List, Optional, Union, Tuple, Set, Callable, Any
 
 
 SEABORN_OLD = version.parse(sns.__version__) < version.parse("0.13.2")
@@ -1223,7 +1223,6 @@ def eq_plot_bootstrapped_group_curves(
 # Group and Disparity Metrics (Violin/Box/Seaborn Plots)
 ################################################################################
 
-
 def eq_group_metrics_plot(
     group_metrics: List[Dict[str, Dict[str, float]]],
     metric_cols: List[str],
@@ -1244,25 +1243,25 @@ def eq_group_metrics_plot(
     leg_cols: int = 6,
     y_lim: Optional[Tuple[float, float]] = None,
     statistical_tests: dict = None,
+    disparities: bool = False,
+    zero_line_kwargs: Optional[Dict[str, Any]] = None,
     **plot_kwargs: Dict[str, Union[str, float]],
 ) -> None:
     """
-    Plot group and disparity metrics as violin, box, or other seaborn plots with
-    optional pass/fail coloring.
+    Plot group and disparity metrics as violin, box, or other seaborn plots.
 
-    group_metrics         : list           - One dict per category mapping group
-    metric_cols           : list           - Metric names to plot
-    name                  : str            - Plot title or identifier
-    plot_kind             : str, default "violinplot" - Seaborn plot type
-    categories            : str or list    - Categories to include or 'all'
-    color_by_group        : bool, default True - Use separate colors per group
-    max_cols              : int or None    - Max columns in facet grid
-    strict_layout         : bool, default True - Apply tight layout adjustments
-    plot_thresholds       : tuple, default (0.0, 2.0) - (lower, upper) for pass/fail
-    show_pass_fail        : bool, default False - Color by pass/fail
-    y_lim                 : tuple or None  - y-axis limits as (min, max)
+    NEW:
+      disparities : bool, default False
+          If True, draw a red dotted line at y=0 on each subplot and add a
+          legend entry "Reference group (zero diff)".
+      zero_line_kwargs : dict or None
+          Matplotlib kwargs to style the zero line (defaults to red dotted).
+      Shared y-limits:
+          If y_lim is None, a single y-limit is computed across ALL subplots
+          to make them directly comparable.
+      Y-axis label:
+          Applied only on the left-most column.
     """
-
     if not isinstance(group_metrics, list):
         raise TypeError("group_metrics should be a list")
 
@@ -1288,14 +1287,39 @@ def eq_group_metrics_plot(
         )
     )
 
+    # ----- NEW: compute a shared y-limit across all panels when not provided -----
+    if y_lim is None:
+        vals = []
+        for row in group_metrics:
+            for attr in attributes:
+                if attr in row:
+                    for col in metric_cols:
+                        if col in row[attr]:
+                            v = row[attr][col]
+                            if isinstance(v, (int, float)):
+                                vals.append(v)
+        if len(vals) > 0:
+            vmin, vmax = min(vals), max(vals)
+            if vmin == vmax:  # avoid zero-range
+                pad = max(1e-6, abs(vmax) * 0.05)
+                y_lim = (vmin - pad, vmax + pad)
+            else:
+                pad = 0.05 * (vmax - vmin)
+                y_lim = (vmin - pad, vmax + pad)
+        else:
+            y_lim = (-1.0, 1.0)  # sensible fallback
+
     ## Initialise signficance checking
     significance_map = {}
     if statistical_tests:
         for group, metrics in statistical_tests.items():
             for metric_key, test_result in metrics.items():
-                ## we have to remove _diff for it to work
                 if metric_key in metric_cols and group in attributes:
                     significance_map[(group, metric_key)] = test_result.is_significant
+
+    # default styling for the zero reference line
+    if zero_line_kwargs is None:
+        zero_line_kwargs = dict(color="red", linestyle=":", linewidth=1, label="Reference group")
 
     for i, col in enumerate(metric_cols):
         ax = axs[i // n_cols, i % n_cols]
@@ -1327,7 +1351,6 @@ def eq_group_metrics_plot(
                 f"Unsupported plot_type: '{plot_type}'. Must be a valid seaborn plot type."
             )
 
-        ## assemble common args
         plot_args = dict(
             ax=ax,
             x=x_vals,
@@ -1335,28 +1358,31 @@ def eq_group_metrics_plot(
             hue=x_vals,
             palette={group_to_alpha[attr]: group_colors[attr] for attr in attributes},
         )
-        ## only pass legend=False on newer seaborn
         if not SEABORN_OLD:
             plot_args["legend"] = False
 
         try:
             plot_func(**plot_args, **plot_kwargs)
         except TypeError as e:
-            ## fallback for old seaborn which does not accept legend kwarg
             if SEABORN_OLD and "legend" in str(e):
                 plot_args.pop("legend", None)
                 plot_func(**plot_args, **plot_kwargs)
             else:
                 raise ValueError(f"Failed to plot with {plot_type}: {e}")
 
-        ## strip out the auto‐drawn legend on old seaborn
         if SEABORN_OLD:
             lg = ax.get_legend()
             if lg:
                 lg.remove()
 
-        metric_cols_clean = [col.replace("_", " ") for col in metric_cols]
+        metric_cols_clean = [m.replace("_", " ") for m in metric_cols]
         ax.set_title(f"{name.capitalize()}: {metric_cols_clean[i]}")
+
+        # ----- NEW: draw zero reference line for disparities -----
+        if disparities:
+            ax.axhline(0.0, **zero_line_kwargs)
+
+        # axes cosmetics
         ax.set_xlabel("")
         ax.set_xticks(range(len(attributes)))
         labels = [
@@ -1365,8 +1391,8 @@ def eq_group_metrics_plot(
             for attr in attributes
         ]
         ax.set_xticklabels(labels, rotation=0, fontweight="bold")
+
         for tick_label in ax.get_xticklabels():
-            # So our lookup doesn't break
             label_text = tick_label.get_text().replace(" *", "")
             attr = alpha_to_group[label_text]
             if show_pass_fail:
@@ -1375,11 +1401,22 @@ def eq_group_metrics_plot(
                 )
             else:
                 tick_label.set_color(base_colors.get(attr, "black"))
+
         if show_pass_fail:
             add_plot_threshold_lines(ax, lower, upper, len(attributes))
+
+        # ----- NEW: shared y-limits -----
         ax.set_ylim(y_lim)
+
+        # ----- NEW: y-axis label only for left column -----
+        if i % n_cols == 0:
+            ax.set_ylabel("Difference vs reference" if disparities else "Metric value")
+        else:
+            ax.set_ylabel("")
+
         ax.grid(show_grid)
 
+    # hide any unused axes
     for j in range(i + 1, n_rows * n_cols):
         axs[j // n_cols, j % n_cols].axis("off")
 
@@ -1388,23 +1425,26 @@ def eq_group_metrics_plot(
             fig, attributes, group_to_alpha, base_colors, show_pass_fail, leg_cols
         )
 
+        extra_legend_items = []
         if statistical_tests:
-            stat_legend_elements = [
+            extra_legend_items.append(
                 Line2D(
-                    [0],
-                    [0],
+                    [0], [0],
                     marker="*",
                     color="w",
                     markerfacecolor="black",
                     markersize=10,
                     label="Statistically Significant Difference",
-                ),
-            ]
-            stat_legend = fig.legend(
-                handles=stat_legend_elements,
-                loc="upper right",
-                bbox_to_anchor=(0.7, 1.1),
+                )
             )
+        if disparities:
+            # Dummy line handle for legend entry
+            extra_legend_items.append(
+                Line2D([0], [0], **{**zero_line_kwargs, "label": "Reference group"})
+            )
+
+        if extra_legend_items:
+            fig.legend(handles=extra_legend_items, loc="upper right", bbox_to_anchor=(0.7, 1.1))
 
     if strict_layout:
         plt.tight_layout(w_pad=2, h_pad=2, rect=[0.01, 0.01, 1.01, 1])
