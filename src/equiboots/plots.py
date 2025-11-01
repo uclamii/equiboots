@@ -1287,7 +1287,6 @@ def eq_group_metrics_plot(
         )
     )
 
-    # ----- NEW: compute a shared y-limit across all panels when not provided -----
     if y_lim is None:
         vals = []
         for row in group_metrics:
@@ -1378,7 +1377,6 @@ def eq_group_metrics_plot(
         metric_cols_clean = [m.replace("_", " ") for m in metric_cols]
         ax.set_title(f"{name.capitalize()}: {metric_cols_clean[i]}")
 
-        # ----- NEW: draw zero reference line for disparities -----
         if disparities:
             ax.axhline(0.0, **zero_line_kwargs)
 
@@ -1405,10 +1403,8 @@ def eq_group_metrics_plot(
         if show_pass_fail:
             add_plot_threshold_lines(ax, lower, upper, len(attributes))
 
-        # ----- NEW: shared y-limits -----
         ax.set_ylim(y_lim)
 
-        # ----- NEW: y-axis label only for left column -----
         if i % n_cols == 0:
             ax.set_ylabel("Difference vs reference" if disparities else "Metric value")
         else:
@@ -1438,7 +1434,6 @@ def eq_group_metrics_plot(
                 )
             )
         if disparities:
-            # Dummy line handle for legend entry
             extra_legend_items.append(
                 Line2D([0], [0], **{**zero_line_kwargs, "label": "Reference group"})
             )
