@@ -16,6 +16,7 @@ from sklearn.metrics import (
     r2_score,
     explained_variance_score,
     mean_squared_log_error,
+    get_scorer,
 )
 
 from sklearn.calibration import calibration_curve
@@ -33,7 +34,7 @@ except ImportError:  # < 1.4
 # ------------------------------------------------------------------------------
 
 from sklearn.preprocessing import MultiLabelBinarizer
-from typing import Optional, List, Dict, Tuple
+from typing import Optional, List, Dict, Tuple, Iterable
 
 
 def binary_classification_metrics(
@@ -91,6 +92,90 @@ def binary_classification_metrics(
             }
         )
     return metrics
+
+
+def _score_with_scorer(
+    metric_name: str,
+    y_true: np.ndarray,
+    y_pred: np.ndarray,
+    y_proba: Optional[np.ndarray] = None,
+) -> float:
+    """
+    Compute one metric given raw arrays by introspecting a sklearn Scorer.
+
+    This follows sklearn's scorer pattern so we don't hardcode which metrics
+    need probabilities vs. thresholds vs. predictions.
+    """
+    scorer = get_scorer(metric_name)  # raises KeyError if unknown
+
+    # Access Scorer internals (stable enough across recent sklearn versions)
+    score_func = getattr(scorer, "_score_func", None)
+    needs_proba = getattr(scorer, "_needs_proba", False)
+    needs_threshold = getattr(scorer, "_needs_threshold", False)
+    kwargs = getattr(scorer, "_kwargs", {}) or {}
+    sign = getattr(scorer, "_sign", 1)
+
+    if score_func is None:
+        raise ValueError(f"Scorer for '{metric_name}' has no _score_func.")
+
+    if needs_proba:
+        if y_proba is None:
+            raise ValueError(
+                f"Metric '{metric_name}' requires probabilities (y_proba)."
+            )
+        y_score = y_proba
+        if y_proba.ndim == 2 and y_proba.shape[1] == 2:
+            y_score = y_proba[:, 1]
+        score = score_func(y_true, y_score, **kwargs)
+
+    else:
+        # Pure label-based metrics (accuracy, precision, recall, f1, etc.)
+        score = score_func(y_true, y_pred, **kwargs)
+
+    return float(sign * score)
+
+
+def get_custom_metrics(
+    y_true: np.ndarray,
+    y_pred: np.ndarray,
+    metric_list: Iterable[str],
+    y_proba: Optional[np.ndarray] = None,
+) -> Dict[str, float]:
+    """
+    Calculate only the metrics listed in `metric_list`, using sklearn's get_scorer
+    pattern to decide whether to use predictions, thresholds, or probabilities.
+
+    Parameters
+    ----------
+    y_true : array-like of shape (n_samples,)
+    y_pred : array-like of shape (n_samples,)
+        Predicted class labels (for classification) or predictions (for regression).
+    metric_list : iterable of str
+        Names must match sklearn scorer names, e.g.:
+        - 'roc_auc', 'average_precision', 'neg_log_loss', 'brier_score_loss'
+        - 'accuracy', 'precision', 'recall', 'f1', 'f1_macro', 'balanced_accuracy'
+        - regression: 'r2', 'neg_mean_squared_error', etc.
+    y_proba : array-like of shape (n_samples,) or (n_samples, n_classes), optional
+        Class probabilities or scores when required (e.g., roc_auc).
+
+    Returns
+    -------
+    Dict[str, float]
+        Mapping metric name -> score.
+    """
+    results: Dict[str, float] = {}
+    for name in metric_list:
+        try:
+            results[name] = _score_with_scorer(name, y_true, y_pred, y_proba)
+        except KeyError:
+            # Unknown scorer name; skip but make it obvious what happened
+            # (you can raise instead, if you prefer strict behavior)
+            results[name] = np.nan
+        except Exception as e:
+            # If a specific metric fails (e.g., missing y_proba), record NaN
+            # to keep bootstraps flowing without hard failures.
+            results[name] = np.nan
+    return results
 
 
 def multi_class_prevalence(
