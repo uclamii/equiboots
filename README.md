@@ -37,7 +37,7 @@ pip install equiboots
 
 ## 📄 Official Documentation
 
-[Documentation](https://uclamii.github.io/equiboots_docs)
+[Documentation](https://uclamii.github.io/equiboots_docs/getting_started.html#)
 
 ## 🌐 Author Website
 
