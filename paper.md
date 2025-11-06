@@ -36,13 +36,11 @@ You can install the package directly from PyPI:
 pip install equiboots
 ```
 
-Source code: https://github.com/uclamii/equi_boots
+- Source code: https://github.com/uclamii/equi_boots
 
-Documentation: https://lshpaner.github.io/equiboots_docs
+- Documentation: https://lshpaner.github.io/equiboots_docs
 
-Tutorial: https://igit.me/equi
-
-DOI: https://doi.org/10.5281/zenodo.14002139
+- DOI: https://doi.org/10.5281/zenodo.14002139
 
 
 ## Statement of need
@@ -64,7 +62,7 @@ It provides transparent, statistically grounded tools for fairness auditing that
 ### Grouped Evaluation and Statistical Testing
 
 EquiBoots allows users to slice model predictions by sensitive attributes such as race or sex and compute group-specific metrics including AUC, precision, recall, and calibration.
-It includes built-in statistical testing modules (e.g., t-tests, Mann–Whitney U tests, bootstrapped differences) to determine whether disparities are statistically significant.
+It includes built-in statistical testing modules (e.g., Chi-Squared tests and bootstrapped differences) to determine whether disparities are statistically significant.
 
 Results can be visualized through grouped Receiver Operating Characteristic (ROC), Precision-Recall (PR) curves, and calibration curves, enabling interpretable fairness assessments.
 
