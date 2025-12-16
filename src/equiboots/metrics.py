@@ -37,6 +37,84 @@ from sklearn.preprocessing import MultiLabelBinarizer
 from typing import Optional, List, Dict, Tuple, Iterable
 
 
+SCORE_MAP = {
+    "Accuracy": "accuracy",
+    "Precision": "precision",
+    "Recall": "recall",
+    "F1 Score": "f1",
+    "Specificity": None,
+    "TP Rate": None,
+    "FP Rate": None,
+    "FN Rate": None,
+    "TN Rate": None,
+    "TP": None,
+    "FP": None,
+    "FN": None,
+    "TN": None,
+    "Prevalence": None,
+    "Predicted Prevalence": None,
+    "ROC AUC": "roc_auc",
+    "Average Precision Score": "average_precision",
+    "Log Loss": "neg_log_loss",
+    "Brier Score": "brier_score_loss",
+    "Calibration AUC": None,   # custom handled below
+}
+
+CONFUSION_METRICS = {
+    "TP", "FP", "FN", "TN",
+    "TP Rate", "FP Rate", "FN Rate", "TN Rate",
+    "Specificity",
+    "Prevalence",
+    "Predicted Prevalence",
+}
+
+CUSTOM_PROBA_METRICS = {
+    "Calibration AUC",
+}
+
+def fast_confusion_counts(
+    y_true: np.ndarray,
+    y_pred: np.ndarray,
+) -> tuple[int, int, int, int]:
+    """
+    Fast confusion-matrix counts using pure NumPy.
+
+    Returns
+    -------
+    tn, fp, fn, tp
+    """
+    y_true = y_true.astype(bool)
+    y_pred = y_pred.astype(bool)
+
+    tp = np.sum(y_true & y_pred)
+    tn = np.sum(~y_true & ~y_pred)
+    fp = np.sum(~y_true & y_pred)
+    fn = np.sum(y_true & ~y_pred)
+
+    return tn, fp, fn, tp
+
+
+def _confusion_metrics(y_true: np.ndarray, y_pred: np.ndarray) -> Dict[str, float]:
+    tn, fp, fn, tp = fast_confusion_counts(y_true, y_pred)
+
+    tp_fn = tp + fn
+    fp_tn = fp + tn
+
+    return {
+        "TP": tp,
+        "FP": fp,
+        "FN": fn,
+        "TN": tn,
+        "TP Rate": tp / tp_fn if tp_fn > 0 else 0.0,
+        "FP Rate": fp / fp_tn if fp_tn > 0 else 0.0,
+        "FN Rate": fn / tp_fn if tp_fn > 0 else 0.0,
+        "TN Rate": tn / fp_tn if fp_tn > 0 else 0.0,
+        "Specificity": tn / (tn + fp) if (tn + fp) > 0 else 0.0,
+        "Prevalence": np.mean(y_true),
+        "Predicted Prevalence": np.mean(y_pred),
+    }
+
+
 def binary_classification_metrics(
     y_true: np.ndarray, y_pred: np.ndarray, y_proba: Optional[np.ndarray] = None
 ) -> Dict[str, float]:
@@ -106,6 +184,9 @@ def _score_with_scorer(
     This follows sklearn's scorer pattern so we don't hardcode which metrics
     need probabilities vs. thresholds vs. predictions.
     """
+
+
+
     scorer = get_scorer(metric_name)  # raises KeyError if unknown
 
     # Access Scorer internals (stable enough across recent sklearn versions)
@@ -134,47 +215,59 @@ def _score_with_scorer(
 
     return float(sign * score)
 
-
 def get_custom_metrics(
     y_true: np.ndarray,
     y_pred: np.ndarray,
     metric_list: Iterable[str],
     y_proba: Optional[np.ndarray] = None,
 ) -> Dict[str, float]:
-    """
-    Calculate only the metrics listed in `metric_list`, using sklearn's get_scorer
-    pattern to decide whether to use predictions, thresholds, or probabilities.
 
-    Parameters
-    ----------
-    y_true : array-like of shape (n_samples,)
-    y_pred : array-like of shape (n_samples,)
-        Predicted class labels (for classification) or predictions (for regression).
-    metric_list : iterable of str
-        Names must match sklearn scorer names, e.g.:
-        - 'roc_auc', 'average_precision', 'neg_log_loss', 'brier_score_loss'
-        - 'accuracy', 'precision', 'recall', 'f1', 'f1_macro', 'balanced_accuracy'
-        - regression: 'r2', 'neg_mean_squared_error', etc.
-    y_proba : array-like of shape (n_samples,) or (n_samples, n_classes), optional
-        Class probabilities or scores when required (e.g., roc_auc).
-
-    Returns
-    -------
-    Dict[str, float]
-        Mapping metric name -> score.
-    """
     results: Dict[str, float] = {}
-    for name in metric_list:
+
+    metric_set = set(metric_list)
+
+    # ---- Decide what we need up front ----
+    needs_confusion = bool(metric_set & CONFUSION_METRICS)
+    needs_custom_proba = bool(metric_set & CUSTOM_PROBA_METRICS)
+
+    cm_metrics: Dict[str, float] = {}
+    if needs_confusion:
+        cm_metrics = _confusion_metrics(y_true, y_pred)
+
+    for display_name in metric_list:
         try:
-            results[name] = _score_with_scorer(name, y_true, y_pred, y_proba)
+            # 1. Confusion-matrix metrics
+            if display_name in CONFUSION_METRICS:
+                results[display_name] = cm_metrics.get(display_name, np.nan)
+                continue
+
+            # 2. Custom probability-based metrics
+            if display_name == "Calibration AUC":
+                if y_proba is None:
+                    results[display_name] = np.nan
+                else:
+                    prob_true, prob_pred = calibration_curve(
+                        y_true, y_proba, n_bins=10
+                    )
+                    results[display_name] = calibration_auc(prob_pred, prob_true)
+                continue
+
+            # 3. Sklearn scorers (via score_map)
+            scorer_name = SCORE_MAP.get(display_name)
+            if scorer_name is None:
+                results[display_name] = np.nan
+                continue
+
+            results[display_name] = _score_with_scorer(
+                scorer_name, y_true, y_pred, y_proba
+            )
+
         except KeyError:
-            # Unknown scorer name; skip but make it obvious what happened
-            # (you can raise instead, if you prefer strict behavior)
-            results[name] = np.nan
-        except Exception as e:
-            # If a specific metric fails (e.g., missing y_proba), record NaN
-            # to keep bootstraps flowing without hard failures.
-            results[name] = np.nan
+            results[display_name] = np.nan
+        except ValueError:
+            results[display_name] = np.nan
+
+
     return results
 
 
