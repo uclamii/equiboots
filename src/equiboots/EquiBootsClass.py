@@ -352,6 +352,9 @@ class EquiBoots:
 
         return data
 
+
+
+
     def get_metrics(self, sliced_dict, metric_list: Optional[List[str]] = None) -> dict:
         """Calculate metrics for each group based on the task type."""
         if self.bootstrap_flag:
