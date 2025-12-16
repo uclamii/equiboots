@@ -249,3 +249,146 @@ def test_calculate_bootstrap_stats_metric_missing_everywhere_returns_empty_df():
     out = calculate_bootstrap_stats(samples, metric="Accuracy")
     assert isinstance(out, pd.DataFrame)
     assert out.empty
+
+
+def test_fast_confusion_counts_basic():
+    y_true = np.array([1, 0, 1, 0, 1])
+    y_pred = np.array([1, 0, 0, 0, 1])
+
+    tn, fp, fn, tp = metrics.fast_confusion_counts(y_true, y_pred)
+
+    assert tp == 2
+    assert tn == 2
+    assert fp == 0
+    assert fn == 1
+
+
+def test_fast_confusion_counts_casts_to_bool():
+    y_true = np.array([2, 0, -1, 0])
+    y_pred = np.array([1, 0, 1, 0])
+
+    tn, fp, fn, tp = metrics.fast_confusion_counts(y_true, y_pred)
+
+    # After bool cast:
+    # y_true -> [True, False, True, False]
+    # y_pred -> [True, False, True, False]
+    assert tp == 2
+    assert tn == 2
+    assert fp == 0
+    assert fn == 0
+
+
+def test_confusion_metrics_outputs_expected_keys():
+    y_true = np.array([1, 0, 1, 0])
+    y_pred = np.array([1, 0, 0, 0])
+
+    out = metrics._confusion_metrics(y_true, y_pred)
+
+    expected_keys = {
+        "TP",
+        "FP",
+        "FN",
+        "TN",
+        "TP Rate",
+        "FP Rate",
+        "FN Rate",
+        "TN Rate",
+        "Specificity",
+        "Prevalence",
+        "Predicted Prevalence",
+    }
+
+    assert expected_keys.issubset(out.keys())
+
+
+def test_confusion_metrics_rates_are_valid():
+    y_true = np.array([1, 1, 1, 1])
+    y_pred = np.array([0, 0, 0, 0])
+
+    out = metrics._confusion_metrics(y_true, y_pred)
+
+    assert out["TP"] == 0
+    assert out["FN"] == 4
+    assert out["TP Rate"] == 0.0
+    assert out["FP Rate"] == 0.0
+    assert out["Specificity"] == 0.0
+
+
+def test_score_with_scorer_accuracy():
+    y_true = np.array([1, 0, 1, 0])
+    y_pred = np.array([1, 0, 0, 0])
+
+    score = metrics._score_with_scorer("accuracy", y_true, y_pred)
+
+    assert score == pytest.approx(0.75)
+
+
+def test_score_with_scorer_allows_label_based_roc_auc():
+    y_true = np.array([0, 1, 1, 0])
+    y_pred = np.array([0, 1, 0, 0])
+
+    score = metrics._score_with_scorer("roc_auc", y_true, y_pred, y_proba=None)
+
+    assert isinstance(score, float)
+    assert 0.0 <= score <= 1.0
+
+
+def test_score_with_scorer_binary_proba_matrix():
+    y_true = np.array([0, 1, 1, 0])
+    y_pred = np.array([0, 1, 1, 0])
+    y_proba = np.array(
+        [
+            [0.9, 0.1],
+            [0.2, 0.8],
+            [0.1, 0.9],
+            [0.85, 0.15],
+        ]
+    )
+
+
+def test_get_custom_metrics_confusion_only():
+    y_true = np.array([1, 0, 1, 0])
+    y_pred = np.array([1, 0, 0, 0])
+
+    out = metrics.get_custom_metrics(
+        y_true,
+        y_pred,
+        metric_list=["TP", "FP", "FN", "TN"],
+    )
+
+    assert out["TP"] == 1
+    assert out["TN"] == 2
+    assert out["FP"] == 0
+    assert out["FN"] == 1
+
+
+def test_get_custom_metrics_sklearn_and_confusion_mix():
+    y_true = np.array([1, 0, 1, 0])
+    y_pred = np.array([1, 0, 0, 0])
+
+    out = metrics.get_custom_metrics(
+        y_true,
+        y_pred,
+        metric_list=["Accuracy", "TP Rate", "Specificity"],
+    )
+
+    assert "Accuracy" in out
+    assert "TP Rate" in out
+    assert "Specificity" in out
+    assert 0.0 <= out["Accuracy"] <= 1.0
+
+
+def test_calibration_auc_zero_for_perfect_calibration():
+    x = np.linspace(0, 1, 10)
+    auc = metrics.calibration_auc(x, x)
+
+    assert auc == pytest.approx(0.0)
+
+
+def test_calibration_auc_positive_for_miscalibration():
+    mean_pred = np.array([0.2, 0.4, 0.6, 0.8])
+    frac_pos = np.array([0.1, 0.3, 0.7, 0.9])
+
+    auc = metrics.calibration_auc(mean_pred, frac_pos)
+
+    assert auc > 0.0
