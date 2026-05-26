@@ -58,10 +58,10 @@ def eq_general_test(task):
     )
 
     eq = EquiBoots(
-        y_true,
-        y_prob,
-        y_pred,
-        fairness_df,
+        y_true=y_true,
+        y_prob=y_prob,
+        y_pred=y_pred,
+        fairness_df=fairness_df,
         fairness_vars=["race", "sex"],
         reference_groups=["white", "M"],
         task=task,

@@ -149,18 +149,56 @@ class StatisticalTester:
         """
         # Convert to numpy arrays
         data = pd.DataFrame(metrics)
+
+        metric_list = ["Recall", "Precision", "Accuracy", "F1 Score", "Specificity", "TP Rate", "FN Rate", "FP Rate", "TN Rate", "Predicted Prevalence"]
         # Create contingency table
-        contingency_table = data.T
+        statistical_test_dict = {}
+        for metric in metric_list:
+            contingency_table = self.get_contingency_table(data, metric)
+            # Use scipy's implementation
+            chi2, p_value, _, _ = stats.chi2_contingency(contingency_table)
+            statistical_test_dict[metric] = StatTestResult(
+                statistic=chi2,
+                p_value=p_value,
+                is_significant=p_value <= config.get("alpha", 0.05),
+                test_name="Chi-Square Test",
+            )
+        return statistical_test_dict
+    
+    def get_contingency_table(self, data, metric):
 
-        # Use scipy's implementation
-        chi2, p_value, _, _ = stats.chi2_contingency(contingency_table)
+        if metric == "Accuracy":
+            table = ""
+            return table
+        elif metric == "Precision":
+            table = ""
+            return table
+        elif metric == "Recall":
+            table = ""
+            return table
+        elif metric == "F1 Score":
+            table = ""
+            return table
+        elif metric == "Specificity":
+            table = ""
+            return table
+        elif metric == "TP Rate":
+            table = ""
+            return table
+        elif metric == "TN Rate":
+            table = ""
+            return table
+        elif metric == "FN Rate":
+            table = ""
+            return table
+        elif metric == "FP Rate":
+            table = ""
+            return table
+        elif metric == "Predicted Prevalence":
+            table = ""
+            return table
 
-        return StatTestResult(
-            statistic=chi2,
-            p_value=p_value,
-            is_significant=p_value <= config.get("alpha", 0.05),
-            test_name="Chi-Square Test",
-        )
+
 
     def _calculate_effect_size(self, metrics: Dict) -> float:
         """Calculates the Cramer's V effect size using scipy.
@@ -294,7 +332,7 @@ class StatisticalTester:
         """Calculate Cohen's d"""
         mean_1 = np.mean(data_1)
         mean_2 = np.mean(data_2)
-        mean_sum = mean_1 + mean_2
+        mean_sum = mean_1 - mean_2
         pooled_std = np.sqrt((np.std(data_1) ** 2 + np.std(data_2) ** 2) / 2)
         return mean_sum / pooled_std if pooled_std > 0 else 0
 
