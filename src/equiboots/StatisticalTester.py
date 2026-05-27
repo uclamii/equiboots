@@ -214,7 +214,8 @@ class StatisticalTester:
         Returns:
             float: Cramer's V effect size
         """
-        data = metrics.T
+        data = pd.DataFrame(metrics)
+        data = data.T
         coningency_table = self.get_contingency_table(data, metric)
         effect_size = association(coningency_table, method="cramer")
         return effect_size
@@ -380,8 +381,9 @@ class StatisticalTester:
 
                     ref_comp_metrics = {**ref_metrics, **comp_metrics}
 
-                    results[group][metric] = test_func(ref_comp_metrics, config)
-                    if results[group].is_significant:
+                    results[group] = {}
+                    results[group] = test_func(ref_comp_metrics, config)
+                    if results[group][metric].is_significant:
                         effect_size = self._calculate_effect_size(ref_comp_metrics, metric)
                         results[group][metric].effect_size = effect_size
                     else:
