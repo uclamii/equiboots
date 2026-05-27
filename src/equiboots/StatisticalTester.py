@@ -201,6 +201,7 @@ class StatisticalTester:
             data['TP + FP'] = data['TP'] + data['FP']
             data['FN + TN'] = data['FN'] + data['TN']
             table = data[['TP + FP', 'FN + TN']]
+            return table
         elif metric == "Negative Predictive Value":
             table = data[['TN', 'FN']]
             return table
