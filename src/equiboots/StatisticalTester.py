@@ -311,7 +311,7 @@ class StatisticalTester:
         else:
             boot = False
         # Avoid running this command if results have a len of 1; then
-        if len(results) > 1:
+        if len(results) > 1 and boot:
             # Adjust p-values for multiple comparisons
             adjusted_results = self._adjust_p_values(
                 results, config["adjust_method"], config["alpha"], boot=boot

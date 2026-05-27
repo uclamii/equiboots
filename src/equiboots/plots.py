@@ -1473,37 +1473,70 @@ def eq_group_metrics_point_plot(
     **plot_kwargs: Dict[str, Union[str, float]],
 ) -> None:
     """
-    Plot point estimates of group and disparity metrics by category with per-metric statistical significance.
+    Plot point estimates of group and disparity metrics by category.
+
+    group_metrics   : list of dict     - One dict per category mapping group
+    metric_cols     : list             - Metric names to plot (defines rows)
+    category_names  : list             - Category labels to plot (defines columns)
+    cmap            : str              - Colormap for group coloring
+    strict_layout   : bool             - Apply tight layout adjustments
+    plot_thresholds : tuple            - (lower, upper) bounds for pass/fail
+    show_pass_fail  : bool             - Color by pass/fail instead of group colors
+    y_lim           : tuple or None    - y‑axis limits as (min, max)
+    leg_cols        : int              - no. of columns in legend
+    raw_metrics     : bool             - Treat metrics as raw; not metric ratios
     """
+    # Determine all unique group names
     all_groups = sorted(set().union(*(gm.keys() for gm in group_metrics)))
+
+    # Shared setup
     n_cols = len(category_names)
-    
     fig, axs, group_to_alpha, alpha_to_group, base_colors, y_lim, _, n_cols = (
         setup_plot_environment(
-            all_groups, cmap, True, metric_cols, None, n_cols, 
-            figsize, strict_layout, y_lim, layout_type="point"
+            all_groups,
+            cmap,
+            True,
+            metric_cols,
+            None,
+            n_cols,
+            figsize,
+            strict_layout,
+            y_lim,
+            layout_type="point",
         )
     )
 
     for i, metric in enumerate(metric_cols):
         for j, cat_name in enumerate(category_names):
             ax = axs[i, j]
+
             x_vals, y_vals = [], []
             groups = list(group_metrics[j].keys())
+            # Create modified group labels for this category based on statistical tests
             current_group_to_alpha = group_to_alpha.copy()
-            
-            if statistical_tests and cat_name in statistical_tests:
-                stat_tests = statistical_tests[cat_name]
-                
-                if stat_tests.get("omnibus") and metric in stat_tests["omnibus"] and stat_tests["omnibus"][metric].is_significant:
-                    current_group_to_alpha = {grp: alph + " *" for grp, alph in current_group_to_alpha.items()}
+            if statistical_tests:
+                # Omnibus test for this specific metric
+                omnibus_for_metric = (statistical_tests.get("omnibus") or {}).get(metric)
+                if omnibus_for_metric and omnibus_for_metric.is_significant:
+                    current_group_to_alpha = {
+                        grp: alph + " *" for grp, alph in current_group_to_alpha.items()
+                    }
 
+                # Per-group tests for this specific metric
                 for group in groups:
-                    if group in stat_tests and metric in stat_tests[group] and stat_tests[group][metric].is_significant:
+                    group_tests = statistical_tests.get(group)
+                    if (
+                        group_tests
+                        and metric in group_tests
+                        and group_tests[metric].is_significant
+                    ):
                         current_group_to_alpha[group] += " ▲"
 
             current_alpha_to_group = {v: k for k, v in current_group_to_alpha.items()}
-            group_status, lower, upper = compute_pass_fail(group_metrics, groups, metric, plot_thresholds, raw_metrics)
+
+            group_status, lower, upper = compute_pass_fail(
+                group_metrics, groups, metric, plot_thresholds, raw_metrics
+            )
 
             for group in group_metrics[j]:
                 val = group_metrics[j][group][metric]
@@ -1512,30 +1545,52 @@ def eq_group_metrics_point_plot(
                     y_vals.append(val)
 
             group_colors = (
-                {group: "green" if group_status.get(group) == "Pass" else "red" for group in groups}
-                if show_pass_fail else base_colors
+                {
+                    group: "green" if group_status.get(group) == "Pass" else "red"
+                    for group in groups
+                }
+                if show_pass_fail
+                else base_colors
             )
 
             for x, y, group in zip(range(len(x_vals)), y_vals, x_vals):
                 sns.scatterplot(
-                    x=[x], y=[y], ax=ax,
+                    x=[x],
+                    y=[y],
+                    ax=ax,
                     color=group_colors[current_alpha_to_group[group]],
-                    s=100, label=None, **plot_kwargs
+                    s=100,
+                    label=None,
+                    **plot_kwargs,
                 )
 
             ax.set_title(f"{cat_name}")
             ax.set_xlabel("")
             ax.set_xticks(range(len(groups)))
-            ax.set_xticklabels([current_group_to_alpha[group] for group in groups], rotation=45, ha="right")
+            ax.set_xticklabels(
+                [current_group_to_alpha[group] for group in groups],
+                rotation=45,
+                ha="right",
+            )
 
             for tick_label in ax.get_xticklabels():
                 alpha = tick_label.get_text()
                 group = current_alpha_to_group[alpha]
-                color = "green" if show_pass_fail and group_status[group] == "Pass" else "red" if show_pass_fail else base_colors[group]
+                if show_pass_fail:
+                    color = "green" if group_status[group] == "Pass" else "red"
+                else:
+                    color = base_colors[group]  # legend color
                 tick_label.set_color(color)
 
-            ax.set_ylabel(metric if j == 0 else "")
-            ax.set_ylim(y_lims[(i, j)] if y_lims and (i, j) in y_lims else y_lim)
+            if j == 0:
+                ax.set_ylabel(metric)
+            else:
+                ax.set_ylabel("")
+
+            if y_lims and (i, j) in y_lims:
+                ax.set_ylim(y_lims[(i, j)])
+            else:
+                ax.set_ylim(y_lim)
             ax.grid(show_grid)
             add_plot_threshold_lines(ax, lower, upper, len(groups), show_reference)
             ax.set_xlim(-0.5, len(groups) - 0.5)
@@ -1546,20 +1601,43 @@ def eq_group_metrics_point_plot(
                 axs[row_idx, col_idx].axis("off")
 
     if include_legend:
-        create_legend(fig, all_groups, group_to_alpha, base_colors, show_pass_fail, leg_cols)
+        create_legend(
+            fig, all_groups, group_to_alpha, base_colors, show_pass_fail, leg_cols
+        )
+
         if statistical_tests:
+
             stat_legend_elements = [
-                Line2D([0], [0], marker="*", color="w", markerfacecolor="black", markersize=10, label="Omnibus test significant"),
-                Line2D([0], [0], marker="^", color="w", markerfacecolor="black", markersize=8, label="Group test significant"),
+                Line2D(
+                    [0],
+                    [0],
+                    marker="*",
+                    color="w",
+                    markerfacecolor="black",
+                    markersize=10,
+                    label="Omnibus test significant",
+                ),
+                Line2D(
+                    [0],
+                    [0],
+                    marker="^",
+                    color="w",
+                    markerfacecolor="black",
+                    markersize=8,
+                    label="Group test significant",
+                ),
             ]
-            fig.legend(handles=stat_legend_elements, loc="upper right", bbox_to_anchor=(0.7, 1.1))
+            stat_legend = fig.legend(
+                handles=stat_legend_elements,
+                loc="upper right",
+                bbox_to_anchor=(0.7, 1.1),
+            )
 
     if strict_layout:
         plt.tight_layout(w_pad=2, h_pad=4, rect=[0.01, 0.01, 1.01, 1])
-    
     save_or_show_plot(fig, save_path, filename)
 
-    
+
 def eq_plot_metrics_forest(
     group_metrics: Dict[str, Dict[str, float]],
     metric_name: str,
