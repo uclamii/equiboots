@@ -159,19 +159,36 @@ class StatisticalTester:
         """
         # Convert to numpy arrays
         data = pd.DataFrame(metrics)
-
-        # Create contingency table
         statistical_test_dict = {}
         data = data.T
+
         for metric in self.METRIC_LIST:
             contingency_table = self.get_contingency_table(data, metric)
-            # Use scipy's implementation
-            chi2, p_value, _, _ = stats.chi2_contingency(contingency_table)
+            chi2, p_value, dof, expected = stats.chi2_contingency(contingency_table)
+
+            test_name = "Chi-Square Test"
+
+            # Cochran's rule: chi-square unreliable when expected cells are small
+            if (expected < 5).any():
+                if contingency_table.shape == (2, 2):
+                    # Fisher's exact is well-defined for 2x2, swap in transparently
+                    _, p_value = stats.fisher_exact(contingency_table)
+                    test_name = "Fisher's Exact Test"
+                    chi2 = np.nan  # not a chi2 statistic anymore
+                else:
+                    warnings.warn(
+                        f"Metric '{metric}': expected cell counts < 5 detected "
+                        f"(min expected = {expected.min():.2f}). "
+                        f"Chi-square approximation may be unreliable for this "
+                        f"{contingency_table.shape[0]} x {contingency_table.shape[1]} table. "
+                        f"Consider Fisher-Freeman-Halton or a Monte Carlo permutation test."
+                    )
+
             statistical_test_dict[metric] = StatTestResult(
                 statistic=chi2,
                 p_value=p_value,
                 is_significant=p_value <= config.get("alpha", 0.05),
-                test_name="Chi-Square Test",
+                test_name=test_name,
             )
         return statistical_test_dict
 
