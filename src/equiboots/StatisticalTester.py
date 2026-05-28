@@ -251,45 +251,58 @@ class StatisticalTester:
         boot: bool = False,
     ) -> Dict[str, Dict[str, StatTestResult]]:
         """Adjusts p-values for multiple comparisons using specified method."""
+        if method not in ("bonferroni", "fdr_bh", "holm"):
+            return results
 
         if boot:
             # When boot=True, results has nested structure: results[group][test_type]
+            # Adjust across all group/test pairs together (existing behavior)
             p_values = []
             group_test_pairs = []
-
-            # Collect all p-values and their corresponding group/test pairs
             for group, group_results in results.items():
                 for test_type, test_result in group_results.items():
                     p_values.append(test_result.p_value)
                     group_test_pairs.append((group, test_type))
-        else:
-            # Original behavior: results[group] contains StatTestResult directly
-            p_values = []
-            for group, group_result in results.items():
-                p_values.append(group_result.p_value)
 
-        if method == "bonferroni":
-            adjusted_p_values = multipletests(
-                p_values, alpha=alpha, method="bonferroni"
-            )[1]
-        elif method == "fdr_bh":
-            adjusted_p_values = multipletests(p_values, alpha=alpha, method="fdr_bh")[1]
-        elif method == "holm":
-            adjusted_p_values = multipletests(p_values, alpha=alpha, method="holm")[1]
-        else:
-            return results
+            adjusted_p_values = multipletests(p_values, alpha=alpha, method=method)[1]
 
-        if boot:
-            # Update nested structure
             for idx, (group, test_type) in enumerate(group_test_pairs):
                 results[group][test_type].p_value = adjusted_p_values[idx]
                 results[group][test_type].is_significant = (
                     adjusted_p_values[idx] <= alpha
                 )
         else:
-            for idx, group in enumerate(results.keys()):
-                results[group].p_value = adjusted_p_values[idx]
-                results[group].is_significant = adjusted_p_values[idx] <= alpha
+            # Non-bootstrapped: adjust per metric across pairwise (non-omnibus) groups only
+            pairwise_groups = [g for g in results.keys() if g != "omnibus"]
+            if not pairwise_groups:
+                return results
+
+            # Collect all metrics present across the pairwise groups
+            metrics = set()
+            for group in pairwise_groups:
+                metrics.update(results[group].keys())
+
+            # Adjust p-values per metric, across race groups
+            for metric in metrics:
+                p_values = []
+                groups_for_metric = []
+                for group in pairwise_groups:
+                    if metric in results[group]:
+                        p_values.append(results[group][metric].p_value)
+                        groups_for_metric.append(group)
+
+                if not p_values:
+                    continue
+
+                adjusted_p_values = multipletests(p_values, alpha=alpha, method=method)[
+                    1
+                ]
+
+                for idx, group in enumerate(groups_for_metric):
+                    results[group][metric].p_value = adjusted_p_values[idx]
+                    results[group][metric].is_significant = (
+                        adjusted_p_values[idx] <= alpha
+                    )
 
         return results
 
@@ -329,13 +342,12 @@ class StatisticalTester:
 
     def adjusting_p_vals(self, config, results):
         """Runs the adjusting p value method based on bootstrap conditions"""
-        # if config["test_type"] == "bootstrap_test":
-        #     boot = True
-        # else:
-        #     boot = False
-        boot = config["test_type"] in ("bootstrap_test", "chi_square")
+        if config["test_type"] == "bootstrap_test":
+            boot = True
+        else:
+            boot = False
         # Avoid running this command if results have a len of 1; then
-        if len(results) > 1 and boot:
+        if len(results) > 1:
             # Adjust p-values for multiple comparisons
             adjusted_results = self._adjust_p_values(
                 results, config["adjust_method"], config["alpha"], boot=boot
