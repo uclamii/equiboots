@@ -401,61 +401,21 @@ class StatisticalTester:
 
         ref_metrics = {k: v for k, v in metrics.items() if k in [reference_group]}
 
-        # omnibus test
+        # 1) omnibus test
         results["omnibus"] = test_func(metrics, config)
 
-        ##########
-        # OLD: single tangled loop. Bugs:
-        #   1) results[group] = test_func() sits INSIDE the metric loop, so
-        #      every metric iteration overwrites results[group] with a fresh
-        #      dict, wiping any effect_size we set on earlier metrics. Only
-        #      the last significant metric's effect_size survives.
-        #   2) test_func runs O(metrics * groups) times when O(groups) is
-        #      enough (test_func already returns a dict over all metrics).
-        #   3) `results[group] = {}` is dead; the next line replaces it.
-        ##########
-
-        # for metric in self.METRIC_LIST:
-        #     if results["omnibus"][metric].is_significant:
-        #         effect_size = self._calculate_effect_size(metrics, metric)
-        #         results["omnibus"][metric].effect_size = effect_size
-        #
-        #         for group, _ in metrics.items():
-        #             if group == reference_group:
-        #                 continue
-        #
-        #             comp_metrics = {k: v for k, v in metrics.items() if k in [group]}
-        #
-        #             ref_comp_metrics = {**ref_metrics, **comp_metrics}
-        #
-        #             results[group] = {}
-        #             results[group] = test_func(ref_comp_metrics, config)
-        #             if results[group][metric].is_significant:
-        #                 effect_size = self._calculate_effect_size(
-        #                     ref_comp_metrics, metric
-        #                 )
-        #                 results[group][metric].effect_size = effect_size
-        #             else:
-        #                 results[group][metric].effect_size = None
-        #                 results[group][metric].confidence_interval = None
-        #     else:  # no need to calculate effect size
-        #         results["omnibus"][metric].effect_size = None
-        #         results["omnibus"][metric].confidence_interval = None
-
-        ##########
-        # NEW: three-phase structure
-        #   1) Omnibus (already done above).
-        #   2) Pairwise ONCE per non-reference group.
-        #   3) Annotate effect sizes per metric, gated on omnibus significance.
-        ###########
-
-        # 2) Pairwise once per non-reference group
-        for group in metrics:
-            if group == reference_group:
-                continue
-            comp_metrics = {k: v for k, v in metrics.items() if k in [group]}
-            ref_comp_metrics = {**ref_metrics, **comp_metrics}
-            results[group] = test_func(ref_comp_metrics, config)
+        #### 2) Pairwise once per non-reference group gated on whether we see any signficance across omnibus
+        omnibus_results = results.get("omnibus", {})
+        any_omnibus_significant = any(
+            r.is_significant for r in omnibus_results.values()
+        )
+        if any_omnibus_significant:
+            for group in metrics:
+                if group == reference_group:
+                    continue
+                comp_metrics = {k: v for k, v in metrics.items() if k in [group]}
+                ref_comp_metrics = {**ref_metrics, **comp_metrics}
+                results[group] = test_func(ref_comp_metrics, config)
 
         # 3) Annotate effect sizes per metric, gated on omnibus significance
         for metric in self.METRIC_LIST:
