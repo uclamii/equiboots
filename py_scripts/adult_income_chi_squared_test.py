@@ -46,7 +46,7 @@ X = df.drop("income", axis=1)
 y = df["income"]
 
 for col in X.columns:
-    if X[col].dtype == "object":
+    if isinstance(X[col], object):
         X[col] = X[col].astype("category")
 
 X_train, X_test, y_train, y_test = train_test_split(
