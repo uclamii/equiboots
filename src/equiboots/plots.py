@@ -16,7 +16,6 @@ from packaging import version
 from .metrics import regression_metrics, calibration_auc, calculate_bootstrap_stats
 from typing import Dict, List, Optional, Union, Tuple, Set, Callable, Any
 
-
 SEABORN_OLD = version.parse(sns.__version__) < version.parse("0.13.2")
 
 ################################################################################
@@ -1223,6 +1222,7 @@ def eq_plot_bootstrapped_group_curves(
 # Group and Disparity Metrics (Violin/Box/Seaborn Plots)
 ################################################################################
 
+
 def eq_group_metrics_plot(
     group_metrics: List[Dict[str, Dict[str, float]]],
     metric_cols: List[str],
@@ -1318,7 +1318,9 @@ def eq_group_metrics_plot(
 
     # default styling for the zero reference line
     if zero_line_kwargs is None:
-        zero_line_kwargs = dict(color="red", linestyle=":", linewidth=1, label="Reference group")
+        zero_line_kwargs = dict(
+            color="red", linestyle=":", linewidth=1, label="Reference group"
+        )
 
     for i, col in enumerate(metric_cols):
         ax = axs[i // n_cols, i % n_cols]
@@ -1425,7 +1427,8 @@ def eq_group_metrics_plot(
         if statistical_tests:
             extra_legend_items.append(
                 Line2D(
-                    [0], [0],
+                    [0],
+                    [0],
                     marker="*",
                     color="w",
                     markerfacecolor="black",
@@ -1439,7 +1442,9 @@ def eq_group_metrics_plot(
             )
 
         if extra_legend_items:
-            fig.legend(handles=extra_legend_items, loc="upper right", bbox_to_anchor=(0.7, 1.1))
+            fig.legend(
+                handles=extra_legend_items, loc="upper right", bbox_to_anchor=(0.7, 1.1)
+            )
 
     if strict_layout:
         plt.tight_layout(w_pad=2, h_pad=2, rect=[0.01, 0.01, 1.01, 1])
@@ -1449,6 +1454,26 @@ def eq_group_metrics_plot(
 ################################################################################
 # Group and Disparity Metrics (Point Estimate Plots)
 ################################################################################
+def _resolve_category_tests(statistical_tests, cat_name, groups):
+    """Return the {omnibus/group -> {metric -> StatTestResult}} dict for one category.
+
+    Accepts either:
+      1. Flat single-category dict:  {"omnibus": {...}, "GroupA": {...}, ...}
+      2. Nested dict keyed by category: {"sex": {...}, "race": {...}, ...}
+    """
+    if not statistical_tests:
+        return None
+    # Nested: cat_name is a top-level key whose value looks like a per-category dict
+    if cat_name in statistical_tests:
+        candidate = statistical_tests[cat_name]
+        if isinstance(candidate, dict) and (
+            "omnibus" in candidate or any(g in candidate for g in groups)
+        ):
+            return candidate
+    # Flat: applies directly to the single category being plotted
+    if "omnibus" in statistical_tests or any(g in statistical_tests for g in groups):
+        return statistical_tests
+    return None
 
 
 def eq_group_metrics_point_plot(
@@ -1512,11 +1537,17 @@ def eq_group_metrics_point_plot(
 
             x_vals, y_vals = [], []
             groups = list(group_metrics[j].keys())
+
+            # Resolve the test dict for THIS category (handles flat or nested input)
+            cat_stat_tests = _resolve_category_tests(
+                statistical_tests, cat_name, groups
+            )
+
             # Create modified group labels for this category based on statistical tests
             current_group_to_alpha = group_to_alpha.copy()
-            if statistical_tests:
+            if cat_stat_tests:
                 # Omnibus test for this specific metric
-                omnibus_for_metric = (statistical_tests.get("omnibus") or {}).get(metric)
+                omnibus_for_metric = (cat_stat_tests.get("omnibus") or {}).get(metric)
                 if omnibus_for_metric and omnibus_for_metric.is_significant:
                     current_group_to_alpha = {
                         grp: alph + " *" for grp, alph in current_group_to_alpha.items()
@@ -1524,7 +1555,7 @@ def eq_group_metrics_point_plot(
 
                 # Per-group tests for this specific metric
                 for group in groups:
-                    group_tests = statistical_tests.get(group)
+                    group_tests = cat_stat_tests.get(group)
                     if (
                         group_tests
                         and metric in group_tests
