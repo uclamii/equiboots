@@ -46,8 +46,16 @@ class StatisticalTester:
             "chi_square": self._chi_square_test,
             "bootstrap_test": self._bootstrap_test,
         }
-        self.METRIC_LIST = ["Recall", "Precision", "Accuracy", "F1 Score", "Specificity", "FP Rate", "FN Rate", "Predicted Prevalence"]
-
+        self.METRIC_LIST = [
+            "Recall",
+            "Precision",
+            "Accuracy",
+            "F1 Score",
+            "Specificity",
+            "FP Rate",
+            "FN Rate",
+            "Predicted Prevalence",
+        ]
 
     def _bootstrap_test(self, data: List[float], config: dict) -> List[float]:
 
@@ -166,47 +174,45 @@ class StatisticalTester:
                 test_name="Chi-Square Test",
             )
         return statistical_test_dict
-    
+
     def get_contingency_table(self, data, metric):
         ## Accuracy contingency table example   ## Recall contingency table example
         ##       |TP + FN| FN + TN |            ##       |TP | FN |
         ##       |-------|---------|            ##       |---|----|
         ##  GRP1 |       |         |            ##  GRP1 |   |    |
-        ##  GRP2 |       |         |            ##  GRP2 |   |    |   
+        ##  GRP2 |       |         |            ##  GRP2 |   |    |
         if metric == "Accuracy":
-            data['TP + TN'] = data['TN'] + data['TP']
-            data['FP + FN'] = data['FP'] + data['FN']
-            table = data[['TP + TN', 'FP + FN']]
+            data["TP + TN"] = data["TN"] + data["TP"]
+            data["FP + FN"] = data["FP"] + data["FN"]
+            table = data[["TP + TN", "FP + FN"]]
             return table
         elif metric == "Precision":
-            table = data[['TP', 'FP']]
+            table = data[["TP", "FP"]]
             return table
-        elif metric == "Recall": 
-            table = data[['TP', 'FN']]
+        elif metric == "Recall":
+            table = data[["TP", "FN"]]
             return table
         elif metric == "F1 Score":
-            data['FP + FN'] = data['FP'] + data['FN']
-            table = data[['TP', 'FP + FN']]
+            data["FP + FN"] = data["FP"] + data["FN"]
+            table = data[["TP", "FP + FN"]]
             return table
         elif metric == "Specificity":
-            table = data[['TN', 'FP']]
+            table = data[["TN", "FP"]]
             return table
         elif metric == "FN Rate":
-            table = data[['FN', 'TP']]
+            table = data[["FN", "TP"]]
             return table
         elif metric == "FP Rate":
-            table = data[['FP', 'TN']]
+            table = data[["FP", "TN"]]
             return table
         elif metric == "Predicted Prevalence":
-            data['TP + FP'] = data['TP'] + data['FP']
-            data['FN + TN'] = data['FN'] + data['TN']
-            table = data[['TP + FP', 'FN + TN']]
+            data["TP + FP"] = data["TP"] + data["FP"]
+            data["FN + TN"] = data["FN"] + data["TN"]
+            table = data[["TP + FP", "FN + TN"]]
             return table
         elif metric == "Negative Predictive Value":
-            table = data[['TN', 'FN']]
+            table = data[["TN", "FN"]]
             return table
-
-
 
     def _calculate_effect_size(self, metrics: Dict, metric: str) -> float:
         """Calculates the Cramer's V effect size using scipy.
@@ -306,10 +312,11 @@ class StatisticalTester:
 
     def adjusting_p_vals(self, config, results):
         """Runs the adjusting p value method based on bootstrap conditions"""
-        if config["test_type"] == "bootstrap_test":
-            boot = True
-        else:
-            boot = False
+        # if config["test_type"] == "bootstrap_test":
+        #     boot = True
+        # else:
+        #     boot = False
+        boot = config["test_type"] in ("bootstrap_test", "chi_square")
         # Avoid running this command if results have a len of 1; then
         if len(results) > 1 and boot:
             # Adjust p-values for multiple comparisons
@@ -368,33 +375,87 @@ class StatisticalTester:
         # omnibus test
         results["omnibus"] = test_func(metrics, config)
 
+        ##########
+        # OLD: single tangled loop. Bugs:
+        #   1) results[group] = test_func() sits INSIDE the metric loop, so
+        #      every metric iteration overwrites results[group] with a fresh
+        #      dict, wiping any effect_size we set on earlier metrics. Only
+        #      the last significant metric's effect_size survives.
+        #   2) test_func runs O(metrics * groups) times when O(groups) is
+        #      enough (test_func already returns a dict over all metrics).
+        #   3) `results[group] = {}` is dead; the next line replaces it.
+        ##########
+
+        # for metric in self.METRIC_LIST:
+        #     if results["omnibus"][metric].is_significant:
+        #         effect_size = self._calculate_effect_size(metrics, metric)
+        #         results["omnibus"][metric].effect_size = effect_size
+        #
+        #         for group, _ in metrics.items():
+        #             if group == reference_group:
+        #                 continue
+        #
+        #             comp_metrics = {k: v for k, v in metrics.items() if k in [group]}
+        #
+        #             ref_comp_metrics = {**ref_metrics, **comp_metrics}
+        #
+        #             results[group] = {}
+        #             results[group] = test_func(ref_comp_metrics, config)
+        #             if results[group][metric].is_significant:
+        #                 effect_size = self._calculate_effect_size(
+        #                     ref_comp_metrics, metric
+        #                 )
+        #                 results[group][metric].effect_size = effect_size
+        #             else:
+        #                 results[group][metric].effect_size = None
+        #                 results[group][metric].confidence_interval = None
+        #     else:  # no need to calculate effect size
+        #         results["omnibus"][metric].effect_size = None
+        #         results["omnibus"][metric].confidence_interval = None
+
+        ##########
+        # NEW: three-phase structure
+        #   1) Omnibus (already done above).
+        #   2) Pairwise ONCE per non-reference group.
+        #   3) Annotate effect sizes per metric, gated on omnibus significance.
+        ###########
+
+        # 2) Pairwise once per non-reference group
+        for group in metrics:
+            if group == reference_group:
+                continue
+            comp_metrics = {k: v for k, v in metrics.items() if k in [group]}
+            ref_comp_metrics = {**ref_metrics, **comp_metrics}
+            results[group] = test_func(ref_comp_metrics, config)
+
+        # 3) Annotate effect sizes per metric, gated on omnibus significance
         for metric in self.METRIC_LIST:
             if results["omnibus"][metric].is_significant:
-                effect_size = self._calculate_effect_size(metrics, metric)
-                results["omnibus"][metric].effect_size = effect_size
-                
-                for group, _ in metrics.items():
-                    if group == reference_group:
+                results["omnibus"][metric].effect_size = self._calculate_effect_size(
+                    metrics, metric
+                )
+                for group in results:
+                    if group == "omnibus":
                         continue
-
-                    comp_metrics = {k: v for k, v in metrics.items() if k in [group]}
-
-                    ref_comp_metrics = {**ref_metrics, **comp_metrics}
-
-                    results[group] = {}
-                    results[group] = test_func(ref_comp_metrics, config)
                     if results[group][metric].is_significant:
-                        effect_size = self._calculate_effect_size(ref_comp_metrics, metric)
-                        results[group][metric].effect_size = effect_size
+                        pair = {**ref_metrics, group: metrics[group]}
+                        results[group][metric].effect_size = (
+                            self._calculate_effect_size(pair, metric)
+                        )
                     else:
                         results[group][metric].effect_size = None
                         results[group][metric].confidence_interval = None
-            else:  # no need to calculate effect size
+            else:
                 results["omnibus"][metric].effect_size = None
                 results["omnibus"][metric].confidence_interval = None
+                # Clear pairwise for this metric too since the omnibus gate failed
+                for group in results:
+                    if group == "omnibus":
+                        continue
+                    results[group][metric].effect_size = None
+                    results[group][metric].confidence_interval = None
+
         return results
-
-
 
     def _analyze_bootstrapped_metrics(
         self, metrics_diff: list[Dict], reference_group: str, config: Dict[str, Any]
