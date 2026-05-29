@@ -786,6 +786,49 @@ def test_eq_group_metrics_plot_no_statistical_tests(monkeypatch):
     )
 
 
+def test_eq_group_metrics_plot_can_add_reference_group_at_zero(monkeypatch):
+    captured = _capture_fig(monkeypatch)
+    group_metrics = [
+        {
+            "A": {"Accuracy_diff": 0.2},
+            "B": {"Accuracy_diff": -0.1},
+        },
+        {
+            "A": {"Accuracy_diff": 0.1},
+            "B": {"Accuracy_diff": -0.2},
+        },
+    ]
+
+    plots.eq_group_metrics_plot(
+        group_metrics=group_metrics,
+        metric_cols=["Accuracy_diff"],
+        name="race",
+        plot_type="stripplot",
+        include_reference_group=True,
+        reference_group="Reference",
+        disparities=True,
+        include_legend=True,
+    )
+
+    legend_text = [
+        text.get_text()
+        for legend in captured[0].legends
+        for text in legend.get_texts()
+    ]
+    assert any("Reference" in label for label in legend_text)
+    assert "Reference" not in group_metrics[0]
+
+
+def test_eq_group_metrics_plot_reference_group_requires_name():
+    with pytest.raises(ValueError, match="reference_group is required"):
+        plots.eq_group_metrics_plot(
+            group_metrics=[{"A": {"Accuracy_diff": 0.1}}],
+            metric_cols=["Accuracy_diff"],
+            name="race",
+            include_reference_group=True,
+        )
+
+
 def test_eq_group_metrics_point_plot_with_omnibus_significant(monkeypatch):
     """Test eq_group_metrics_point_plot with significant omnibus test"""
     monkeypatch.setattr(plt, "show", lambda: None)
@@ -1459,6 +1502,44 @@ def test_eq_plot_bootstrap_forest_missing_reference_group_ok(monkeypatch):
     assert not has_red_dashed_vertical
 
     # Do not assert about the legend here, since current implementation may still add it.
+
+
+def test_eq_plot_bootstrap_forest_can_add_reference_group_at_zero(monkeypatch):
+    captured = _capture_fig(monkeypatch)
+    group_boot_metrics = [
+        {"A": {"M": 0.2}, "B": {"M": -0.1}},
+        {"A": {"M": 0.4}, "B": {"M": 0.1}},
+    ]
+
+    plots.eq_plot_bootstrap_forest(
+        group_boot_metrics=group_boot_metrics,
+        metric="M",
+        reference_group="Reference",
+        include_reference_group=True,
+        sort_alphabetically=True,
+    )
+
+    ax = captured[0].axes[0]
+    labels = [t.get_text() for t in ax.get_yticklabels()]
+    assert "Reference" in labels
+    assert "Reference" not in group_boot_metrics[0]
+
+    found_zero_reference_line = False
+    for line in ax.lines:
+        x = line.get_xdata()
+        if len(x) >= 2 and np.isclose(x[0], 0.0) and np.isclose(x[1], 0.0):
+            found_zero_reference_line = True
+            break
+    assert found_zero_reference_line
+
+
+def test_eq_plot_bootstrap_forest_reference_group_requires_name():
+    with pytest.raises(ValueError, match="reference_group is required"):
+        plots.eq_plot_bootstrap_forest(
+            group_boot_metrics=[{"A": {"M": 0.2}}],
+            metric="M",
+            include_reference_group=True,
+        )
 
 
 def test_eq_plot_bootstrap_forest_draws_ci_segments(monkeypatch):
