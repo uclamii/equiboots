@@ -2,7 +2,6 @@ import numpy as np
 import pandas as pd
 import equiboots as eqb
 
-
 if __name__ == "__main__":
     y_prob = np.random.rand(1000)
     y_pred = y_prob > 0.5
@@ -20,10 +19,10 @@ if __name__ == "__main__":
     )
 
     eq2 = eqb.EquiBoots(
-        y_true,
-        y_prob,
-        y_pred,
-        fairness_df,
+        y_true=y_true,
+        y_prob=y_prob,
+        y_pred=y_pred,
+        fairness_df=fairness_df,
         fairness_vars=["race", "sex"],
         reference_groups=["white", "M"],
         task="binary_classification",
@@ -50,20 +49,20 @@ if __name__ == "__main__":
     melted = pd.DataFrame(dispa).melt()
     df = melted["value"].apply(pd.Series).assign(attribute_value=melted["variable"])
 
-    eqb.eq_disparity_metrics_plot(
-        dispa,
+    eqb.eq_group_metrics_plot(
+        group_metrics=dispa,
         metric_cols=[
-            "Accuracy_ratio",
-            "Precision_ratio",
-            "Predicted Prevalence_ratio",
-            "FP Rate_ratio",
-            "TN Rate_ratio",
-            "Recall_ratio",
+            "Accuracy_Ratio",
+            "Precision_Ratio",
+            "Predicted_Prevalence_Ratio",
+            "FP_Rate_Ratio",
+            "TN_Rate_Ratio",
+            "Recall_Ratio",
         ],
         name="race",
         categories="all",
         figsize=(24, 4),
-        plot_kind="violinplot",
+        plot_type="violinplot",
         color_by_group=True,
         show_grid=False,
         strict_layout=True,
