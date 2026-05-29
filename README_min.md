@@ -4,7 +4,6 @@
 
 [![Downloads](https://pepy.tech/badge/equiboots)](https://pepy.tech/project/equiboots) [![PyPI](https://img.shields.io/pypi/v/equiboots.svg)](https://pypi.org/project/equiboots/) [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://opensource.org/licenses/Apache-2.0) [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.15086941.svg)](https://doi.org/10.5281/zenodo.15086941)
 
-
 The `equiboots` library is a fairness-aware model evaluation toolkit designed to audit performance disparities across demographic groups. It provides robust, bootstrapped metrics for binary, multi-class, and multi-label classification, as well as regression models. The library supports group-wise performance slicing, fairness diagnostics, and customizable visualizations to support equitable AI/ML development.
 
 `equiboots` is particularly useful in clinical, social, and policy domains where transparency, bias mitigation, and outcome fairness are critical for responsible deployment.
@@ -65,7 +64,7 @@ If you use `equiboots` in your research or projects, please consider citing it.
    month        = mar,
    year         = 2025,
    publisher    = {Zenodo},
-   version      = {0.0.1a11},
+   version      = {0.0.1a12},
    doi          = {10.5281/zenodo.15086941},
    url          = {https://doi.org/10.5281/zenodo.15086941}
 }
@@ -78,4 +77,3 @@ If you have any questions or issues with `equiboots`, please open an issue on th
 ## Acknowledgements
 
 This work was supported by the UCLA Medical Informatics Institute (MII) and the Clinical and Translational Science Institute (CTSI). Special thanks to Alex Bui, PhD, for his invaluable guidance and support. Many thanks to David Elashoff, PhD, and Sitaram Vangala, M.S., for their statistical consultation. Thanks to Jayleen Mendoza for her contribution to model healing.
-

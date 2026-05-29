@@ -451,6 +451,23 @@ def compute_pass_fail(
     return group_status, lower, upper
 
 
+def _add_reference_group_at_zero(
+    group_metrics: List[Dict[str, Dict[str, float]]],
+    reference_group: str,
+    metric_cols: List[str],
+) -> List[Dict[str, Dict[str, float]]]:
+    """Return a copy of bootstrap difference metrics with reference values at zero."""
+    updated_metrics = []
+    for row in group_metrics:
+        updated_row = {group: dict(metrics) for group, metrics in row.items()}
+        reference_metrics = dict(updated_row.get(reference_group, {}))
+        for metric in metric_cols:
+            reference_metrics.setdefault(metric, 0.0)
+        updated_row[reference_group] = reference_metrics
+        updated_metrics.append(updated_row)
+    return updated_metrics
+
+
 def create_legend(
     fig: plt.Figure,
     group_list: List[str],
@@ -1244,6 +1261,8 @@ def eq_group_metrics_plot(
     y_lim: Optional[Tuple[float, float]] = None,
     statistical_tests: dict = None,
     disparities: bool = False,
+    include_reference_group: bool = False,
+    reference_group: Optional[str] = None,
     zero_line_kwargs: Optional[Dict[str, Any]] = None,
     **plot_kwargs: Dict[str, Union[str, float]],
 ) -> None:
@@ -1254,6 +1273,12 @@ def eq_group_metrics_plot(
       disparities : bool, default False
           If True, draw a red dotted line at y=0 on each subplot and add a
           legend entry "Reference group (zero diff)".
+      include_reference_group : bool, default False
+          If True, add `reference_group` to the plotted data with 0.0 for each
+          metric in `metric_cols`. Useful for bootstrap difference plots.
+      reference_group : str or None
+          Reference group name to display at zero when `include_reference_group`
+          is True.
       zero_line_kwargs : dict or None
           Matplotlib kwargs to style the zero line (defaults to red dotted).
       Shared y-limits:
@@ -1264,6 +1289,15 @@ def eq_group_metrics_plot(
     """
     if not isinstance(group_metrics, list):
         raise TypeError("group_metrics should be a list")
+
+    if include_reference_group:
+        if reference_group is None:
+            raise ValueError(
+                "reference_group is required when include_reference_group=True"
+            )
+        group_metrics = _add_reference_group_at_zero(
+            group_metrics, reference_group, metric_cols
+        )
 
     all_keys = sorted({key for row in group_metrics for key in row.keys()})
     attributes = (
@@ -1832,6 +1866,7 @@ def eq_plot_bootstrap_forest(
     group_boot_metrics: List[Dict[str, Dict[str, np.ndarray]]],
     metric: str = "Accuracy",
     reference_group: Optional[str] = None,
+    include_reference_group: bool = False,
     figsize: Tuple[float, float] = (6, 4),
     save_path: Optional[str] = None,
     filename: str = "bootstrap_forest",
@@ -1845,6 +1880,15 @@ def eq_plot_bootstrap_forest(
     group, and draw a dotted line through `reference_group` if provided.
     Adds asterisks to group names with significant differences.
     """
+    if include_reference_group:
+        if reference_group is None:
+            raise ValueError(
+                "reference_group is required when include_reference_group=True"
+            )
+        group_boot_metrics = _add_reference_group_at_zero(
+            group_boot_metrics, reference_group, [metric]
+        )
+
     # Calculate mean and 95% CI for each metric per group
     bootstrap_metrics = calculate_bootstrap_stats(group_boot_metrics, metric)
     fig, ax = plt.subplots(figsize=figsize)
