@@ -168,8 +168,16 @@ class StatisticalTester:
 
             test_name = "Chi-Square Test"
 
-            # Cochran's rule: chi-square unreliable when expected cells are small
-            if (expected < 5).any():
+            # Cochran's rule: chi-square approximation is unreliable when more
+            # than 20% of expected cell counts are < 5. Use Fisher's exact (2x2)
+            # or warn (larger).
+            # See Kim HY (2017), "Statistical notes for clinical researchers:
+            # Chi-squared test and Fisher's exact test." Restor Dent Endod
+            # 42(2):152-155. https://pmc.ncbi.nlm.nih.gov/articles/PMC5426219/
+            n_cells = expected.size
+            low_expected_pct = (expected < 5).sum() / n_cells
+
+            if low_expected_pct > 0.20:
                 if contingency_table.shape == (2, 2):
                     # Fisher's exact is well-defined for 2x2, swap in transparently
                     _, p_value = stats.fisher_exact(contingency_table)
@@ -177,13 +185,13 @@ class StatisticalTester:
                     chi2 = np.nan  # not a chi2 statistic anymore
                 else:
                     warnings.warn(
-                        f"Metric '{metric}': expected cell counts < 5 detected "
-                        f"(min expected = {expected.min():.2f}). "
-                        f"Chi-square approximation may be unreliable for this "
-                        f"{contingency_table.shape[0]} x {contingency_table.shape[1]} table. "
-                        f"Consider Fisher-Freeman-Halton or a Monte Carlo permutation test."
+                        f"Metric '{metric}': {int(low_expected_pct * 100)}% of "
+                        f"expected cell counts < 5 (min expected = "
+                        f"{expected.min():.2f}). Chi-square approximation may be "
+                        f"unreliable for this {contingency_table.shape[0]} x "
+                        f"{contingency_table.shape[1]} table per Cochran's rule. "
+                        f"Consider Fisher's exact test."
                     )
-
             statistical_test_dict[metric] = StatTestResult(
                 statistic=chi2,
                 p_value=p_value,

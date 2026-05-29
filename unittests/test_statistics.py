@@ -1,5 +1,5 @@
 import copy
-
+import warnings
 import numpy as np
 import pandas as pd
 import pytest
@@ -127,6 +127,72 @@ def test_chi_square_test_falls_back_to_fisher_for_small_2x2_tables(
     assert all(result.is_significant is False for result in results.values())
 
 
+def test_chi_square_fishers_exact_fallback_2x2():
+    """2x2 table with >20% expected cells <5 should fall back to Fisher's exact."""
+    tester = StatisticalTester()
+    metrics = {
+        "ref": {"TP": 2, "FP": 1, "TN": 5, "FN": 1},
+        "groupA": {"TP": 1, "FP": 0, "TN": 4, "FN": 1},
+    }
+    config = {"alpha": 0.05}
+
+    result = tester._chi_square_test(metrics, config)
+
+    for metric_name, test_result in result.items():
+        assert (
+            test_result.test_name == "Fisher's Exact Test"
+        ), f"{metric_name}: expected Fisher's Exact Test, got {test_result.test_name}"
+        assert np.isnan(
+            test_result.statistic
+        ), f"{metric_name}: chi2 statistic should be NaN when Fisher's is used"
+        assert 0.0 <= test_result.p_value <= 1.0
+
+
+def test_chi_square_warns_on_low_expected_Kx2():
+    """K x 2 table (K>2) with >20% expected cells <5 should emit a Cochran warning."""
+    tester = StatisticalTester()
+    metrics = {
+        "ref": {"TP": 2, "FP": 1, "TN": 5, "FN": 1},
+        "groupA": {"TP": 1, "FP": 0, "TN": 4, "FN": 1},
+        "groupB": {"TP": 1, "FP": 1, "TN": 3, "FN": 0},
+    }
+    config = {"alpha": 0.05}
+
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        tester._chi_square_test(metrics, config)
+
+    cochran_warnings = [w for w in caught if "Cochran" in str(w.message)]
+    assert len(cochran_warnings) > 0, "Expected Cochran's rule warning, got none"
+
+
+def test_chi_square_normal_path_large_counts():
+    """Healthy expected counts should use plain chi-square, no Fisher, no warning."""
+    tester = StatisticalTester()
+    metrics = {
+        "ref": {"TP": 100, "FP": 50, "TN": 200, "FN": 100},
+        "groupA": {"TP": 80, "FP": 40, "TN": 180, "FN": 90},
+    }
+    config = {"alpha": 0.05}
+
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        result = tester._chi_square_test(metrics, config)
+
+    cochran_warnings = [w for w in caught if "Cochran" in str(w.message)]
+    assert (
+        len(cochran_warnings) == 0
+    ), "Got unexpected Cochran warning for healthy counts"
+
+    for metric_name, test_result in result.items():
+        assert (
+            test_result.test_name == "Chi-Square Test"
+        ), f"{metric_name}: expected Chi-Square Test, got {test_result.test_name}"
+        assert not np.isnan(
+            test_result.statistic
+        ), f"{metric_name}: chi2 statistic should be a real number"
+
+
 def test_analyze_metrics_runs_omnibus_then_pairwise_and_effect_sizes(
     tester, chi_square_config
 ):
@@ -174,9 +240,7 @@ def test_analyze_metrics_skips_pairwise_when_omnibus_has_no_significance(
     assert all(result.is_significant is False for result in results["omnibus"].values())
 
 
-def test_analyze_bootstrapped_metrics_aggregates_differences(
-    tester, bootstrap_config
-):
+def test_analyze_bootstrapped_metrics_aggregates_differences(tester, bootstrap_config):
     group_a_values = np.linspace(0.1, 0.2, 5000)
     group_b_values = np.linspace(-0.2, -0.1, 5000)
     differences = [
