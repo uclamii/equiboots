@@ -1114,9 +1114,9 @@ def test_plot_effect_sizes_bars_and_legend(monkeypatch):
 
     # 2) Build a simple dict of DummyResult
     data = {
-        "A": DummyResult(0.1),
-        "B": DummyResult(0.5),
-        "C": DummyResult(None),  # should become 0.0
+        "A": {"Metric": DummyResult(0.1)},
+        "B": {"Metric": DummyResult(0.5)},
+        "C": {"Metric": DummyResult(None)},
     }
 
     # 3) Call your plot
@@ -1261,10 +1261,10 @@ def test_eq_plot_metrics_forest_stat_markers_and_legend(monkeypatch):
     captured = _capture_fig(monkeypatch)
     gm = {"A": {"M": 0.3}, "B": {"M": 0.6}, "C": {"M": 0.4}}
     stats = {
-        "A": _MockTestResult(is_significant=False),
-        "B": _MockTestResult(is_significant=True),
-        "C": _MockTestResult(is_significant=False),
-        "omnibus": _MockTestResult(is_significant=True),
+        "A": {"M": _MockTestResult(is_significant=False)},
+        "B": {"M": _MockTestResult(is_significant=True)},
+        "C": {"M": _MockTestResult(is_significant=False)},
+        "omnibus": {"M": _MockTestResult(is_significant=True)},
     }
     plots.eq_plot_metrics_forest(
         group_metrics=gm,
@@ -1287,8 +1287,8 @@ def test_eq_plot_metrics_forest_keeps_markers_after_sort(monkeypatch):
     captured = _capture_fig(monkeypatch)
     gm = {"X": {"m": 0.9}, "Y": {"m": 0.1}, "Z": {"m": 0.5}}
     stats = {
-        "X": _MockTestResult(is_significant=True),
-        "omnibus": _MockTestResult(is_significant=False),
+        "X": {"m": _MockTestResult(is_significant=True)},
+        "omnibus": {"m": _MockTestResult(is_significant=False)},
     }
     plots.eq_plot_metrics_forest(
         group_metrics=gm,
