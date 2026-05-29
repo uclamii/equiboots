@@ -125,7 +125,10 @@ def main():
 
     is_significant_table = metrics_table(race_metrics, stat_test_results)
 
-    stat_test_results["omnibus"].is_significant
+    omnibus_is_significant = any(
+        result.is_significant for result in stat_test_results["omnibus"].values()
+    )
+    print("Any omnibus race test significant:", omnibus_is_significant)
     int_list = np.linspace(0, 100, num=10, dtype=int).tolist()
     eq2 = eqb.EquiBoots(
         y_true,
@@ -166,7 +169,7 @@ def main():
         "metrics": metrics_boot,
     }
 
-    stat_test_results = eq.analyze_statistical_significance(
+    stat_test_results = eq2.analyze_statistical_significance(
         race_metrics, "race", test_config, diffs
     )
     metrics_table(
