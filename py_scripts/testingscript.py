@@ -58,10 +58,10 @@ def eq_general_test(task):
     )
 
     eq = EquiBoots(
-        y_true,
-        y_prob,
-        y_pred,
-        fairness_df,
+        y_true=y_true,
+        y_prob=y_prob,
+        y_pred=y_pred,
+        fairness_df=fairness_df,
         fairness_vars=["race", "sex"],
         reference_groups=["white", "M"],
         task=task,
@@ -115,7 +115,7 @@ def eq_general_test(task):
     # Calculate differences
 
     diffs = eq.calculate_differences(race_metrics, "race")
-    
+
     # Create DataFrame from differences
     disa_diffs_df = eqb.metrics_dataframe(metrics_data=diffs)
     print(f"Disparity Metrics DataFrame\n{disa_diffs_df}\n")
