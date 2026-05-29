@@ -134,7 +134,6 @@ def main():
         category_names=["race", "sex"],
         figsize=(6, 8),
         include_legend=True,
-        plot_thresholds=(0.9, 1.1),
         raw_metrics=True,
         show_grid=True,
         y_lim=(0, 1),
