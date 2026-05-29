@@ -786,6 +786,49 @@ def test_eq_group_metrics_plot_no_statistical_tests(monkeypatch):
     )
 
 
+def test_eq_group_metrics_plot_can_add_reference_group_at_zero(monkeypatch):
+    captured = _capture_fig(monkeypatch)
+    group_metrics = [
+        {
+            "A": {"Accuracy_diff": 0.2},
+            "B": {"Accuracy_diff": -0.1},
+        },
+        {
+            "A": {"Accuracy_diff": 0.1},
+            "B": {"Accuracy_diff": -0.2},
+        },
+    ]
+
+    plots.eq_group_metrics_plot(
+        group_metrics=group_metrics,
+        metric_cols=["Accuracy_diff"],
+        name="race",
+        plot_type="stripplot",
+        include_reference_group=True,
+        reference_group="Reference",
+        disparities=True,
+        include_legend=True,
+    )
+
+    legend_text = [
+        text.get_text()
+        for legend in captured[0].legends
+        for text in legend.get_texts()
+    ]
+    assert any("Reference" in label for label in legend_text)
+    assert "Reference" not in group_metrics[0]
+
+
+def test_eq_group_metrics_plot_reference_group_requires_name():
+    with pytest.raises(ValueError, match="reference_group is required"):
+        plots.eq_group_metrics_plot(
+            group_metrics=[{"A": {"Accuracy_diff": 0.1}}],
+            metric_cols=["Accuracy_diff"],
+            name="race",
+            include_reference_group=True,
+        )
+
+
 def test_eq_group_metrics_point_plot_with_omnibus_significant(monkeypatch):
     """Test eq_group_metrics_point_plot with significant omnibus test"""
     monkeypatch.setattr(plt, "show", lambda: None)
@@ -797,10 +840,10 @@ def test_eq_group_metrics_point_plot_with_omnibus_significant(monkeypatch):
     # Omnibus test is significant - should add * to all group labels
     statistical_tests = {
         "Category1": {
-            "omnibus": MockTestResult(is_significant=True),
-            "A": MockTestResult(is_significant=False),
-            "B": MockTestResult(is_significant=False),
-            "C": MockTestResult(is_significant=False),
+            "omnibus": {"Metric1": MockTestResult(is_significant=True)},
+            "A": {"Metric1": MockTestResult(is_significant=False)},
+            "B": {"Metric1": MockTestResult(is_significant=False)},
+            "C": {"Metric1": MockTestResult(is_significant=False)},
         }
     }
 
@@ -823,10 +866,10 @@ def test_eq_group_metrics_point_plot_with_group_significant(monkeypatch):
     # Specific groups are significant - should add ▲ to those groups
     statistical_tests = {
         "Category1": {
-            "omnibus": MockTestResult(is_significant=False),
-            "A": MockTestResult(is_significant=True),
-            "B": MockTestResult(is_significant=False),
-            "C": MockTestResult(is_significant=True),
+            "omnibus": {"Metric1": MockTestResult(is_significant=False)},
+            "A": {"Metric1": MockTestResult(is_significant=True)},
+            "B": {"Metric1": MockTestResult(is_significant=False)},
+            "C": {"Metric1": MockTestResult(is_significant=True)},
         }
     }
 
@@ -849,9 +892,9 @@ def test_eq_group_metrics_point_plot_with_both_significant(monkeypatch):
     # Both omnibus and group tests are significant
     statistical_tests = {
         "Category1": {
-            "omnibus": MockTestResult(is_significant=True),
-            "A": MockTestResult(is_significant=True),
-            "B": MockTestResult(is_significant=False),
+            "omnibus": {"Metric1": MockTestResult(is_significant=True)},
+            "A": {"Metric1": MockTestResult(is_significant=True)},
+            "B": {"Metric1": MockTestResult(is_significant=False)},
         }
     }
 
@@ -875,8 +918,8 @@ def test_eq_group_metrics_point_plot_missing_category(monkeypatch):
     # Only provide statistical tests for first category
     statistical_tests = {
         "Category1": {
-            "omnibus": MockTestResult(is_significant=True),
-            "A": MockTestResult(is_significant=False),
+            "omnibus": {"Metric1": MockTestResult(is_significant=True)},
+            "A": {"Metric1": MockTestResult(is_significant=False)},
         }
         # Category2 is missing - should not cause errors
     }
@@ -916,8 +959,8 @@ def test_eq_group_metrics_point_plot_no_omnibus_test(monkeypatch):
     # No omnibus test provided
     statistical_tests = {
         "Category1": {
-            "A": MockTestResult(is_significant=True),
-            "B": MockTestResult(is_significant=False),
+            "A": {"Metric1": MockTestResult(is_significant=True)},
+            "B": {"Metric1": MockTestResult(is_significant=False)},
         }
     }
 
@@ -1009,14 +1052,14 @@ def test_eq_group_metrics_point_plot_multiple_categories_mixed_significance(
 
     statistical_tests = {
         "Race": {
-            "omnibus": MockTestResult(is_significant=True),
-            "White": MockTestResult(is_significant=False),
-            "Black": MockTestResult(is_significant=True),
+            "omnibus": {"Accuracy": MockTestResult(is_significant=True)},
+            "White": {"Accuracy": MockTestResult(is_significant=False)},
+            "Black": {"Accuracy": MockTestResult(is_significant=True)},
         },
         "Gender": {
-            "omnibus": MockTestResult(is_significant=False),
-            "Male": MockTestResult(is_significant=True),
-            "Female": MockTestResult(is_significant=False),
+            "omnibus": {"Accuracy": MockTestResult(is_significant=False)},
+            "Male": {"Accuracy": MockTestResult(is_significant=True)},
+            "Female": {"Accuracy": MockTestResult(is_significant=False)},
         },
     }
 
@@ -1114,9 +1157,9 @@ def test_plot_effect_sizes_bars_and_legend(monkeypatch):
 
     # 2) Build a simple dict of DummyResult
     data = {
-        "A": DummyResult(0.1),
-        "B": DummyResult(0.5),
-        "C": DummyResult(None),  # should become 0.0
+        "A": {"Metric": DummyResult(0.1)},
+        "B": {"Metric": DummyResult(0.5)},
+        "C": {"Metric": DummyResult(None)},
     }
 
     # 3) Call your plot
@@ -1261,10 +1304,10 @@ def test_eq_plot_metrics_forest_stat_markers_and_legend(monkeypatch):
     captured = _capture_fig(monkeypatch)
     gm = {"A": {"M": 0.3}, "B": {"M": 0.6}, "C": {"M": 0.4}}
     stats = {
-        "A": _MockTestResult(is_significant=False),
-        "B": _MockTestResult(is_significant=True),
-        "C": _MockTestResult(is_significant=False),
-        "omnibus": _MockTestResult(is_significant=True),
+        "A": {"M": _MockTestResult(is_significant=False)},
+        "B": {"M": _MockTestResult(is_significant=True)},
+        "C": {"M": _MockTestResult(is_significant=False)},
+        "omnibus": {"M": _MockTestResult(is_significant=True)},
     }
     plots.eq_plot_metrics_forest(
         group_metrics=gm,
@@ -1287,8 +1330,8 @@ def test_eq_plot_metrics_forest_keeps_markers_after_sort(monkeypatch):
     captured = _capture_fig(monkeypatch)
     gm = {"X": {"m": 0.9}, "Y": {"m": 0.1}, "Z": {"m": 0.5}}
     stats = {
-        "X": _MockTestResult(is_significant=True),
-        "omnibus": _MockTestResult(is_significant=False),
+        "X": {"m": _MockTestResult(is_significant=True)},
+        "omnibus": {"m": _MockTestResult(is_significant=False)},
     }
     plots.eq_plot_metrics_forest(
         group_metrics=gm,
@@ -1459,6 +1502,44 @@ def test_eq_plot_bootstrap_forest_missing_reference_group_ok(monkeypatch):
     assert not has_red_dashed_vertical
 
     # Do not assert about the legend here, since current implementation may still add it.
+
+
+def test_eq_plot_bootstrap_forest_can_add_reference_group_at_zero(monkeypatch):
+    captured = _capture_fig(monkeypatch)
+    group_boot_metrics = [
+        {"A": {"M": 0.2}, "B": {"M": -0.1}},
+        {"A": {"M": 0.4}, "B": {"M": 0.1}},
+    ]
+
+    plots.eq_plot_bootstrap_forest(
+        group_boot_metrics=group_boot_metrics,
+        metric="M",
+        reference_group="Reference",
+        include_reference_group=True,
+        sort_alphabetically=True,
+    )
+
+    ax = captured[0].axes[0]
+    labels = [t.get_text() for t in ax.get_yticklabels()]
+    assert "Reference" in labels
+    assert "Reference" not in group_boot_metrics[0]
+
+    found_zero_reference_line = False
+    for line in ax.lines:
+        x = line.get_xdata()
+        if len(x) >= 2 and np.isclose(x[0], 0.0) and np.isclose(x[1], 0.0):
+            found_zero_reference_line = True
+            break
+    assert found_zero_reference_line
+
+
+def test_eq_plot_bootstrap_forest_reference_group_requires_name():
+    with pytest.raises(ValueError, match="reference_group is required"):
+        plots.eq_plot_bootstrap_forest(
+            group_boot_metrics=[{"A": {"M": 0.2}}],
+            metric="M",
+            include_reference_group=True,
+        )
 
 
 def test_eq_plot_bootstrap_forest_draws_ci_segments(monkeypatch):

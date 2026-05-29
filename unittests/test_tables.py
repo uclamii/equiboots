@@ -40,14 +40,14 @@ def test_metrics_table_basic(sample_metrics):
 
 def test_metrics_table_with_significant_omnibus(sample_metrics):
     """Test omnibus significance adds '*' to all columns."""
-    tests = {"omnibus": SimpleNamespace(is_significant=True)}
+    tests = {"omnibus": {"Metric": SimpleNamespace(is_significant=True)}}
     df = metrics_table(sample_metrics, statistical_tests=tests)
     assert all("*" in col for col in df.columns)
 
 
 def test_metrics_table_with_metric_specific_significance(sample_metrics):
     """Test selective marking (▲) only affects matched columns."""
-    tests = {"GroupA": SimpleNamespace(is_significant=True)}
+    tests = {"GroupA": {"Metric": SimpleNamespace(is_significant=True)}}
     df = metrics_table(sample_metrics, statistical_tests=tests)
     assert any("▲" in col for col in df.columns) or isinstance(df, pd.DataFrame)
 

@@ -2,7 +2,6 @@ import numpy as np
 import pandas as pd
 import equiboots as eqb
 
-
 if __name__ == "__main__":
     y_prob = np.random.rand(1000)
     y_pred = y_prob > 0.5
@@ -20,10 +19,10 @@ if __name__ == "__main__":
     )
 
     eq2 = eqb.EquiBoots(
-        y_true,
-        y_prob,
-        y_pred,
-        fairness_df,
+        y_true=y_true,
+        y_prob=y_prob,
+        y_pred=y_pred,
+        fairness_df=fairness_df,
         fairness_vars=["race", "sex"],
         reference_groups=["white", "M"],
         task="binary_classification",
@@ -45,32 +44,35 @@ if __name__ == "__main__":
     data = eq2.slicer("race")
     race_metrics = eq2.get_metrics(data)
 
-    dispa = eq2.calculate_disparities(race_metrics, "race")
+    diffs = eq2.calculate_differences(race_metrics, "race")
 
-    melted = pd.DataFrame(dispa).melt()
+    melted = pd.DataFrame(diffs).melt()
     df = melted["value"].apply(pd.Series).assign(attribute_value=melted["variable"])
 
-    eqb.eq_disparity_metrics_plot(
-        dispa,
+    eqb.eq_group_metrics_plot(
+        group_metrics=diffs,
         metric_cols=[
-            "Accuracy_ratio",
-            "Precision_ratio",
-            "Predicted Prevalence_ratio",
-            "FP Rate_ratio",
-            "TN Rate_ratio",
-            "Recall_ratio",
+            "Accuracy_diff",
+            "Precision_diff",
+            "Predicted_Prevalence_diff",
+            "FP_Rate_diff",
+            "TN_Rate_diff",
+            "Recall_diff",
         ],
         name="race",
         categories="all",
         figsize=(24, 4),
-        plot_kind="violinplot",
+        plot_type="violinplot",
         color_by_group=True,
         show_grid=False,
         strict_layout=True,
         save_path="./images",
         show_pass_fail=True,
-        # y_lim=(-2, 4),
-        # plot_thresholds=[0.9, 1.2],
+        disparities=True,
+        include_reference_group=True,
+        reference_group=eq2.reference_groups["race"],
+        # y_lim=(-0.5, 0.5),
+        # plot_thresholds=[-0.1, 0.1],
     )
 
     eqb.eq_plot_bootstrapped_group_curves(

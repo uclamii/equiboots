@@ -46,6 +46,16 @@ class StatisticalTester:
             "chi_square": self._chi_square_test,
             "bootstrap_test": self._bootstrap_test,
         }
+        self.METRIC_LIST = [
+            "Recall",
+            "Precision",
+            "Accuracy",
+            "F1 Score",
+            "Specificity",
+            "FP Rate",
+            "FN Rate",
+            "Predicted Prevalence",
+        ]
 
     def _bootstrap_test(self, data: List[float], config: dict) -> List[float]:
 
@@ -149,26 +159,95 @@ class StatisticalTester:
         """
         # Convert to numpy arrays
         data = pd.DataFrame(metrics)
-        # Create contingency table
-        contingency_table = data.T
+        statistical_test_dict = {}
+        data = data.T
 
-        # Use scipy's implementation
-        chi2, p_value, _, _ = stats.chi2_contingency(contingency_table)
+        for metric in self.METRIC_LIST:
+            contingency_table = self.get_contingency_table(data, metric)
+            chi2, p_value, dof, expected = stats.chi2_contingency(contingency_table)
 
-        return StatTestResult(
-            statistic=chi2,
-            p_value=p_value,
-            is_significant=p_value <= config.get("alpha", 0.05),
-            test_name="Chi-Square Test",
-        )
+            test_name = "Chi-Square Test"
 
-    def _calculate_effect_size(self, metrics: Dict) -> float:
+            # Cochran's rule: chi-square approximation is unreliable when more
+            # than 20% of expected cell counts are < 5. Use Fisher's exact (2x2)
+            # or warn (larger).
+            # See Kim HY (2017), "Statistical notes for clinical researchers:
+            # Chi-squared test and Fisher's exact test." Restor Dent Endod
+            # 42(2):152-155. https://pmc.ncbi.nlm.nih.gov/articles/PMC5426219/
+            n_cells = expected.size
+            low_expected_pct = (expected < 5).sum() / n_cells
+
+            if low_expected_pct > 0.20:
+                if contingency_table.shape == (2, 2):
+                    # Fisher's exact is well-defined for 2x2, swap in transparently
+                    _, p_value = stats.fisher_exact(contingency_table)
+                    test_name = "Fisher's Exact Test"
+                    chi2 = np.nan  # not a chi2 statistic anymore
+                else:
+                    warnings.warn(
+                        f"Metric '{metric}': {int(low_expected_pct * 100)}% of "
+                        f"expected cell counts < 5 (min expected = "
+                        f"{expected.min():.2f}). Chi-square approximation may be "
+                        f"unreliable for this {contingency_table.shape[0]} x "
+                        f"{contingency_table.shape[1]} table per Cochran's rule. "
+                        f"Consider Fisher's exact test."
+                    )
+            statistical_test_dict[metric] = StatTestResult(
+                statistic=chi2,
+                p_value=p_value,
+                is_significant=p_value <= config.get("alpha", 0.05),
+                test_name=test_name,
+            )
+        return statistical_test_dict
+
+    def get_contingency_table(self, data, metric):
+        ## Accuracy contingency table example   ## Recall contingency table example
+        ##       |TP + FN| FN + TN |            ##       |TP | FN |
+        ##       |-------|---------|            ##       |---|----|
+        ##  GRP1 |       |         |            ##  GRP1 |   |    |
+        ##  GRP2 |       |         |            ##  GRP2 |   |    |
+        if metric == "Accuracy":
+            data["TP + TN"] = data["TN"] + data["TP"]
+            data["FP + FN"] = data["FP"] + data["FN"]
+            table = data[["TP + TN", "FP + FN"]]
+            return table
+        elif metric == "Precision":
+            table = data[["TP", "FP"]]
+            return table
+        elif metric == "Recall":
+            table = data[["TP", "FN"]]
+            return table
+        elif metric == "F1 Score":
+            data["FP + FN"] = data["FP"] + data["FN"]
+            table = data[["TP", "FP + FN"]]
+            return table
+        elif metric == "Specificity":
+            table = data[["TN", "FP"]]
+            return table
+        elif metric == "FN Rate":
+            table = data[["FN", "TP"]]
+            return table
+        elif metric == "FP Rate":
+            table = data[["FP", "TN"]]
+            return table
+        elif metric == "Predicted Prevalence":
+            data["TP + FP"] = data["TP"] + data["FP"]
+            data["FN + TN"] = data["FN"] + data["TN"]
+            table = data[["TP + FP", "FN + TN"]]
+            return table
+        elif metric == "Negative Predictive Value":
+            table = data[["TN", "FN"]]
+            return table
+
+    def _calculate_effect_size(self, metrics: Dict, metric: str) -> float:
         """Calculates the Cramer's V effect size using scipy.
 
         Returns:
             float: Cramer's V effect size
         """
-        coningency_table = pd.DataFrame(metrics).T
+        data = pd.DataFrame(metrics)
+        data = data.T
+        coningency_table = self.get_contingency_table(data, metric)
         effect_size = association(coningency_table, method="cramer")
         return effect_size
 
@@ -180,45 +259,58 @@ class StatisticalTester:
         boot: bool = False,
     ) -> Dict[str, Dict[str, StatTestResult]]:
         """Adjusts p-values for multiple comparisons using specified method."""
+        if method not in ("bonferroni", "fdr_bh", "holm"):
+            return results
 
         if boot:
             # When boot=True, results has nested structure: results[group][test_type]
+            # Adjust across all group/test pairs together (existing behavior)
             p_values = []
             group_test_pairs = []
-
-            # Collect all p-values and their corresponding group/test pairs
             for group, group_results in results.items():
                 for test_type, test_result in group_results.items():
                     p_values.append(test_result.p_value)
                     group_test_pairs.append((group, test_type))
-        else:
-            # Original behavior: results[group] contains StatTestResult directly
-            p_values = []
-            for group, group_result in results.items():
-                p_values.append(group_result.p_value)
 
-        if method == "bonferroni":
-            adjusted_p_values = multipletests(
-                p_values, alpha=alpha, method="bonferroni"
-            )[1]
-        elif method == "fdr_bh":
-            adjusted_p_values = multipletests(p_values, alpha=alpha, method="fdr_bh")[1]
-        elif method == "holm":
-            adjusted_p_values = multipletests(p_values, alpha=alpha, method="holm")[1]
-        else:
-            return results
+            adjusted_p_values = multipletests(p_values, alpha=alpha, method=method)[1]
 
-        if boot:
-            # Update nested structure
             for idx, (group, test_type) in enumerate(group_test_pairs):
                 results[group][test_type].p_value = adjusted_p_values[idx]
                 results[group][test_type].is_significant = (
                     adjusted_p_values[idx] <= alpha
                 )
         else:
-            for idx, group in enumerate(results.keys()):
-                results[group].p_value = adjusted_p_values[idx]
-                results[group].is_significant = adjusted_p_values[idx] <= alpha
+            # Non-bootstrapped: adjust per metric across pairwise (non-omnibus) groups only
+            pairwise_groups = [g for g in results.keys() if g != "omnibus"]
+            if not pairwise_groups:
+                return results
+
+            # Collect all metrics present across the pairwise groups
+            metrics = set()
+            for group in pairwise_groups:
+                metrics.update(results[group].keys())
+
+            # Adjust p-values per metric, across race groups
+            for metric in metrics:
+                p_values = []
+                groups_for_metric = []
+                for group in pairwise_groups:
+                    if metric in results[group]:
+                        p_values.append(results[group][metric].p_value)
+                        groups_for_metric.append(group)
+
+                if not p_values:
+                    continue
+
+                adjusted_p_values = multipletests(p_values, alpha=alpha, method=method)[
+                    1
+                ]
+
+                for idx, group in enumerate(groups_for_metric):
+                    results[group][metric].p_value = adjusted_p_values[idx]
+                    results[group][metric].is_significant = (
+                        adjusted_p_values[idx] <= alpha
+                    )
 
         return results
 
@@ -294,7 +386,7 @@ class StatisticalTester:
         """Calculate Cohen's d"""
         mean_1 = np.mean(data_1)
         mean_2 = np.mean(data_2)
-        mean_sum = mean_1 + mean_2
+        mean_sum = mean_1 - mean_2
         pooled_std = np.sqrt((np.std(data_1) ** 2 + np.std(data_2) ** 2) / 2)
         return mean_sum / pooled_std if pooled_std > 0 else 0
 
@@ -317,35 +409,50 @@ class StatisticalTester:
 
         ref_metrics = {k: v for k, v in metrics.items() if k in [reference_group]}
 
-        # omnibus test
+        # 1) omnibus test
         results["omnibus"] = test_func(metrics, config)
 
-        if results["omnibus"].is_significant:
-            effect_size = self._calculate_effect_size(metrics)
-            results["omnibus"].effect_size = effect_size
-            for group, _ in metrics.items():
+        #### 2) Pairwise once per non-reference group gated on whether we see any signficance across omnibus
+        omnibus_results = results.get("omnibus", {})
+        any_omnibus_significant = any(
+            r.is_significant for r in omnibus_results.values()
+        )
+        if any_omnibus_significant:
+            for group in metrics:
                 if group == reference_group:
                     continue
-
                 comp_metrics = {k: v for k, v in metrics.items() if k in [group]}
-
                 ref_comp_metrics = {**ref_metrics, **comp_metrics}
-
                 results[group] = test_func(ref_comp_metrics, config)
-                if results[group].is_significant:
-                    effect_size = self._calculate_effect_size(ref_comp_metrics)
-                    results[group].effect_size = effect_size
-                else:
-                    results[group].effect_size = None
-                    results[group].confidence_interval = None
 
-            return results
+        # 3) Annotate effect sizes per metric, gated on omnibus significance
+        for metric in self.METRIC_LIST:
+            if results["omnibus"][metric].is_significant:
+                results["omnibus"][metric].effect_size = self._calculate_effect_size(
+                    metrics, metric
+                )
+                for group in results:
+                    if group == "omnibus":
+                        continue
+                    if results[group][metric].is_significant:
+                        pair = {**ref_metrics, group: metrics[group]}
+                        results[group][metric].effect_size = (
+                            self._calculate_effect_size(pair, metric)
+                        )
+                    else:
+                        results[group][metric].effect_size = None
+                        results[group][metric].confidence_interval = None
+            else:
+                results["omnibus"][metric].effect_size = None
+                results["omnibus"][metric].confidence_interval = None
+                # Clear pairwise for this metric too since the omnibus gate failed
+                for group in results:
+                    if group == "omnibus":
+                        continue
+                    results[group][metric].effect_size = None
+                    results[group][metric].confidence_interval = None
 
-        else:  # no need to calculate effect size
-            results["omnibus"].effect_size = None
-            results["omnibus"].confidence_interval = None
-            # no need for pairwise test
-            return results
+        return results
 
     def _analyze_bootstrapped_metrics(
         self, metrics_diff: list[Dict], reference_group: str, config: Dict[str, Any]

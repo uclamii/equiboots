@@ -16,7 +16,6 @@ from packaging import version
 from .metrics import regression_metrics, calibration_auc, calculate_bootstrap_stats
 from typing import Dict, List, Optional, Union, Tuple, Set, Callable, Any
 
-
 SEABORN_OLD = version.parse(sns.__version__) < version.parse("0.13.2")
 
 ################################################################################
@@ -450,6 +449,23 @@ def compute_pass_fail(
         for group, vals in group_pass_fail.items()
     }
     return group_status, lower, upper
+
+
+def _add_reference_group_at_zero(
+    group_metrics: List[Dict[str, Dict[str, float]]],
+    reference_group: str,
+    metric_cols: List[str],
+) -> List[Dict[str, Dict[str, float]]]:
+    """Return a copy of bootstrap difference metrics with reference values at zero."""
+    updated_metrics = []
+    for row in group_metrics:
+        updated_row = {group: dict(metrics) for group, metrics in row.items()}
+        reference_metrics = dict(updated_row.get(reference_group, {}))
+        for metric in metric_cols:
+            reference_metrics.setdefault(metric, 0.0)
+        updated_row[reference_group] = reference_metrics
+        updated_metrics.append(updated_row)
+    return updated_metrics
 
 
 def create_legend(
@@ -1223,6 +1239,7 @@ def eq_plot_bootstrapped_group_curves(
 # Group and Disparity Metrics (Violin/Box/Seaborn Plots)
 ################################################################################
 
+
 def eq_group_metrics_plot(
     group_metrics: List[Dict[str, Dict[str, float]]],
     metric_cols: List[str],
@@ -1244,6 +1261,8 @@ def eq_group_metrics_plot(
     y_lim: Optional[Tuple[float, float]] = None,
     statistical_tests: dict = None,
     disparities: bool = False,
+    include_reference_group: bool = False,
+    reference_group: Optional[str] = None,
     zero_line_kwargs: Optional[Dict[str, Any]] = None,
     **plot_kwargs: Dict[str, Union[str, float]],
 ) -> None:
@@ -1254,6 +1273,12 @@ def eq_group_metrics_plot(
       disparities : bool, default False
           If True, draw a red dotted line at y=0 on each subplot and add a
           legend entry "Reference group (zero diff)".
+      include_reference_group : bool, default False
+          If True, add `reference_group` to the plotted data with 0.0 for each
+          metric in `metric_cols`. Useful for bootstrap difference plots.
+      reference_group : str or None
+          Reference group name to display at zero when `include_reference_group`
+          is True.
       zero_line_kwargs : dict or None
           Matplotlib kwargs to style the zero line (defaults to red dotted).
       Shared y-limits:
@@ -1264,6 +1289,15 @@ def eq_group_metrics_plot(
     """
     if not isinstance(group_metrics, list):
         raise TypeError("group_metrics should be a list")
+
+    if include_reference_group:
+        if reference_group is None:
+            raise ValueError(
+                "reference_group is required when include_reference_group=True"
+            )
+        group_metrics = _add_reference_group_at_zero(
+            group_metrics, reference_group, metric_cols
+        )
 
     all_keys = sorted({key for row in group_metrics for key in row.keys()})
     attributes = (
@@ -1318,7 +1352,9 @@ def eq_group_metrics_plot(
 
     # default styling for the zero reference line
     if zero_line_kwargs is None:
-        zero_line_kwargs = dict(color="red", linestyle=":", linewidth=1, label="Reference group")
+        zero_line_kwargs = dict(
+            color="red", linestyle=":", linewidth=1, label="Reference group"
+        )
 
     for i, col in enumerate(metric_cols):
         ax = axs[i // n_cols, i % n_cols]
@@ -1425,7 +1461,8 @@ def eq_group_metrics_plot(
         if statistical_tests:
             extra_legend_items.append(
                 Line2D(
-                    [0], [0],
+                    [0],
+                    [0],
                     marker="*",
                     color="w",
                     markerfacecolor="black",
@@ -1439,7 +1476,9 @@ def eq_group_metrics_plot(
             )
 
         if extra_legend_items:
-            fig.legend(handles=extra_legend_items, loc="upper right", bbox_to_anchor=(0.7, 1.1))
+            fig.legend(
+                handles=extra_legend_items, loc="upper right", bbox_to_anchor=(0.7, 1.1)
+            )
 
     if strict_layout:
         plt.tight_layout(w_pad=2, h_pad=2, rect=[0.01, 0.01, 1.01, 1])
@@ -1449,6 +1488,26 @@ def eq_group_metrics_plot(
 ################################################################################
 # Group and Disparity Metrics (Point Estimate Plots)
 ################################################################################
+def _resolve_category_tests(statistical_tests, cat_name, groups):
+    """Return the {omnibus/group -> {metric -> StatTestResult}} dict for one category.
+
+    Accepts either:
+      1. Flat single-category dict:  {"omnibus": {...}, "GroupA": {...}, ...}
+      2. Nested dict keyed by category: {"sex": {...}, "race": {...}, ...}
+    """
+    if not statistical_tests:
+        return None
+    # Nested: cat_name is a top-level key whose value looks like a per-category dict
+    if cat_name in statistical_tests:
+        candidate = statistical_tests[cat_name]
+        if isinstance(candidate, dict) and (
+            "omnibus" in candidate or any(g in candidate for g in groups)
+        ):
+            return candidate
+    # Flat: applies directly to the single category being plotted
+    if "omnibus" in statistical_tests or any(g in statistical_tests for g in groups):
+        return statistical_tests
+    return None
 
 
 def eq_group_metrics_point_plot(
@@ -1512,18 +1571,30 @@ def eq_group_metrics_point_plot(
 
             x_vals, y_vals = [], []
             groups = list(group_metrics[j].keys())
+
+            # Resolve the test dict for THIS category (handles flat or nested input)
+            cat_stat_tests = _resolve_category_tests(
+                statistical_tests, cat_name, groups
+            )
+
             # Create modified group labels for this category based on statistical tests
             current_group_to_alpha = group_to_alpha.copy()
-            if statistical_tests and cat_name in statistical_tests:
-                stat_tests = statistical_tests[cat_name]
-
-                if stat_tests.get("omnibus") and stat_tests["omnibus"].is_significant:
+            if cat_stat_tests:
+                # Omnibus test for this specific metric
+                omnibus_for_metric = (cat_stat_tests.get("omnibus") or {}).get(metric)
+                if omnibus_for_metric and omnibus_for_metric.is_significant:
                     current_group_to_alpha = {
                         grp: alph + " *" for grp, alph in current_group_to_alpha.items()
                     }
 
+                # Per-group tests for this specific metric
                 for group in groups:
-                    if group in stat_tests and stat_tests[group].is_significant:
+                    group_tests = cat_stat_tests.get(group)
+                    if (
+                        group_tests
+                        and metric in group_tests
+                        and group_tests[metric].is_significant
+                    ):
                         current_group_to_alpha[group] += " ▲"
 
             current_alpha_to_group = {v: k for k, v in current_group_to_alpha.items()}
@@ -1669,12 +1740,19 @@ def eq_plot_metrics_forest(
     # Add statistical significance markers
     if statistical_tests:
         for group in groups:
-            if group in statistical_tests and statistical_tests[group].is_significant:
+            if (
+                group in statistical_tests
+                and isinstance(statistical_tests[group], dict)
+                and metric_name in statistical_tests[group]
+                and statistical_tests[group][metric_name].is_significant
+            ):
                 groups[groups.index(group)] += " ▲"
 
         if (
             statistical_tests.get("omnibus")
-            and statistical_tests["omnibus"].is_significant
+            and isinstance(statistical_tests["omnibus"], dict)
+            and metric_name in statistical_tests["omnibus"]
+            and statistical_tests["omnibus"][metric_name].is_significant
         ):
             groups = [f"{group} *" for group in groups]
 
@@ -1736,7 +1814,9 @@ def eq_plot_metrics_forest(
 
         if (
             statistical_tests.get("omnibus")
-            and statistical_tests["omnibus"].is_significant
+            and isinstance(statistical_tests["omnibus"], dict)
+            and metric_name in statistical_tests["omnibus"]
+            and statistical_tests["omnibus"][metric_name].is_significant
         ):
             legend_elements.append(
                 Line2D(
@@ -1753,7 +1833,10 @@ def eq_plot_metrics_forest(
 
         original_groups = list(valid_groups.keys())
         group_tests_significant = any(
-            group in statistical_tests and statistical_tests[group].is_significant
+            group in statistical_tests
+            and isinstance(statistical_tests[group], dict)
+            and metric_name in statistical_tests[group]
+            and statistical_tests[group][metric_name].is_significant
             for group in original_groups
         )
 
@@ -1783,6 +1866,7 @@ def eq_plot_bootstrap_forest(
     group_boot_metrics: List[Dict[str, Dict[str, np.ndarray]]],
     metric: str = "Accuracy",
     reference_group: Optional[str] = None,
+    include_reference_group: bool = False,
     figsize: Tuple[float, float] = (6, 4),
     save_path: Optional[str] = None,
     filename: str = "bootstrap_forest",
@@ -1796,6 +1880,15 @@ def eq_plot_bootstrap_forest(
     group, and draw a dotted line through `reference_group` if provided.
     Adds asterisks to group names with significant differences.
     """
+    if include_reference_group:
+        if reference_group is None:
+            raise ValueError(
+                "reference_group is required when include_reference_group=True"
+            )
+        group_boot_metrics = _add_reference_group_at_zero(
+            group_boot_metrics, reference_group, [metric]
+        )
+
     # Calculate mean and 95% CI for each metric per group
     bootstrap_metrics = calculate_bootstrap_stats(group_boot_metrics, metric)
     fig, ax = plt.subplots(figsize=figsize)
@@ -1935,53 +2028,59 @@ def plot_effect_sizes(
     legend_loc="best",
     save_path=None,
     filename="effect_sizes",
+    decimal_places=2,
 ):
     """
-    Bar chart of effect sizes by group.
-    Expects a mapping of labels to objects with .effect_size. Bars are annotated,
-    horizontal guides mark 0.2 and 0.6, and a PNG is saved if `save_path` is provided.
+    Bar chart of effect sizes by outer key (omnibus + each group).
+
+    Expects stat_test_results in nested shape:
+        {outer_key: {metric: StatTestResult, ...}, ...}
+    For each outer key, plots the MAX Cramer's V across all metrics (the
+    strongest disparity signal for that group). Bars are annotated,
+    horizontal guides mark 0.2 and 0.6, and a PNG is saved if `save_path`
+    is provided.
     """
-    stat_results_keys = stat_test_results.keys()
-    effect_sizes = [
-        result.effect_size if result.effect_size else 0
-        for _, result in stat_test_results.items()
-    ]
+    labels = []
+    effect_sizes = []
+    for outer_key, inner in stat_test_results.items():
+        if not isinstance(inner, dict):
+            continue
+        # Pull the max effect size across metrics; treat None as 0
+        max_es = max((r.effect_size if r.effect_size else 0) for r in inner.values())
+        labels.append(outer_key)
+        effect_sizes.append(max_es)
+
+    if not labels:
+        raise ValueError("stat_test_results is empty or malformed.")
 
     plt.figure(figsize=figsize)
-    # Create the bar chart
-    bars = plt.bar(stat_results_keys, effect_sizes)
+    bars = plt.bar(labels, effect_sizes)
 
-    # Add value labels on top of each bar
     for bar in bars:
         yval = bar.get_height()
         plt.text(
             bar.get_x() + bar.get_width() / 2,
             yval + 0.01,
-            round(yval, 2),
+            round(yval, decimal_places),
             ha="center",
             va="bottom",
-        )  # Adjust vertical position (0.01) as needed
+        )
 
-    # Add labels and title
     plt.xlabel(xlabel)
     plt.ylabel(ylabel)
     plt.title(title)
 
-    # Add horizontal lines for effect size ranges
     plt.axhline(y=0.2, color="red", linestyle="--", label="Small effect size <= 0.2")
     plt.axhline(y=0.6, color="red", linestyle="--", label="Medium effect size <= 0.6")
     plt.plot([], [], color="red", linestyle="--", label="Large effect size > 0.6")
 
-    # Add a legend and grid
     plt.legend(loc=legend_loc)
     plt.grid(axis="y", linestyle="--")
 
-    # decide horizontal alignment based on rotation
     ha = "center" if rotation == 0 else "right"
     plt.xticks(rotation=rotation, ha=ha)
     plt.tight_layout()
 
-    # save or show
     fig = plt.gcf()
     if save_path:
         fig.savefig(os.path.join(save_path, f"{filename}.png"), bbox_inches="tight")

@@ -1,595 +1,356 @@
+import copy
+import warnings
 import numpy as np
 import pandas as pd
 import pytest
-from equiboots import EquiBoots
-from equiboots.StatisticalTester import StatisticalTester, StatTestResult
 
-def test_statistical_tester_initialization():
-    """Test initialization of StatisticalTester class"""
-    tester = StatisticalTester()
-    assert isinstance(tester, StatisticalTester)
-    assert hasattr(tester, '_test_implementations')
-    assert 'mann_whitney' in tester._test_implementations
-    assert 't_test' in tester._test_implementations
-    assert 'ks_test' in tester._test_implementations
-    assert 'permutation' in tester._test_implementations
-    assert 'wilcoxon' in tester._test_implementations
+from src.equiboots.StatisticalTester import StatTestResult, StatisticalTester
 
-def test_stat_test_result_dataclass():
-    """Test StatTestResult dataclass"""
-    result = StatTestResult(
-        statistic=1.5,
-        p_value=0.05,
-        is_significant=True,
-        test_name="test",
-        effect_size=0.8,
-        confidence_interval=(0.5, 2.5)
-    )
-    assert result.statistic == 1.5
-    assert result.p_value == 0.05
-    assert result.is_significant is True
-    assert result.test_name == "test"
-    assert result.effect_size == 0.8
-    assert result.confidence_interval == (0.5, 2.5)
 
-def test_mann_whitney_test():
-    """Test Mann-Whitney U test implementation"""
-    tester = StatisticalTester()
-    ref_data = np.random.normal(0, 1, 100)
-    comp_data = np.random.normal(1, 1, 100)
-    
-    result = tester._mann_whitney_test(ref_data, comp_data, {"alpha": 0.05})
-    assert isinstance(result, StatTestResult)
-    assert hasattr(result, 'statistic')
-    assert hasattr(result, 'p_value')
-    assert hasattr(result, 'is_significant')
-    assert hasattr(result, 'effect_size')
+@pytest.fixture
+def tester():
+    return StatisticalTester()
 
-def test_t_test():
-    """Test Welch's t-test implementation"""
-    tester = StatisticalTester()
-    ref_data = np.random.normal(0, 1, 100)
-    comp_data = np.random.normal(1, 1, 100)
-    
-    result = tester._t_test(ref_data, comp_data, {"alpha": 0.05})
-    assert isinstance(result, StatTestResult)
-    assert hasattr(result, 'statistic')
-    assert hasattr(result, 'p_value')
-    assert hasattr(result, 'is_significant')
-    assert hasattr(result, 'effect_size')
 
-def test_ks_test():
-    """Test Kolmogorov-Smirnov test implementation"""
-    tester = StatisticalTester()
-    ref_data = np.random.normal(0, 1, 100)
-    comp_data = np.random.normal(1, 1, 100)
-    
-    result = tester._ks_test(ref_data, comp_data, {"alpha": 0.05})
-    assert isinstance(result, StatTestResult)
-    assert hasattr(result, 'statistic')
-    assert hasattr(result, 'p_value')
-    assert hasattr(result, 'is_significant')
-    assert hasattr(result, 'effect_size')
-
-def test_permutation_test():
-    """Test permutation test implementation"""
-    tester = StatisticalTester()
-    ref_data = np.random.normal(0, 1, 100)
-    comp_data = np.random.normal(1, 1, 100)
-    
-    result = tester._permutation_test(ref_data, comp_data, {
+@pytest.fixture
+def chi_square_config():
+    return {
+        "test_type": "chi_square",
         "alpha": 0.05,
-        "bootstrap_iterations": 1000,
-        "confidence_level": 0.95
-    })
-    assert isinstance(result, StatTestResult)
-    assert hasattr(result, 'statistic')
-    assert hasattr(result, 'p_value')
-    assert hasattr(result, 'is_significant')
-    assert hasattr(result, 'effect_size')
-    assert hasattr(result, 'confidence_interval')
-
-def test_wilcoxon_test():
-    """Test Wilcoxon signed-rank test implementation"""
-    tester = StatisticalTester()
-    ref_data = np.random.normal(0, 1, 100)
-    comp_data = np.random.normal(1, 1, 100)
-    
-    result = tester._wilcoxon_test(ref_data, comp_data, {"alpha": 0.05})
-    assert isinstance(result, StatTestResult)
-    assert hasattr(result, 'statistic')
-    assert hasattr(result, 'p_value')
-    assert hasattr(result, 'is_significant')
-    assert hasattr(result, 'effect_size')
-
-def test_adjust_p_values():
-    """Test p-value adjustment methods"""
-    tester = StatisticalTester()
-    p_values = [0.01, 0.02, 0.03, 0.04, 0.05]
-    
-    # Test Bonferroni correction
-    bonferroni_results = tester._adjust_p_values(
-        {"group1": {"metric1": StatTestResult(0, p_values[0], True, "test")}},
-        "bonferroni",
-        0.05
-    )
-    assert isinstance(bonferroni_results, dict)
-    
-    # Test FDR BH correction
-    fdr_results = tester._adjust_p_values(
-        {"group1": {"metric1": StatTestResult(0, p_values[0], True, "test")}},
-        "fdr_bh",
-        0.05
-    )
-    assert isinstance(fdr_results, dict)
-    
-    # Test Holm correction
-    holm_results = tester._adjust_p_values(
-        {"group1": {"metric1": StatTestResult(0, p_values[0], True, "test")}},
-        "holm",
-        0.05
-    )
-    assert isinstance(holm_results, dict)
-
-def test_analyze_metrics():
-    """Test analyze_metrics method"""
-    tester = StatisticalTester()
-    metrics_data = {
-        "group1": {"metric1": 0.8, "metric2": 0.6},
-        "group2": {"metric1": 0.9, "metric2": 0.7}
+        "adjust_method": "none",
     }
-    
+
+
+@pytest.fixture
+def bootstrap_config():
+    return {
+        "test_type": "bootstrap_test",
+        "alpha": 0.05,
+        "adjust_method": "none",
+        "tail_type": "two_tailed",
+        "confidence_level": 0.95,
+        "metrics": ["Accuracy"],
+    }
+
+
+def test_stat_test_result_casts_numpy_bool_to_python_bool():
+    result = StatTestResult(
+        statistic=1.0,
+        p_value=0.01,
+        is_significant=np.bool_(True),
+        test_name="example",
+    )
+
+    assert result.is_significant is True
+
+
+@pytest.mark.parametrize(
+    ("tail_type", "expected"),
+    [
+        ("two_tailed", (2.5, 97.5)),
+        ("one_tail_less", (0, 5.0)),
+        ("one_tail_greater", (95.0, 100)),
+    ],
+)
+def test_get_ci_bounds_for_supported_tail_types(tester, tail_type, expected):
+    config = {"tail_type": tail_type, "alpha": 0.05}
+
+    assert tester.get_ci_bounds(config) == expected
+
+
+def test_get_ci_bounds_rejects_unknown_tail_type(tester):
+    with pytest.raises(ValueError, match="Must specify"):
+        tester.get_ci_bounds({"tail_type": "sideways", "alpha": 0.05})
+
+
+@pytest.mark.parametrize(
+    ("data", "tail_type", "expected"),
+    [
+        ([-1, -1, 1, 1], "two_tailed", 0.5),
+        ([1, 1, 1, -1], "two_tailed", 0.25),
+        ([-1, -1, -1, 1], "one_tail_less", 0.75),
+    ],
+)
+def test_calc_p_value_bootstrap(tester, data, tail_type, expected):
+    config = {"tail_type": tail_type, "alpha": 0.05}
+
+    assert tester.calc_p_value_bootstrap(data, config) == pytest.approx(expected)
+
+
+@pytest.mark.parametrize(
+    ("metric", "expected_columns", "expected_values"),
+    [
+        ("Accuracy", ["TP + TN", "FP + FN"], [[11, 7], [17, 15]]),
+        ("Precision", ["TP", "FP"], [[10, 5], [15, 11]]),
+        ("Recall", ["TP", "FN"], [[10, 2], [15, 4]]),
+        ("F1 Score", ["TP", "FP + FN"], [[10, 7], [15, 15]]),
+        ("Specificity", ["TN", "FP"], [[1, 5], [2, 11]]),
+        ("FN Rate", ["FN", "TP"], [[2, 10], [4, 15]]),
+        ("FP Rate", ["FP", "TN"], [[5, 1], [11, 2]]),
+        ("Predicted Prevalence", ["TP + FP", "FN + TN"], [[15, 3], [26, 6]]),
+        ("Negative Predictive Value", ["TN", "FN"], [[1, 2], [2, 4]]),
+    ],
+)
+def test_get_contingency_table_builds_expected_tables(
+    tester, metric, expected_columns, expected_values
+):
+    data = pd.DataFrame(
+        {
+            "TP": [10, 15],
+            "FP": [5, 11],
+            "TN": [1, 2],
+            "FN": [2, 4],
+        },
+        index=["reference", "group"],
+    )
+
+    table = tester.get_contingency_table(data.copy(), metric)
+
+    assert list(table.columns) == expected_columns
+    assert table.to_numpy().tolist() == expected_values
+
+
+def test_chi_square_test_falls_back_to_fisher_for_small_2x2_tables(
+    tester, chi_square_config
+):
+    metrics = {
+        "reference": {"TP": 1, "FP": 1, "TN": 1, "FN": 1},
+        "group": {"TP": 1, "FP": 1, "TN": 1, "FN": 1},
+    }
+
+    results = tester._chi_square_test(metrics, chi_square_config)
+
+    assert set(results) == set(tester.METRIC_LIST)
+    assert all(result.test_name == "Fisher's Exact Test" for result in results.values())
+    assert all(np.isnan(result.statistic) for result in results.values())
+    assert all(result.p_value == pytest.approx(1.0) for result in results.values())
+    assert all(result.is_significant is False for result in results.values())
+
+
+def test_chi_square_fishers_exact_fallback_2x2():
+    """2x2 table with >20% expected cells <5 should fall back to Fisher's exact."""
+    tester = StatisticalTester()
+    metrics = {
+        "ref": {"TP": 2, "FP": 1, "TN": 5, "FN": 1},
+        "groupA": {"TP": 1, "FP": 0, "TN": 4, "FN": 1},
+    }
+    config = {"alpha": 0.05}
+
+    result = tester._chi_square_test(metrics, config)
+
+    for metric_name, test_result in result.items():
+        assert (
+            test_result.test_name == "Fisher's Exact Test"
+        ), f"{metric_name}: expected Fisher's Exact Test, got {test_result.test_name}"
+        assert np.isnan(
+            test_result.statistic
+        ), f"{metric_name}: chi2 statistic should be NaN when Fisher's is used"
+        assert 0.0 <= test_result.p_value <= 1.0
+
+
+def test_chi_square_warns_on_low_expected_Kx2():
+    """K x 2 table (K>2) with >20% expected cells <5 should emit a Cochran warning."""
+    tester = StatisticalTester()
+    metrics = {
+        "ref": {"TP": 2, "FP": 1, "TN": 5, "FN": 1},
+        "groupA": {"TP": 1, "FP": 0, "TN": 4, "FN": 1},
+        "groupB": {"TP": 1, "FP": 1, "TN": 3, "FN": 0},
+    }
+    config = {"alpha": 0.05}
+
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        tester._chi_square_test(metrics, config)
+
+    cochran_warnings = [w for w in caught if "Cochran" in str(w.message)]
+    assert len(cochran_warnings) > 0, "Expected Cochran's rule warning, got none"
+
+
+def test_chi_square_normal_path_large_counts():
+    """Healthy expected counts should use plain chi-square, no Fisher, no warning."""
+    tester = StatisticalTester()
+    metrics = {
+        "ref": {"TP": 100, "FP": 50, "TN": 200, "FN": 100},
+        "groupA": {"TP": 80, "FP": 40, "TN": 180, "FN": 90},
+    }
+    config = {"alpha": 0.05}
+
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        result = tester._chi_square_test(metrics, config)
+
+    cochran_warnings = [w for w in caught if "Cochran" in str(w.message)]
+    assert (
+        len(cochran_warnings) == 0
+    ), "Got unexpected Cochran warning for healthy counts"
+
+    for metric_name, test_result in result.items():
+        assert (
+            test_result.test_name == "Chi-Square Test"
+        ), f"{metric_name}: expected Chi-Square Test, got {test_result.test_name}"
+        assert not np.isnan(
+            test_result.statistic
+        ), f"{metric_name}: chi2 statistic should be a real number"
+
+
+def test_analyze_metrics_runs_omnibus_then_pairwise_and_effect_sizes(
+    tester, chi_square_config
+):
+    metrics = {
+        "reference": {"TP": 90, "FP": 10, "TN": 90, "FN": 10},
+        "different": {"TP": 10, "FP": 90, "TN": 10, "FN": 90},
+        "similar": {"TP": 88, "FP": 12, "TN": 91, "FN": 9},
+    }
+
     results = tester.analyze_metrics(
-        metrics_data,
-        "group1",
-        {
-            "test_type": "mann_whitney",
-            "alpha": 0.05,
-            "adjust_method": "none"
-        }
+        metrics,
+        reference_group="reference",
+        test_config=chi_square_config,
+        task="binary_classification",
     )
-    assert isinstance(results, dict)
-    assert "group2" in results
-    assert "metric1" in results["group2"]
-    assert "metric2" in results["group2"]
 
-def test_equiboots_statistical_analysis():
-    """Test statistical analysis through EquiBoots class"""
-    # Generate synthetic data with positive values
-    np.random.seed(42)
-    n_samples = 100
-    # Generate positive values by using exponential of normal distribution
-    y_true = np.exp(np.random.normal(0, 0.5, n_samples))
-    y_pred = y_true * (1 + np.random.normal(0, 0.1, n_samples))
-    fairness_df = pd.DataFrame({
-        'race': np.random.choice(['white', 'black', 'asian'], n_samples),
-        'sex': np.random.choice(['M', 'F'], n_samples)
-    })
-    
-    # Initialize EquiBoots
-    eq = EquiBoots(
-        y_true=y_true,
-        y_pred=y_pred,
-        y_prob=None,  # Add y_prob=None for regression task
-        fairness_df=fairness_df,
-        fairness_vars=['race', 'sex'],
-        reference_groups=['white', 'M'],
-        task='regression',
-        bootstrap_flag=False
-    )
-    
-    # Test list_available_tests
-    tests = eq.list_available_tests()
-    assert isinstance(tests, dict)
-    assert 'mann_whitney' in tests
-    assert 't_test' in tests
-    
-    # Test list_adjustment_methods
-    methods = eq.list_adjustment_methods()
-    assert isinstance(methods, dict)
-    assert 'bonferroni' in methods
-    assert 'fdr_bh' in methods
-    
-    # Test analyze_statistical_significance
-    eq.grouper(groupings_vars=['race'])
-    race_data = eq.slicer('race')
-    race_metrics = eq.get_metrics(race_data)
-    
-    results = eq.analyze_statistical_significance(
-        metric_dict=race_metrics,
-        var_name='race',
-        test_config={
-            'test_type': 'mann_whitney',
-            'alpha': 0.05,
-            'adjust_method': 'none'
-        }
-    )
-    assert isinstance(results, dict)
-    assert 'black' in results
-    assert 'asian' in results
+    assert set(results) == {"omnibus", "different", "similar"}
+    assert results["omnibus"]["Recall"].is_significant is True
+    assert results["omnibus"]["Recall"].effect_size > 0
+    assert results["different"]["Recall"].is_significant is True
+    assert results["different"]["Recall"].effect_size > 0
+    assert results["similar"]["Recall"].is_significant is False
+    assert results["similar"]["Recall"].effect_size is None
+    assert results["omnibus"]["Predicted Prevalence"].is_significant is False
+    assert results["omnibus"]["Predicted Prevalence"].effect_size is None
 
-def test_analyze_all_group_comparisons():
-    """Test all-group comparisons functionality."""
-    # Create synthetic data
-    n_samples = 100
-    groups = ["A", "B", "C"]
+
+def test_analyze_metrics_skips_pairwise_when_omnibus_has_no_significance(
+    tester, chi_square_config
+):
     metrics = {
-        "A": {
-            "metric1": np.random.normal(0, 1, n_samples),
-            "metric2": np.random.normal(0, 1, n_samples)
-        },
-        "B": {
-            "metric1": np.random.normal(0.5, 1, n_samples),
-            "metric2": np.random.normal(0.5, 1, n_samples)
-        },
-        "C": {
-            "metric1": np.random.normal(1, 1, n_samples),
-            "metric2": np.random.normal(1, 1, n_samples)
-        }
+        "reference": {"TP": 50, "FP": 10, "TN": 40, "FN": 8},
+        "group": {"TP": 50, "FP": 10, "TN": 40, "FN": 8},
+        "other": {"TP": 50, "FP": 10, "TN": 40, "FN": 8},
     }
-    
-    # Test with different configurations
-    test_configs = [
-        {
-            "test_type": "mann_whitney",
-            "alpha": 0.05,
-            "adjust_method": "bonferroni"
-        },
-        {
-            "test_type": "t_test",
-            "alpha": 0.05,
-            "adjust_method": "holm"
-        },
-        {
-            "test_type": "ks_test",
-            "alpha": 0.05,
-            "adjust_method": "fdr_bh"
-        },
-        {
-            "test_type": "permutation",
-            "alpha": 0.05,
-            "adjust_method": "none",
-            "bootstrap_iterations": 1000
-        },
-        {
-            "test_type": "wilcoxon",
-            "alpha": 0.05,
-            "adjust_method": "bonferroni"
-        }
-    ]
-    
-    for config in test_configs:
-        tester = StatisticalTester()
-        results = tester.analyze_all_group_comparisons(metrics, config)
-        
-        # Check that all groups are present in results
-        assert set(results.keys()) == set(groups)
-        
-        # Check that all group pairs are compared
-        for group1 in groups:
-            assert set(results[group1].keys()) == set(groups) - {group1}
-            for group2 in results[group1].keys():
-                # Check that results contain all metrics
-                assert set(results[group1][group2].keys()) == {"metric1", "metric2"}
-                
-                # Check that each metric has a valid StatTestResult
-                for metric, result in results[group1][group2].items():
-                    assert isinstance(result, StatTestResult)
-                    assert isinstance(result.statistic, float)
-                    assert isinstance(result.p_value, float)
-                    assert isinstance(result.is_significant, bool)
-                    assert isinstance(result.test_name, str)
-                    assert isinstance(result.effect_size, float)
-                    if result.confidence_interval:
-                        assert isinstance(result.confidence_interval, tuple)
-                        assert len(result.confidence_interval) == 2
-                        assert all(isinstance(x, float) for x in result.confidence_interval)
 
-def test_all_group_comparisons_with_bootstrapped_data():
-    """Test all-group comparisons with bootstrapped data."""
-    # Create synthetic bootstrapped data
-    n_bootstraps = 50
-    n_samples = 100
-    groups = ["A", "B", "C"]
-    metrics = []
-    
-    for _ in range(n_bootstraps):
-        bootstrap_sample = {
-            "A": {
-                "metric1": np.random.normal(0, 1, n_samples),
-                "metric2": np.random.normal(0, 1, n_samples)
-            },
-            "B": {
-                "metric1": np.random.normal(0.5, 1, n_samples),
-                "metric2": np.random.normal(0.5, 1, n_samples)
-            },
-            "C": {
-                "metric1": np.random.normal(1, 1, n_samples),
-                "metric2": np.random.normal(1, 1, n_samples)
-            }
-        }
-        metrics.append(bootstrap_sample)
-    
-    # Test with different configurations
-    test_configs = [
-        {
-            "test_type": "mann_whitney",
-            "alpha": 0.05,
-            "adjust_method": "bonferroni"
-        },
-        {
-            "test_type": "t_test",
-            "alpha": 0.05,
-            "adjust_method": "holm"
-        },
-        {
-            "test_type": "ks_test",
-            "alpha": 0.05,
-            "adjust_method": "fdr_bh"
-        },
-        {
-            "test_type": "permutation",
-            "alpha": 0.05,
-            "adjust_method": "none",
-            "bootstrap_iterations": 1000
-        }
-    ]
-    
-    for config in test_configs:
-        tester = StatisticalTester()
-        results = tester.analyze_all_group_comparisons(metrics, config)
-        
-        # Check that all groups are present in results
-        assert set(results.keys()) == set(groups)
-        
-        # Check that all group pairs are compared
-        for group1 in groups:
-            assert set(results[group1].keys()) == set(groups) - {group1}
-            for group2 in results[group1].keys():
-                # Check that results contain all metrics
-                assert set(results[group1][group2].keys()) == {"metric1", "metric2"}
-                
-                # Check that each metric has a valid StatTestResult
-                for metric, result in results[group1][group2].items():
-                    assert isinstance(result, StatTestResult)
-                    assert isinstance(result.statistic, float)
-                    assert isinstance(result.p_value, float)
-                    assert isinstance(result.is_significant, bool)
-                    assert isinstance(result.test_name, str)
-                    assert isinstance(result.effect_size, float)
-                    if result.confidence_interval:
-                        assert isinstance(result.confidence_interval, tuple)
-                        assert len(result.confidence_interval) == 2
-                        assert all(isinstance(x, float) for x in result.confidence_interval)
-
-def test_all_group_comparisons_with_different_metrics():
-    """Test all-group comparisons with different types of metrics."""
-    # Create synthetic data with different metric types
-    n_samples = 100
-    groups = ["A", "B", "C"]
-    metrics = {
-        "A": {
-            "continuous": np.random.normal(0, 1, n_samples),
-            "binary": np.random.binomial(1, 0.5, n_samples),
-            "count": np.random.poisson(5, n_samples)
-        },
-        "B": {
-            "continuous": np.random.normal(0.5, 1, n_samples),
-            "binary": np.random.binomial(1, 0.6, n_samples),
-            "count": np.random.poisson(6, n_samples)
-        },
-        "C": {
-            "continuous": np.random.normal(1, 1, n_samples),
-            "binary": np.random.binomial(1, 0.7, n_samples),
-            "count": np.random.poisson(7, n_samples)
-        }
-    }
-    
-    # Test with different configurations
-    test_configs = [
-        {
-            "test_type": "mann_whitney",
-            "alpha": 0.05,
-            "adjust_method": "bonferroni"
-        },
-        {
-            "test_type": "t_test",
-            "alpha": 0.05,
-            "adjust_method": "holm"
-        },
-        {
-            "test_type": "ks_test",
-            "alpha": 0.05,
-            "adjust_method": "fdr_bh"
-        },
-        {
-            "test_type": "permutation",
-            "alpha": 0.05,
-            "adjust_method": "none",
-            "bootstrap_iterations": 1000
-        }
-    ]
-    
-    for config in test_configs:
-        tester = StatisticalTester()
-        results = tester.analyze_all_group_comparisons(metrics, config)
-        
-        # Check that all groups are present in results
-        assert set(results.keys()) == set(groups)
-        
-        # Check that all group pairs are compared
-        for group1 in groups:
-            assert set(results[group1].keys()) == set(groups) - {group1}
-            for group2 in results[group1].keys():
-                # Check that results contain all metrics
-                assert set(results[group1][group2].keys()) == {"continuous", "binary", "count"}
-                
-                # Check that each metric has a valid StatTestResult
-                for metric, result in results[group1][group2].items():
-                    assert isinstance(result, StatTestResult)
-                    assert isinstance(result.statistic, float)
-                    assert isinstance(result.p_value, float)
-                    assert isinstance(result.is_significant, bool)
-                    assert isinstance(result.test_name, str)
-                    assert isinstance(result.effect_size, float)
-                    if result.confidence_interval:
-                        assert isinstance(result.confidence_interval, tuple)
-                        assert len(result.confidence_interval) == 2
-                        assert all(isinstance(x, float) for x in result.confidence_interval)
-
-def test_all_group_comparisons_with_p_value_adjustment():
-    """Test all-group comparisons with different p-value adjustment methods."""
-    # Create synthetic data
-    n_samples = 100
-    groups = ["A", "B", "C"]
-    metrics = {
-        "A": {
-            "metric1": np.random.normal(0, 1, n_samples),
-            "metric2": np.random.normal(0, 1, n_samples)
-        },
-        "B": {
-            "metric1": np.random.normal(0.5, 1, n_samples),
-            "metric2": np.random.normal(0.5, 1, n_samples)
-        },
-        "C": {
-            "metric1": np.random.normal(1, 1, n_samples),
-            "metric2": np.random.normal(1, 1, n_samples)
-        }
-    }
-    
-    # Test with different adjustment methods
-    adjustment_methods = ["bonferroni", "fdr_bh", "holm", "none"]
-    
-    for method in adjustment_methods:
-        config = {
-            "test_type": "t_test",
-            "alpha": 0.05,
-            "adjust_method": method
-        }
-        
-        tester = StatisticalTester()
-        results = tester.analyze_all_group_comparisons(metrics, config)
-        
-        # Check that all groups are present in results
-        assert set(results.keys()) == set(groups)
-        
-        # Check that all group pairs are compared
-        for group1 in groups:
-            assert set(results[group1].keys()) == set(groups) - {group1}
-            for group2 in results[group1].keys():
-                # Check that results contain all metrics
-                assert set(results[group1][group2].keys()) == {"metric1", "metric2"}
-                
-                # Check that each metric has a valid StatTestResult
-                for metric, result in results[group1][group2].items():
-                    assert isinstance(result, StatTestResult)
-                    assert isinstance(result.statistic, float)
-                    assert isinstance(result.p_value, float)
-                    assert isinstance(result.is_significant, bool)
-                    assert isinstance(result.test_name, str)
-                    assert isinstance(result.effect_size, float)
-                    if result.confidence_interval:
-                        assert isinstance(result.confidence_interval, tuple)
-                        assert len(result.confidence_interval) == 2
-                        assert all(isinstance(x, float) for x in result.confidence_interval)
-
-def test_equiboots_all_group_comparisons():
-    """Test all-group comparisons through EquiBoots class."""
-    # Create synthetic data with positive values
-    n_samples = 100
-    y_true = np.abs(np.random.normal(5, 1, n_samples))  # Ensure positive values
-    y_pred = y_true + np.random.normal(0, 0.1, n_samples)
-    y_prob = None
-    
-    # Create demographic data
-    race = np.random.choice(
-        ["white", "black", "asian", "hispanic"],
-        n_samples,
-        p=[0.4, 0.3, 0.2, 0.1]
-    ).reshape(-1, 1)
-    
-    sex = np.random.choice(
-        ["M", "F"],
-        n_samples,
-        p=[0.6, 0.4]
-    ).reshape(-1, 1)
-    
-    fairness_df = pd.DataFrame(
-        data=np.concatenate((race, sex), axis=1),
-        columns=["race", "sex"]
+    results = tester.analyze_metrics(
+        metrics,
+        reference_group="reference",
+        test_config=chi_square_config,
+        task="binary_classification",
     )
-    
-    # Initialize EquiBoots
-    eq = EquiBoots(
-        y_true=y_true,
-        y_prob=y_prob,
-        y_pred=y_pred,
-        fairness_df=fairness_df,
-        fairness_vars=["race", "sex"],
-        reference_groups=["white", "M"],
-        task="regression",
-        bootstrap_flag=True,
-        num_bootstraps=100,
-        boot_sample_size=200,
-        balanced=True,
-        stratify_by_outcome=False
-    )
-    
-    # Set fixed seeds for reproducibility
-    eq.set_fix_seeds([42, 123, 222, 999])
-    
-    # Get metrics
-    eq.grouper(groupings_vars=["race", "sex"])
-    race_data = eq.slicer("race")
-    race_metrics = eq.get_metrics(race_data)
-    
-    # Test with different configurations
-    test_configs = [
+
+    assert set(results) == {"omnibus"}
+    assert all(result.is_significant is False for result in results["omnibus"].values())
+
+
+def test_analyze_bootstrapped_metrics_aggregates_differences(tester, bootstrap_config):
+    group_a_values = np.linspace(0.1, 0.2, 5000)
+    group_b_values = np.linspace(-0.2, -0.1, 5000)
+    differences = [
         {
-            "test_type": "mann_whitney",
-            "alpha": 0.05,
-            "adjust_method": "bonferroni"
-        },
-        {
-            "test_type": "t_test",
-            "alpha": 0.05,
-            "adjust_method": "holm"
-        },
-        {
-            "test_type": "ks_test",
-            "alpha": 0.05,
-            "adjust_method": "fdr_bh"
-        },
-        {
-            "test_type": "permutation",
-            "alpha": 0.05,
-            "adjust_method": "none",
-            "bootstrap_iterations": 1000
+            "reference": {"Accuracy": 0.0},
+            "group_a": {"Accuracy": group_a_value},
+            "group_b": {"Accuracy": group_b_value},
         }
+        for group_a_value, group_b_value in zip(group_a_values, group_b_values)
     ]
-    
-    for config in test_configs:
-        results = eq.analyze_statistical_significance(
-            metric_dict=race_metrics,
-            var_name="race",
-            test_config=config
+
+    results = tester.analyze_metrics(
+        metrics_data=[],
+        reference_group="reference",
+        test_config=bootstrap_config,
+        differences=copy.deepcopy(differences),
+    )
+
+    assert set(results) == {"group_a", "group_b"}
+    assert results["group_a"]["Accuracy"].statistic == pytest.approx(0.15)
+    assert results["group_b"]["Accuracy"].statistic == pytest.approx(-0.15)
+    assert results["group_a"]["Accuracy"].confidence_interval == pytest.approx(
+        (np.percentile(group_a_values, 2.5), np.percentile(group_a_values, 97.5))
+    )
+    assert results["group_a"]["Accuracy"].is_significant is True
+    assert results["group_b"]["Accuracy"].is_significant is True
+
+
+def test_adjust_p_values_for_bootstrap_results_adjusts_across_all_group_metrics(tester):
+    results = {
+        "group_a": {
+            "Accuracy": StatTestResult(0.1, 0.01, True, "bootstrap_mean"),
+            "Recall": StatTestResult(0.1, 0.04, True, "bootstrap_mean"),
+        },
+        "group_b": {
+            "Accuracy": StatTestResult(0.1, 0.03, True, "bootstrap_mean"),
+        },
+    }
+
+    adjusted = tester._adjust_p_values(
+        results,
+        method="bonferroni",
+        alpha=0.05,
+        boot=True,
+    )
+
+    assert adjusted["group_a"]["Accuracy"].p_value == pytest.approx(0.03)
+    assert adjusted["group_a"]["Accuracy"].is_significant == True
+    assert adjusted["group_b"]["Accuracy"].p_value == pytest.approx(0.09)
+    assert adjusted["group_b"]["Accuracy"].is_significant == False
+    assert adjusted["group_a"]["Recall"].p_value == pytest.approx(0.12)
+    assert adjusted["group_a"]["Recall"].is_significant == False
+
+
+def test_adjust_p_values_for_chi_square_results_excludes_omnibus(tester):
+    results = {
+        "omnibus": {
+            "Recall": StatTestResult(1.0, 0.001, True, "Chi-Square Test"),
+        },
+        "group_a": {
+            "Recall": StatTestResult(1.0, 0.01, True, "Chi-Square Test"),
+        },
+        "group_b": {
+            "Recall": StatTestResult(1.0, 0.04, True, "Chi-Square Test"),
+        },
+    }
+
+    adjusted = tester._adjust_p_values(
+        results,
+        method="bonferroni",
+        alpha=0.05,
+        boot=False,
+    )
+
+    assert adjusted["omnibus"]["Recall"].p_value == pytest.approx(0.001)
+    assert adjusted["group_a"]["Recall"].p_value == pytest.approx(0.02)
+    assert adjusted["group_a"]["Recall"].is_significant == True
+    assert adjusted["group_b"]["Recall"].p_value == pytest.approx(0.08)
+    assert adjusted["group_b"]["Recall"].is_significant == False
+
+
+def test_validate_config_rejects_invalid_test_type(tester):
+    config = {
+        "test_type": "not_a_test",
+        "alpha": 0.05,
+        "adjust_method": "none",
+    }
+
+    with pytest.raises(ValueError, match="Invalid test type"):
+        tester._validate_config(config)
+
+
+def test_validate_config_rejects_invalid_adjustment_method(tester):
+    config = {
+        "test_type": "chi_square",
+        "alpha": 0.05,
+        "adjust_method": "not_a_method",
+    }
+
+    with pytest.raises(ValueError, match="Invalid adjustment method"):
+        tester._validate_config(config)
+
+
+def test_analyze_metrics_rejects_non_bootstrapped_unsupported_task(
+    tester, chi_square_config
+):
+    with pytest.raises(ValueError, match="Task not supported"):
+        tester.analyze_metrics(
+            metrics_data={"reference": {"TP": 1, "FP": 1, "TN": 1, "FN": 1}},
+            reference_group="reference",
+            test_config=chi_square_config,
+            task="regression",
         )
-        
-        # Check that results are returned for all groups
-        groups = ["black", "asian", "hispanic"]  # Exclude reference group
-        assert set(results.keys()) == set(groups)
-        
-        # Check that each group has results for all metrics
-        for group in groups:
-            assert isinstance(results[group], dict)
-            for metric, result in results[group].items():
-                assert isinstance(result, StatTestResult)
-                assert isinstance(result.statistic, float)
-                assert isinstance(result.p_value, float)
-                assert isinstance(result.is_significant, bool)
-                assert isinstance(result.test_name, str)
-                assert isinstance(result.effect_size, float)
-                if result.confidence_interval:
-                    assert isinstance(result.confidence_interval, tuple)
-                    assert len(result.confidence_interval) == 2
-                    assert all(isinstance(x, float) for x in result.confidence_interval) 

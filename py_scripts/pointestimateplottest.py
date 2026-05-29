@@ -2,7 +2,6 @@ import numpy as np
 import pandas as pd
 import equiboots as eqb
 
-
 if __name__ == "__main__":
     y_prob = np.random.rand(1000)
     y_pred = y_prob > 0.5
@@ -20,10 +19,10 @@ if __name__ == "__main__":
     )
 
     eq = eqb.EquiBoots(
-        y_true,
-        y_prob,
-        y_pred,
-        fairness_df,
+        y_true=y_true,
+        y_prob=y_prob,
+        y_pred=y_pred,
+        fairness_df=fairness_df,
         fairness_vars=["race", "sex"],
         reference_groups=["white", "M"],
         task="binary_classification",
@@ -46,9 +45,9 @@ if __name__ == "__main__":
     eqb.eq_group_metrics_point_plot(
         group_metrics=[group_race, group_sex],
         metric_cols=[
-            "Accuracy_ratio",
-            "Precision_ratio",
-            "Recall_ratio",
+            "Accuracy_Ratio",
+            "Precision_Ratio",
+            "Recall_Ratio",
         ],
         category_names=["race", "sex"],
         figsize=(6, 8),
