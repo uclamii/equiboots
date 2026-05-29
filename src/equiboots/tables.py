@@ -3,7 +3,11 @@ import numpy as np
 
 
 def metrics_table(
-    metrics, statistical_tests=None, differences=None, reference_group=None, decimal_places=3
+    metrics,
+    statistical_tests=None,
+    differences=None,
+    reference_group=None,
+    decimal_places=3,
 ):
 
     ### check if group_differences is a string
@@ -45,7 +49,9 @@ def metrics_table(
                                 and metric in statistical_tests[group]
                                 and statistical_tests[group][metric].is_significant
                             ):
-                                group_means[metric] = f"{mean_value:.{decimal_places}f} *"
+                                group_means[metric] = (
+                                    f"{mean_value:.{decimal_places}f} *"
+                                )
                             else:
                                 group_means[metric] = f"{mean_value:.{decimal_places}f}"
                         else:
@@ -62,19 +68,25 @@ def metrics_table(
         metrics_table = pd.DataFrame(metrics)
 
         if statistical_tests:
-            for test_name, test in statistical_tests.items():
-                if test.is_significant == True:
-                    if test_name == "omnibus":
-                        ## Adding a star to the cols
-                        metrics_table.columns = [
-                            f"{col} *" for col in metrics_table.columns
-                        ]
-                    else:
-                        ## Adding triangle to cols
-                        metrics_table.columns = [
-                            f"{col} ▲" if test_name in col else col
-                            for col in metrics_table.columns
-                        ]
+            # statistical_tests is now nested: {outer: {metric: StatTestResult}}
+            omnibus_dict = statistical_tests.get("omnibus", {})
+
+            # Star ALL columns if any omnibus metric is significant
+            if isinstance(omnibus_dict, dict) and any(
+                t.is_significant for t in omnibus_dict.values()
+            ):
+                metrics_table.columns = [f"{col} *" for col in metrics_table.columns]
+
+            # Triangle a specific group's column if any of its pairwise metrics is significant
+            for test_name, test_dict in statistical_tests.items():
+                if test_name == "omnibus" or not isinstance(test_dict, dict):
+                    continue
+                if any(t.is_significant for t in test_dict.values()):
+                    metrics_table.columns = [
+                        f"{col} ▲" if test_name in col else col
+                        for col in metrics_table.columns
+                    ]
+
             ### Dropping irrelevant columns if doing statistical tests
             metrics_table = metrics_table.drop(
                 index=[
