@@ -797,10 +797,10 @@ def test_eq_group_metrics_point_plot_with_omnibus_significant(monkeypatch):
     # Omnibus test is significant - should add * to all group labels
     statistical_tests = {
         "Category1": {
-            "omnibus": MockTestResult(is_significant=True),
-            "A": MockTestResult(is_significant=False),
-            "B": MockTestResult(is_significant=False),
-            "C": MockTestResult(is_significant=False),
+            "omnibus": {"Metric1": MockTestResult(is_significant=True)},
+            "A": {"Metric1": MockTestResult(is_significant=False)},
+            "B": {"Metric1": MockTestResult(is_significant=False)},
+            "C": {"Metric1": MockTestResult(is_significant=False)},
         }
     }
 
@@ -823,10 +823,10 @@ def test_eq_group_metrics_point_plot_with_group_significant(monkeypatch):
     # Specific groups are significant - should add ▲ to those groups
     statistical_tests = {
         "Category1": {
-            "omnibus": MockTestResult(is_significant=False),
-            "A": MockTestResult(is_significant=True),
-            "B": MockTestResult(is_significant=False),
-            "C": MockTestResult(is_significant=True),
+            "omnibus": {"Metric1": MockTestResult(is_significant=False)},
+            "A": {"Metric1": MockTestResult(is_significant=True)},
+            "B": {"Metric1": MockTestResult(is_significant=False)},
+            "C": {"Metric1": MockTestResult(is_significant=True)},
         }
     }
 
@@ -849,9 +849,9 @@ def test_eq_group_metrics_point_plot_with_both_significant(monkeypatch):
     # Both omnibus and group tests are significant
     statistical_tests = {
         "Category1": {
-            "omnibus": MockTestResult(is_significant=True),
-            "A": MockTestResult(is_significant=True),
-            "B": MockTestResult(is_significant=False),
+            "omnibus": {"Metric1": MockTestResult(is_significant=True)},
+            "A": {"Metric1": MockTestResult(is_significant=True)},
+            "B": {"Metric1": MockTestResult(is_significant=False)},
         }
     }
 
@@ -875,8 +875,8 @@ def test_eq_group_metrics_point_plot_missing_category(monkeypatch):
     # Only provide statistical tests for first category
     statistical_tests = {
         "Category1": {
-            "omnibus": MockTestResult(is_significant=True),
-            "A": MockTestResult(is_significant=False),
+            "omnibus": {"Metric1": MockTestResult(is_significant=True)},
+            "A": {"Metric1": MockTestResult(is_significant=False)},
         }
         # Category2 is missing - should not cause errors
     }
@@ -916,8 +916,8 @@ def test_eq_group_metrics_point_plot_no_omnibus_test(monkeypatch):
     # No omnibus test provided
     statistical_tests = {
         "Category1": {
-            "A": MockTestResult(is_significant=True),
-            "B": MockTestResult(is_significant=False),
+            "A": {"Metric1": MockTestResult(is_significant=True)},
+            "B": {"Metric1": MockTestResult(is_significant=False)},
         }
     }
 
@@ -1009,14 +1009,14 @@ def test_eq_group_metrics_point_plot_multiple_categories_mixed_significance(
 
     statistical_tests = {
         "Race": {
-            "omnibus": MockTestResult(is_significant=True),
-            "White": MockTestResult(is_significant=False),
-            "Black": MockTestResult(is_significant=True),
+            "omnibus": {"Accuracy": MockTestResult(is_significant=True)},
+            "White": {"Accuracy": MockTestResult(is_significant=False)},
+            "Black": {"Accuracy": MockTestResult(is_significant=True)},
         },
         "Gender": {
-            "omnibus": MockTestResult(is_significant=False),
-            "Male": MockTestResult(is_significant=True),
-            "Female": MockTestResult(is_significant=False),
+            "omnibus": {"Accuracy": MockTestResult(is_significant=False)},
+            "Male": {"Accuracy": MockTestResult(is_significant=True)},
+            "Female": {"Accuracy": MockTestResult(is_significant=False)},
         },
     }
 
