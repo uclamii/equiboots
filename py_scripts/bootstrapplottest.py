@@ -44,20 +44,20 @@ if __name__ == "__main__":
     data = eq2.slicer("race")
     race_metrics = eq2.get_metrics(data)
 
-    dispa = eq2.calculate_disparities(race_metrics, "race")
+    diffs = eq2.calculate_differences(race_metrics, "race")
 
-    melted = pd.DataFrame(dispa).melt()
+    melted = pd.DataFrame(diffs).melt()
     df = melted["value"].apply(pd.Series).assign(attribute_value=melted["variable"])
 
     eqb.eq_group_metrics_plot(
-        group_metrics=dispa,
+        group_metrics=diffs,
         metric_cols=[
-            "Accuracy_Ratio",
-            "Precision_Ratio",
-            "Predicted_Prevalence_Ratio",
-            "FP_Rate_Ratio",
-            "TN_Rate_Ratio",
-            "Recall_Ratio",
+            "Accuracy_diff",
+            "Precision_diff",
+            "Predicted_Prevalence_diff",
+            "FP_Rate_diff",
+            "TN_Rate_diff",
+            "Recall_diff",
         ],
         name="race",
         categories="all",
@@ -68,8 +68,11 @@ if __name__ == "__main__":
         strict_layout=True,
         save_path="./images",
         show_pass_fail=True,
-        # y_lim=(-2, 4),
-        # plot_thresholds=[0.9, 1.2],
+        disparities=True,
+        include_reference_group=True,
+        reference_group=eq2.reference_groups["race"],
+        # y_lim=(-0.5, 0.5),
+        # plot_thresholds=[-0.1, 0.1],
     )
 
     eqb.eq_plot_bootstrapped_group_curves(
