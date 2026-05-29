@@ -25,7 +25,7 @@ deployment.
 PyPI: https://pypi.org/project/equiboots  
 Documentation: https://uclamii.github.io/equiboots_docs/
 
-Version: 0.0.1a12
+Version: 0.0.1a13
 """
 
 
@@ -33,7 +33,7 @@ Version: 0.0.1a12
 __doc__ = detailed_doc
 
 
-__version__ = "0.0.1a12"
+__version__ = "0.0.1a13"
 __author__ = (
     "Leonid Shpaner, Arthur Funnell, Al Rahrooh, Colin Beam, Panayiotis Petousis"
 )

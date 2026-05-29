@@ -56,8 +56,9 @@ def save_or_show_plot(
 
     if save_path:
         os.makedirs(save_path, exist_ok=True)
+        out_name = filename if os.path.splitext(filename)[1] else f"{filename}.png"
         fig.savefig(
-            os.path.join(save_path, f"{filename}.png"),
+            os.path.join(save_path, out_name),
             bbox_inches="tight",
         )
     plt.show()
@@ -2082,6 +2083,5 @@ def plot_effect_sizes(
     plt.tight_layout()
 
     fig = plt.gcf()
-    if save_path:
-        fig.savefig(os.path.join(save_path, f"{filename}.png"), bbox_inches="tight")
+    save_or_show_plot(fig, save_path, filename)
     plt.show()
