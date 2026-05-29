@@ -1706,12 +1706,19 @@ def eq_plot_metrics_forest(
     # Add statistical significance markers
     if statistical_tests:
         for group in groups:
-            if group in statistical_tests and statistical_tests[group].is_significant:
+            if (
+                group in statistical_tests
+                and isinstance(statistical_tests[group], dict)
+                and metric_name in statistical_tests[group]
+                and statistical_tests[group][metric_name].is_significant
+            ):
                 groups[groups.index(group)] += " ▲"
 
         if (
             statistical_tests.get("omnibus")
-            and statistical_tests["omnibus"].is_significant
+            and isinstance(statistical_tests["omnibus"], dict)
+            and metric_name in statistical_tests["omnibus"]
+            and statistical_tests["omnibus"][metric_name].is_significant
         ):
             groups = [f"{group} *" for group in groups]
 
@@ -1773,7 +1780,9 @@ def eq_plot_metrics_forest(
 
         if (
             statistical_tests.get("omnibus")
-            and statistical_tests["omnibus"].is_significant
+            and isinstance(statistical_tests["omnibus"], dict)
+            and metric_name in statistical_tests["omnibus"]
+            and statistical_tests["omnibus"][metric_name].is_significant
         ):
             legend_elements.append(
                 Line2D(
@@ -1790,7 +1799,10 @@ def eq_plot_metrics_forest(
 
         original_groups = list(valid_groups.keys())
         group_tests_significant = any(
-            group in statistical_tests and statistical_tests[group].is_significant
+            group in statistical_tests
+            and isinstance(statistical_tests[group], dict)
+            and metric_name in statistical_tests[group]
+            and statistical_tests[group][metric_name].is_significant
             for group in original_groups
         )
 
@@ -1972,53 +1984,59 @@ def plot_effect_sizes(
     legend_loc="best",
     save_path=None,
     filename="effect_sizes",
+    decimal_places=2,
 ):
     """
-    Bar chart of effect sizes by group.
-    Expects a mapping of labels to objects with .effect_size. Bars are annotated,
-    horizontal guides mark 0.2 and 0.6, and a PNG is saved if `save_path` is provided.
+    Bar chart of effect sizes by outer key (omnibus + each group).
+
+    Expects stat_test_results in nested shape:
+        {outer_key: {metric: StatTestResult, ...}, ...}
+    For each outer key, plots the MAX Cramer's V across all metrics (the
+    strongest disparity signal for that group). Bars are annotated,
+    horizontal guides mark 0.2 and 0.6, and a PNG is saved if `save_path`
+    is provided.
     """
-    stat_results_keys = stat_test_results.keys()
-    effect_sizes = [
-        result.effect_size if result.effect_size else 0
-        for _, result in stat_test_results.items()
-    ]
+    labels = []
+    effect_sizes = []
+    for outer_key, inner in stat_test_results.items():
+        if not isinstance(inner, dict):
+            continue
+        # Pull the max effect size across metrics; treat None as 0
+        max_es = max((r.effect_size if r.effect_size else 0) for r in inner.values())
+        labels.append(outer_key)
+        effect_sizes.append(max_es)
+
+    if not labels:
+        raise ValueError("stat_test_results is empty or malformed.")
 
     plt.figure(figsize=figsize)
-    # Create the bar chart
-    bars = plt.bar(stat_results_keys, effect_sizes)
+    bars = plt.bar(labels, effect_sizes)
 
-    # Add value labels on top of each bar
     for bar in bars:
         yval = bar.get_height()
         plt.text(
             bar.get_x() + bar.get_width() / 2,
             yval + 0.01,
-            round(yval, 2),
+            round(yval, decimal_places),
             ha="center",
             va="bottom",
-        )  # Adjust vertical position (0.01) as needed
+        )
 
-    # Add labels and title
     plt.xlabel(xlabel)
     plt.ylabel(ylabel)
     plt.title(title)
 
-    # Add horizontal lines for effect size ranges
     plt.axhline(y=0.2, color="red", linestyle="--", label="Small effect size <= 0.2")
     plt.axhline(y=0.6, color="red", linestyle="--", label="Medium effect size <= 0.6")
     plt.plot([], [], color="red", linestyle="--", label="Large effect size > 0.6")
 
-    # Add a legend and grid
     plt.legend(loc=legend_loc)
     plt.grid(axis="y", linestyle="--")
 
-    # decide horizontal alignment based on rotation
     ha = "center" if rotation == 0 else "right"
     plt.xticks(rotation=rotation, ha=ha)
     plt.tight_layout()
 
-    # save or show
     fig = plt.gcf()
     if save_path:
         fig.savefig(os.path.join(save_path, f"{filename}.png"), bbox_inches="tight")
