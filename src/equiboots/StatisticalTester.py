@@ -455,7 +455,7 @@ class StatisticalTester:
         return results
 
     def _analyze_bootstrapped_metrics(
-        self, metrics_diff: list[Dict], reference_group: str, config: Dict[str, Any]
+        self, metrics_diff: List[Dict], reference_group: str, config: Dict[str, Any]
     ) -> Dict[str, Dict[str, StatTestResult]]:
         """Analyzes bootstrapped metrics differences against a reference group."""
 

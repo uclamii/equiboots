@@ -36,7 +36,6 @@ except ImportError:  # < 1.4
 from sklearn.preprocessing import MultiLabelBinarizer
 from typing import Optional, List, Dict, Tuple, Iterable
 
-
 SCORE_MAP = {
     "Accuracy": "accuracy",
     "Precision": "precision",
@@ -57,12 +56,18 @@ SCORE_MAP = {
     "Average Precision Score": "average_precision",
     "Log Loss": "neg_log_loss",
     "Brier Score": "brier_score_loss",
-    "Calibration AUC": None,   # custom handled below
+    "Calibration AUC": None,  # custom handled below
 }
 
 CONFUSION_METRICS = {
-    "TP", "FP", "FN", "TN",
-    "TP Rate", "FP Rate", "FN Rate", "TN Rate",
+    "TP",
+    "FP",
+    "FN",
+    "TN",
+    "TP Rate",
+    "FP Rate",
+    "FN Rate",
+    "TN Rate",
     "Specificity",
     "Prevalence",
     "Predicted Prevalence",
@@ -72,10 +77,11 @@ CUSTOM_PROBA_METRICS = {
     "Calibration AUC",
 }
 
+
 def fast_confusion_counts(
     y_true: np.ndarray,
     y_pred: np.ndarray,
-) -> tuple[int, int, int, int]:
+) -> Tuple[int, int, int, int]:
     """
     Fast confusion-matrix counts using pure NumPy.
 
@@ -185,8 +191,6 @@ def _score_with_scorer(
     need probabilities vs. thresholds vs. predictions.
     """
 
-
-
     scorer = get_scorer(metric_name)  # raises KeyError if unknown
 
     # Access Scorer internals (stable enough across recent sklearn versions)
@@ -214,6 +218,7 @@ def _score_with_scorer(
         score = score_func(y_true, y_pred, **kwargs)
 
     return float(sign * score)
+
 
 def get_custom_metrics(
     y_true: np.ndarray,
@@ -246,9 +251,7 @@ def get_custom_metrics(
                 if y_proba is None:
                     results[display_name] = np.nan
                 else:
-                    prob_true, prob_pred = calibration_curve(
-                        y_true, y_proba, n_bins=10
-                    )
+                    prob_true, prob_pred = calibration_curve(y_true, y_proba, n_bins=10)
                     results[display_name] = calibration_auc(prob_pred, prob_true)
                 continue
 
@@ -266,7 +269,6 @@ def get_custom_metrics(
             results[display_name] = np.nan
         except ValueError:
             results[display_name] = np.nan
-
 
     return results
 

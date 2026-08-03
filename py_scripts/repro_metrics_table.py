@@ -1,7 +1,7 @@
 """
 Reproduction: equiboots.metrics_table ignores `reference_group` and drops round().
 
-    pip install equiboots==0.0.1a13
+    pip install equiboots==0.0.1a14
     python repro_metrics_table.py
 
 Data: UCI Adult / census income, fetched at runtime. Nothing to download by hand.
