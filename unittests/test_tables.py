@@ -108,7 +108,19 @@ def test_metrics_table_non_bootstrap_invalid_input():
 
 
 def test_metrics_table_rounding_behavior(sample_metrics):
-    """Check rounding is applied properly."""
-    df = metrics_table(sample_metrics)
-    # round() does not modify in-place, so should still be float
-    assert isinstance(df.iloc[0, 0], float)
+    """Rounding is applied to decimal_places."""
+    metrics = {"GroupA": {"Accuracy": 0.8126627604166666}}
+    df = metrics_table(metrics, decimal_places=3)
+    assert df.loc["Accuracy", "GroupA"] == 0.813
+
+
+def test_metrics_table_invalid_reference_group_raises():
+    metrics = {"Male": {"Accuracy": 0.81}, "Female": {"Accuracy": 0.92}}
+    with pytest.raises(ValueError, match="not found in metrics"):
+        metrics_table(metrics, reference_group="male")
+
+
+def test_metrics_table_valid_reference_group_passes():
+    metrics = {"Male": {"Accuracy": 0.81}, "Female": {"Accuracy": 0.92}}
+    df = metrics_table(metrics, reference_group="Male")
+    assert "Male" in df.columns

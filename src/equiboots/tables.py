@@ -67,6 +67,12 @@ def metrics_table(
 
         metrics_table = pd.DataFrame(metrics)
 
+        if reference_group is not None and reference_group not in metrics_table.columns:
+            raise ValueError(
+                f"reference_group '{reference_group}' not found in metrics. "
+                f"Available groups: {list(metrics_table.columns)}"
+            )
+
         if statistical_tests:
             # statistical_tests is now nested: {outer: {metric: StatTestResult}}
             omnibus_dict = statistical_tests.get("omnibus", {})
@@ -100,6 +106,6 @@ def metrics_table(
                 errors="ignore",
             )
 
-        metrics_table.round(3)
+        metrics_table = metrics_table.round(decimal_places)
 
         return metrics_table
