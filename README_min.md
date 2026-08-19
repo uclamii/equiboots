@@ -20,14 +20,14 @@ Before installing `equiboots`, ensure your system meets the following requiremen
 
 The following dependencies will be automatically installed with `equiboots`:
 
-- `matplotlib>=3.5.3, <=3.10.1`
-- `numpy>=1.21.6, <=2.2.4`
-- `pandas>=1.3.5, <=2.2.3`
-- `scikit-learn>=1.0.2, <=1.5.2`
-- `scipy>=1.8.0, <=1.15.2`
-- `seaborn>=0.11.2, <=0.13.2`
-- `statsmodels>=0.13, <=0.14.4`
-- `tqdm>=4.66.4, <=4.67.1`
+- `"matplotlib>=3.5.3, <=3.10.1"`
+- `"numpy>=1.21.6, <=2.2.4"`
+- `"pandas>=1.3.5, <=2.2.3"`
+- `"scikit-learn>=1.0.2,<1.9"`
+- `"scipy>=1.8.0, <=1.15.2"`
+- `"seaborn>=0.11.2, <=0.13.2"`
+- `"statsmodels>=0.13, <=0.14.4"`
+- `"tqdm>=4.66.4, <=4.67.1"`
 
 ## 💾 Installation
 
@@ -64,7 +64,7 @@ If you use `equiboots` in your research or projects, please consider citing it.
    month        = mar,
    year         = 2025,
    publisher    = {Zenodo},
-   version      = {0.0.1a13},
+   version      = {0.0.1a14},
    doi          = {10.5281/zenodo.15086941},
    url          = {https://doi.org/10.5281/zenodo.15086941}
 }

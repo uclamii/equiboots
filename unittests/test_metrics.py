@@ -145,7 +145,7 @@ def test_root_mean_squared_error_equivalence():
     y_true = np.array([3.0, -0.5, 2.0, 7.0])
     y_pred = np.array([2.5, 0.0, 2.0, 8.0])
 
-    expected_rmse = mean_squared_error(y_true, y_pred, squared=False)
+    expected_rmse = np.sqrt(mean_squared_error(y_true, y_pred))
     actual_rmse = root_mean_squared_error(y_true, y_pred)
 
     assert np.isclose(
