@@ -75,13 +75,13 @@ except ValueError as e:
     print(f"PASS (fixed): {e}")
 print()
 
-# BUG 2: decimal_places=3 requested.
+# BUG 2: decimal_places=2 requested (different from the historical hardcoded 3).
 # Before the fix values come back at full precision, since round() is discarded.
 print("--- valid reference_group ---")
-table = metrics_table(sex_metrics, reference_group="Male", decimal_places=3)
+table = metrics_table(sex_metrics, reference_group="Male", decimal_places=2)
 print(table.loc[["Accuracy", "Precision", "Recall"]])
 
 shown = str(table.loc["Accuracy", "Male"])
-status = "PASS (fixed)" if len(shown.split(".")[-1]) <= 3 else "FAIL (bug present)"
+status = "PASS (fixed)" if len(shown.split(".")[-1]) <= 2 else "FAIL (bug present)"
 print()
 print(f"{status} - Accuracy['Male'] = {shown}")

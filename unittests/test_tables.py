@@ -110,8 +110,8 @@ def test_metrics_table_non_bootstrap_invalid_input():
 def test_metrics_table_rounding_behavior(sample_metrics):
     """Rounding is applied to decimal_places."""
     metrics = {"GroupA": {"Accuracy": 0.8126627604166666}}
-    df = metrics_table(metrics, decimal_places=3)
-    assert df.loc["Accuracy", "GroupA"] == 0.813
+    df = metrics_table(metrics, decimal_places=2)
+    assert df.loc["Accuracy", "GroupA"] == 0.81
 
 
 def test_metrics_table_invalid_reference_group_raises():
