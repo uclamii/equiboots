@@ -1,8 +1,11 @@
 eda_toolkit==0.0.30
 fastparquet==2024.11.0
 kfre==0.1.18
+loguru==0.7.3
 matplotlib==3.9.2
+mlflow==3.16.0
 model_tuner==0.0.34b9
+nbstripout==0.9.1
 numpy>=1.21.6, <=2.2.4
 pandas==2.2.2
 pytest==8.3.5
